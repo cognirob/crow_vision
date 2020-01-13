@@ -1,0 +1,8 @@
+md5: 1f5c0ed1cfcc43272660c0d8b7c2dd25
+wdir: ../..
+outs:
+- md5: 2c8ef80ddbcf4e27c31c4dbdea4b3455.dir
+  path: data/results/2020_01_13_try1_tools_topview
+  cache: true
+  metric: false
+  persist: false
