@@ -1,0 +1,7 @@
+md5: 718ead07d7a00d9fe50848479cdee246
+outs:
+- md5: 2d5aa7846f2049e8efe14e7d6e349e90.dir
+  path: default_resnet101fpn
+  cache: true
+  metric: false
+  persist: false
