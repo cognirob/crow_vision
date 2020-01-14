@@ -1,0 +1,8 @@
+md5: 6ef2e072850727e815b7d2a67d69bef2
+wdir: ../..
+outs:
+- md5: 4299420b16a5d01b94facd52d50fa290.dir
+  path: data/results/2020_01_13_try1_tools_yolact_human
+  cache: true
+  metric: false
+  persist: false
