@@ -1,2 +1,5 @@
-.dvc/config
-
+# python
+__pycache__/
+**.egg-info/
+# IDE
+.idea
