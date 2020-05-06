@@ -3,3 +3,8 @@ __pycache__/
 **.egg-info/
 # IDE
 .idea
+# ROS
+build/
+log/
+install/
+**_ws/

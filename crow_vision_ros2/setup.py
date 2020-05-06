@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='syxtreme',
     maintainer_email='radoslav.skoviera@cvut.cz',
-    description='TODO: Package description',
+    description='ROS2 interface for CROW vision (Yolact)',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
