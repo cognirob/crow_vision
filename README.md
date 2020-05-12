@@ -7,6 +7,11 @@ We are using Detectron2 and Yolact as DNN vision frameworks.
 
 Object recognition (on RGB camera, real-time), segmentation (bounding boxes/bboxes & pixel masks) -> conversion to 3D point-clouds/bboxes. 
 
+### Components
+
+- CNN (YOLACT, Detectron2)
+- ROS2 (as communication framework)
+
 ## Installation
 
 ### YOLACT 
@@ -30,6 +35,19 @@ Tested on:
 ##### Install YOLACT
 
 TODO currently we're using yolact upstream from a separate repo. 
+
+### ROS2
+
+We use ROS2 (because we're cool, and also it works cross-platform). 
+For installation and setup, see [our wiki on ROS2](https://gitlab.ciirc.cvut.cz/imitrob/project_crow/crow/-/wikis/ros-guide).
+
+#### Packages
+
+The following packages are exposed as ROS nodes: 
+
+- RS camera: TODO
+- image publisher: `ros2 run crow_image_streamer_ros2 image_streamer_node '/tmp/images2/'`
+- CNN: TODO
 
 #### Usage
 
