@@ -35,7 +35,7 @@ class ImageFolderPublisher(Node):
     def timer_callback(self):
         files = glob.glob(str(self.path_) + '/**/*' + str(self.ext_), recursive=True)
         if self.i_ < len(files):
-          imgfile = files[i]
+          imgfile = files[self.i_]
           self.i_ += 1
 
           # load image, convert to msg
