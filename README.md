@@ -45,7 +45,7 @@ For installation and setup, see [our wiki on ROS2](https://gitlab.ciirc.cvut.cz/
 
 The following packages are exposed as ROS nodes: 
 
-- RS camera: TODO
+- Intel RS camera: TODO
 - image publisher: `ros2 run crow_image_streamer_ros2 image_streamer_node '/tmp/images2/'`
 - CNN: TODO
 
@@ -62,6 +62,15 @@ See [YOLACT's original README](external/yolact/README.md)
 
 ### Intel RealSense camera
 
-TODO
+We're using the `R450i` camera. 
+
+#### Install
+
+The external ROS package is automatically built, use `wstool update -t --from-path ../ros2/src/`  (from your workspace).
+See [our ROS wiki how to build the Inter RealSense cam](https://gitlab.ciirc.cvut.cz/imitrob/project_crow/crow/-/wikis/ros-guide#ros-realsense). 
+
+[Usage and documentation](https://github.com/intel/ros2_intel_realsense#usage-instructions).
+
+
 
 
