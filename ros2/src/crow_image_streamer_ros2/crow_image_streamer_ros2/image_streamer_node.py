@@ -2,6 +2,7 @@ import rclpy #add to package.xml deps
 from rclpy.node import Node
 import sensor_msgs
 from cv_bridge import CvBridge
+import cv2
 import os
 import sys
 import glob
@@ -39,8 +40,8 @@ class ImageFolderPublisher(Node):
           self.i_ += 1
 
           # load image, convert to msg
-          im = cv.imread(imgfile)
-          msg = self.cvb_.cv_to_imgmsg(im)
+          im = cv2.imread(imgfile)
+          msg = self.cvb_.cv2_to_imgmsg(im)
 
           self.publisher_.publish(msg)
           self.get_logger().info('Publishing: "%s"' % imgfile)
