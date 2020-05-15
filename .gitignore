@@ -3,3 +3,9 @@ __pycache__/
 **.egg-info/
 # IDE
 .idea
+# ROS
+build/
+log/
+install/
+**_ws/
+ros2/src/ros2_intel_realsense/ # external package, auto downloaded
