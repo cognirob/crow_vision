@@ -5,6 +5,9 @@ import std_msgs
 from cv_bridge import CvBridge
 import cv2
 
+# import CNN - YOLACT
+from crow_vision_ros2.external.yolact.yolact import Yolact
+
 try:
   from yolact_inference import YolactInfTool
 except:
