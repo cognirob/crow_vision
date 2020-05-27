@@ -4,14 +4,15 @@ import sensor_msgs
 import std_msgs
 from cv_bridge import CvBridge
 import cv2
+import torch
 
 # import CNN - YOLACT
 from crow_vision_ros2.external.yolact.yolact import Yolact
-
-try:
-  from yolact_inference import YolactInfTool
-except:
-  assert False, "Failed to import YOLACT. ROS2 does not work with conda, make sure to have Yolact importable from python3"
+from crow_vision_ros2.external.yolact.data import set_cfg
+from crow_vision_ros2.external.yolact.utils.augmentations import FastBaseTransform
+from crow_vision_ros2.external.yolact.layers.output_utils import postprocess
+from crow_vision_ros2.external.yolact.eval import prep_display
+from crow_vision_ros2.external.yolact.data.config import Config
 
 class CrowVision(Node):
   """
@@ -55,9 +56,50 @@ class CrowVision(Node):
     #TODO others publishers
 
     self.cvb_ = cv_bridge.CvBridge()
-    self.yolact_ = YolactInfTool(trained_model=model, top_k=top_k, score_threshold=threshold)
+
+    ## YOLACT setup
+    # setup yolact args
+    global args
+    args=Config({})
+    args.top_k = top_k
+    args.score_threshold = threshold
+    # set here everything that would have been set by parsing arguments in yolact/eval.py:
+    args.display_lincomb = False
+    args.crop = False
+    args.display_fps = False
+    args.display_text = True
+    args.display_bboxes = True
+    args.display_masks =True
+    args.display_scores = True
+
+    # CUDA setup for yolact
+    torch.backends.cudnn.fastest = True
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    set_cfg('crow_base_config')
+
+    self.net_ = Yolact().cuda()
+
+    self.net_.load_weights(model)
+    self.net_.eval()
+    self.net_.detect.use_fast_nms = True
+    self.net_.detect.use_cross_class_nms = False
+
     print('Hi from crow_vision_ros2.')
 
+
+  def label_image(self, img):
+    """
+    Visualize detections and display as an image. Apply CNN inference.
+    """
+    if isinstance(self.net_, Yolact):
+      frame = torch.from_numpy(img).cuda().float()
+      batch = FastBaseTransform()(frame.unsqueeze(0))
+      preds = self.net_(batch)
+      processed = prep_display(preds, frame, h=None, w=None, undo_transform=False)
+      return processed
+    else:
+      assert "Currently only Yolact is supported."
+      
 
   def input_callback(self, msg):
     self.get_logger().info('I heard: "%s"' % str(msg.height))
@@ -65,7 +107,7 @@ class CrowVision(Node):
     masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
     if publisher_img is not None:
-      img_labeled = self.yolact_.visualized_inference(img_raw)
+      img_labeled = self.net_.label_image(img_raw)
       self.publisher_img.publish(cvb_.cv_to_imgmsg(img_labeled))
     if publisher_masks is not None:
       self.publisher_masks.publish(masks)
