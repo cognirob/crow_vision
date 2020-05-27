@@ -10,7 +10,8 @@ from yolact import Yolact
 from data import set_cfg
 from utils.augmentations import FastBaseTransform
 from layers.output_utils import postprocess
-from crow_yolact_wrappers import prep_display, args
+from eval import prep_display 
+from data.config import Config
 
 def find_objects(image, numobj):
     ret, labels, stats, centroids = cv2.connectedComponentsWithStats(image.astype(np.uint8),cv2.CV_32S)
@@ -32,8 +33,19 @@ class YolactInfTool():
         self.top_k = top_k
         self.score_threshold = score_threshold
         self.model = trained_model
+
+        global args
+        args=Config({})
         args.top_k = top_k
         args.score_threshold = score_threshold
+        # set here everything that would have been set by parsing arguments in yolact/eval.py:
+        args.display_lincomb = False
+        args.crop = False
+        args.display_fps = False
+        args.display_text = True
+        args.display_bboxes = True
+        args.display_masks =True
+        args.display_scores = True
 
         # CUDA setup
         torch.backends.cudnn.fastest = True
