@@ -3,10 +3,12 @@ from rclpy.node import Node
 import sensor_msgs
 import std_msgs
 from cv_bridge import CvBridge
+
 import cv2
 import torch
 
 # import CNN - YOLACT
+import sys; import os; sys.path.append(os.path.abspath("/home_shared/mmm/crow_vision/ros2/src/crow_vision_ros2/crow_vision_ros2/external/yolact/"))
 from crow_vision_ros2.external.yolact.yolact import Yolact
 from crow_vision_ros2.external.yolact.data import set_cfg
 from crow_vision_ros2.external.yolact.utils.augmentations import FastBaseTransform
@@ -34,7 +36,7 @@ class CrowVision(Node):
                topic_out_masks="/masks",
                top_k = 15,
                threshold=0.15,
-               model='./data/yolact/weights/weights_yolact_kuka_13/crow_base_59_400000.pth',
+               model='./data/yolact/weights/yolact_base_54_800000.pth',
                ):
     super().__init__('CrowVision')
     self.cam = camera
@@ -55,7 +57,7 @@ class CrowVision(Node):
       self.publisher_masks = None
     #TODO others publishers
 
-    self.cvb_ = cv_bridge.CvBridge()
+    self.cvb_ = CvBridge()
 
     ## YOLACT setup
     # setup yolact args
@@ -75,7 +77,7 @@ class CrowVision(Node):
     # CUDA setup for yolact
     torch.backends.cudnn.fastest = True
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    set_cfg('crow_base_config')
+    set_cfg('yolact_base_config') #TODO add and use crow_base_config
 
     self.net_ = Yolact().cuda()
 
@@ -95,7 +97,9 @@ class CrowVision(Node):
       frame = torch.from_numpy(img).cuda().float()
       batch = FastBaseTransform()(frame.unsqueeze(0))
       preds = self.net_(batch)
-      processed = prep_display(preds, frame, h=None, w=None, undo_transform=False)
+      global args
+      print(args)
+      processed = prep_display(preds, frame, h=None, w=None, undo_transform=False, args=args)
       return processed
     else:
       assert "Currently only Yolact is supported."
@@ -106,11 +110,13 @@ class CrowVision(Node):
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
     masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
-    if publisher_img is not None:
-      img_labeled = self.net_.label_image(img_raw)
-      self.publisher_img.publish(cvb_.cv_to_imgmsg(img_labeled))
-    if publisher_masks is not None:
-      self.publisher_masks.publish(masks)
+    if self.publisher_img is not None:
+      img_labeled = self.label_image(img_raw)
+      self.publisher_img.publish(self.cvb_.cv2_to_imgmsg(img_labeled))
+    if self.publisher_masks is not None:
+      message = std_msgs.msg.String()
+      message.data = str(masks)
+      self.publisher_masks.publish(message)
 
 
 def main(args=None):
@@ -118,8 +124,8 @@ def main(args=None):
   try:
     cnn = CrowVision()
     rclpy.spin(cnn)
-  finally:
     cnn.destroy_node()
+  finally:
     rclpy.shutdown()
 
 
