@@ -21,7 +21,7 @@ class ImageFolderPublisher(Node):
     the current msg. 
     """
 
-    def __init__(self, path, framerate=10, topic="/crow/data/images", imgExt='.png'):
+    def __init__(self, path, framerate=10, topic="/crow/cam1/raw", imgExt='.png'):
         super().__init__('crow_image_streamer_ros2')
         self.publisher_ = self.create_publisher(sensor_msgs.msg.Image, topic, 10)
         assert os.path.isdir(path),"path must be a string pointing to an existing directory with images"
