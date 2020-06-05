@@ -121,7 +121,9 @@ class CrowVision(Node):
     #the input callback triggers the publishers here.
     if self.publisher_img is not None:
       img_labeled = self.label_image(img_raw)
-      self.publisher_img.publish(self.cvb_.cv2_to_imgmsg(img_labeled))
+      msg = self.cvb_.cv2_to_imgmsg(img_labeled)
+      self.get_logger().info("Publishing as Image {} x {}".format(msg.width, msg.height))
+      self.publisher_img.publish(msg)
       cv2.imshow('ros', img_labeled)
       cv2.waitKey(500)
       cv2.destroyAllWindows()
