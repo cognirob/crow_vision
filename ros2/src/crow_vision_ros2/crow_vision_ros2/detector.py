@@ -8,13 +8,14 @@ import cv2
 import torch
 
 # import CNN - YOLACT
-import sys; import os; sys.path.append(os.path.abspath("/home_shared/mmm/crow_vision/ros2/src/crow_vision_ros2/crow_vision_ros2/external/yolact/"))
-from crow_vision_ros2.external.yolact.yolact import Yolact
-from crow_vision_ros2.external.yolact.data import set_cfg
-from crow_vision_ros2.external.yolact.utils.augmentations import FastBaseTransform
-from crow_vision_ros2.external.yolact.layers.output_utils import postprocess
-from crow_vision_ros2.external.yolact.eval import prep_display
-from crow_vision_ros2.external.yolact.data.config import Config
+YOLACT_REPO='~/crow_vision_yolact/'
+import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
+from yolact import Yolact
+from data import set_cfg
+from utils.augmentations import FastBaseTransform
+from layers.output_utils import postprocess
+from eval import prep_display
+from data.config import Config
 
 class CrowVision(Node):
   """
