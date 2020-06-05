@@ -8,7 +8,7 @@ import cv2
 import torch
 
 # import CNN - YOLACT
-YOLACT_REPO='~/crow_vision_yolact/'
+YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
 import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
 from yolact import Yolact
 from data import set_cfg
@@ -32,12 +32,12 @@ class CrowVision(Node):
 
   def __init__(self, 
                camera='/crow/cam1',
-               topic_in="/raw",
-               topic_out_img="/image",
-               topic_out_masks="/masks",
+               topic_in="/raw", #TODO match with default RGB topic of RS camera node
+               topic_out_img="/detections/image",
+               topic_out_masks="/detections/masks",
                top_k = 15,
                threshold=0.15,
-               model='./data/yolact/weights/yolact_base_54_800000.pth',
+               model='./data/yolact/weights/yolact_base_54_800000.pth', #relative to YOLACT_REPO
                ):
     super().__init__('CrowVision')
     self.cam = camera
@@ -82,7 +82,13 @@ class CrowVision(Node):
 
     self.net_ = Yolact().cuda()
 
-    self.net_.load_weights(model)
+    model_abs = os.path.join(
+                 os.path.abspath(os.path.expanduser(YOLACT_REPO)),
+                 str(model)
+                 )
+    assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
+
+    self.net_.load_weights(model_abs)
     self.net_.eval()
     self.net_.detect.use_fast_nms = True
     self.net_.detect.use_cross_class_nms = False
