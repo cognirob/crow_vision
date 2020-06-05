@@ -1,0 +1,27 @@
+name: ros2
+channels:
+  - pytorch
+  - defaults
+  - conda-forge
+dependencies:
+  #ROS2
+  - python==3.6.7 #python version must match internal python ver used in ROS, Eloquent has 3.6; also 3.6.0 is buggy.
+  - conda-build
+  - pip
+  # YOLACT
+  - pytorch::pytorch>=1.0.1
+  - pytorch::torchvision
+  - cython
+  - cudatoolkit
+  - cudnn
+  - pytorch::cuda100
+  - matplotlib
+  - git # to download COCO dataset
+  - curl # to download COCO dataset
+  - unzip # to download COCO dataset
+  - conda-forge::bash # to download COCO dataset
+  - pip:
+    - opencv-python
+    - pillow <7.0 # bug PILLOW_VERSION in torchvision, must be < 7.0 until torchvision is upgraded
+    - pycocotools
+    - PyQt5 # needed on KDE/Qt envs for matplotlib

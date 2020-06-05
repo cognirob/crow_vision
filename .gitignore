@@ -3,9 +3,11 @@ __pycache__/
 **.egg-info/
 # IDE
 .idea
+**.swp
 # ROS
 build/
 log/
 install/
 **_ws/
-ros2/src/ros2_intel_realsense/ # external package, auto downloaded
+ros2/src/ros2_intel_realsense/**
+ros2/src/crow_vision_yolact/**

@@ -2,4 +2,7 @@
     local-name: ros2_intel_realsense
     uri: https://github.com/intel/ros2_intel_realsense.git
     version: eloquent
-
+- git:
+    local-name: crow_vision_yolact
+    uri: https://gitlab.ciirc.cvut.cz/imitrob/project_crow/crow_vision_yolact.git
+    version: master
