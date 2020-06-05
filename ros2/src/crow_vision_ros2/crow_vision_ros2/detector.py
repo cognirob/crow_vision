@@ -17,6 +17,8 @@ from layers.output_utils import postprocess
 from eval import prep_display
 from data.config import Config
 
+import matplotlib.pyplot as plt
+
 class CrowVision(Node):
   """
   ROS2 node for CNN used in Crow.
@@ -36,24 +38,24 @@ class CrowVision(Node):
                topic_out_img="/detections/image",
                topic_out_masks="/detections/masks",
                top_k = 15,
-               threshold=0.15,
+               threshold=0.51,
                model='./data/yolact/weights/yolact_base_54_800000.pth', #relative to YOLACT_REPO
                ):
     super().__init__('CrowVision')
     self.cam = camera
 
     # there is 1 listener with raw images:
-    self.listener_ = self.create_subscription(sensor_msgs.msg.Image, camera+topic_in, self.input_callback, 10)
+    self.listener_ = self.create_subscription(sensor_msgs.msg.Image, camera+topic_in, self.input_callback, 1024)
     
     # there are multiple publishers. We publish all the info for a single detection step (a single image)
     # but optionally the results are separated into different subtopics the clients can subscribe (eg 'labels', 'masks')
     # If a topic_out_* is None, we skip publishing on that stream, it is disabled.
     if topic_out_img is not None:
-      self.publisher_img = self.create_publisher(sensor_msgs.msg.Image, camera+topic_out_img, 10) #publishes the processed (annotated,detected) image
+      self.publisher_img = self.create_publisher(sensor_msgs.msg.Image, camera+topic_out_img, 1024) #publishes the processed (annotated,detected) image
     else:
       self.publisher_img = None
     if topic_out_masks is not None:
-      self.publisher_masks = self.create_publisher(std_msgs.msg.String, camera+topic_out_masks, 10) #TODO change to correct dtype, not string
+      self.publisher_masks = self.create_publisher(std_msgs.msg.String, camera+topic_out_masks, 1024) #TODO change to correct dtype, not string
     else:
       self.publisher_masks = None
     #TODO others publishers
@@ -105,7 +107,6 @@ class CrowVision(Node):
       batch = FastBaseTransform()(frame.unsqueeze(0))
       preds = self.net_(batch)
       global args
-      print(args)
       processed = prep_display(preds, frame, h=None, w=None, undo_transform=False, args=args)
       return processed
     else:
@@ -115,11 +116,19 @@ class CrowVision(Node):
   def input_callback(self, msg):
     self.get_logger().info('I heard: "%s"' % str(msg.height))
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
+
     masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
     if self.publisher_img is not None:
       img_labeled = self.label_image(img_raw)
       self.publisher_img.publish(self.cvb_.cv2_to_imgmsg(img_labeled))
+      cv2.imshow('ros', img_labeled)
+      cv2.waitKey(500)
+      cv2.destroyAllWindows()
+      #plt.imshow(img_labeled)
+      #plt.title('ROS')
+      #plt.show()
+
     if self.publisher_masks is not None:
       message = std_msgs.msg.String()
       message.data = str(masks)
