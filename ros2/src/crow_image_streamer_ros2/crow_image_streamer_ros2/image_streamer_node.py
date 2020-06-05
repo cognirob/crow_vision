@@ -11,7 +11,7 @@ class ImageFolderPublisher(Node):
     """
   ROS2 publisher node. 
   Streams content of a folder with images over a ROS topic. 
-  Serves as cv2 <-> msg.Image convertor. 
+  Serves as cv2 <-> msg.CompressedImage convertor. 
 
   @param: expected command-line argument (str) path to folder with images (recursive). 
   @return streamed ROS msg with image data at topic with give framerate. 
@@ -21,7 +21,11 @@ class ImageFolderPublisher(Node):
     the current msg. 
     """
 
-    def __init__(self, path, framerate=5, topic="/crow/cam1/raw", imgExt='.png', loop:bool=True):
+    def __init__(self, path:str, 
+                       framerate:float=5, 
+                       topic:str="/crow/cam1/raw", 
+                       imgExt:str='png', 
+                       loop:bool=True):
         super().__init__('crow_image_streamer_ros2')
         self.publisher_ = self.create_publisher(sensor_msgs.msg.Image, topic, 1024)
         assert os.path.isdir(path),"path must be a string pointing to an existing directory with images"
@@ -35,7 +39,7 @@ class ImageFolderPublisher(Node):
 
 
     def timer_callback(self):
-        files = glob.glob(str(self.path_) + '/**/*' + str(self.ext_), recursive=True)
+        files = glob.glob(str(self.path_) + '/**/*.' + str(self.ext_), recursive=True)
         if self.i_ < len(files):
           imgfile = files[self.i_]
           self.i_ += 1
