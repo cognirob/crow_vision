@@ -21,11 +21,12 @@ class ImageFolderPublisher(Node):
     the current msg. 
     """
 
-    def __init__(self, path, framerate=10, topic="/crow/cam1/raw", imgExt='.png'):
+    def __init__(self, path, framerate=5, topic="/crow/cam1/raw", imgExt='.png', loop:bool=True):
         super().__init__('crow_image_streamer_ros2')
-        self.publisher_ = self.create_publisher(sensor_msgs.msg.Image, topic, 10)
+        self.publisher_ = self.create_publisher(sensor_msgs.msg.Image, topic, 1024)
         assert os.path.isdir(path),"path must be a string pointing to an existing directory with images"
         self.path_ = str(path)
+        self.loop_ = loop
         self.i_ = int(0) #ith image to handle
         assert framerate > 0, "Framerate [Hz] must be > 0"
         self.timer_ = self.create_timer(1/framerate, self.timer_callback)
@@ -46,6 +47,10 @@ class ImageFolderPublisher(Node):
           self.publisher_.publish(msg)
           self.get_logger().info('Publishing: "%s"' % imgfile)
         else:
+          if self.loop_:
+            self.i_ = 0
+            self.get_logger().info('Looping.')
+            return
           self.get_logger().info('Finished.')
           self.destroy_node()
           rclpy.shutdown()
