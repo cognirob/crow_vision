@@ -23,16 +23,16 @@ class CrowVision(Node):
   """
   ROS2 node for CNN used in Crow.
 
-  This node listens on network for topic "/crow/camX/image", 
+  This node listens on network for topic "/crow/camX/image",
   obtains raw RGB image, processes it in neural net, and publishes results in form of (for given camera):
   - "/detections/image" - processed image with visualized masks, bboxes and labels
-  - "/detections/masks" 
+  - "/detections/masks"
   - "/detections/labels"
   - "/detections/bboxes"
   - "/detections/confidences", etc. TODO
   """
 
-  def __init__(self, 
+  def __init__(self,
                camera='/crow/cam1',
                topic_in="/raw", #TODO match with default RGB topic of RS camera node
                topic_out_img="/detections/image",
@@ -46,7 +46,7 @@ class CrowVision(Node):
 
     # there is 1 listener with raw images:
     self.listener_ = self.create_subscription(sensor_msgs.msg.Image, camera+topic_in, self.input_callback, 1024)
-    
+
     # there are multiple publishers. We publish all the info for a single detection step (a single image)
     # but optionally the results are separated into different subtopics the clients can subscribe (eg 'labels', 'masks')
     # If a topic_out_* is None, we skip publishing on that stream, it is disabled.
@@ -111,7 +111,7 @@ class CrowVision(Node):
       return processed
     else:
       assert "Currently only Yolact is supported."
-      
+
 
   def input_callback(self, msg):
     self.get_logger().info('I heard: "%s"' % str(msg.height))
@@ -121,12 +121,11 @@ class CrowVision(Node):
     #the input callback triggers the publishers here.
     if self.publisher_img is not None:
       img_labeled = self.label_image(img_raw)
-      msg = self.cvb_.cv2_to_imgmsg(img_labeled)
+      msg = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       self.get_logger().info("Publishing as Image {} x {}".format(msg.width, msg.height))
       self.publisher_img.publish(msg)
-      cv2.imshow('ros', img_labeled)
-      cv2.waitKey(500)
-      cv2.destroyAllWindows()
+    #   cv2.imshow('ros', img_labeled)
+    #   cv2.waitKey(50)
       #plt.imshow(img_labeled)
       #plt.title('ROS')
       #plt.show()
@@ -144,6 +143,7 @@ def main(args=None):
     rclpy.spin(cnn)
     cnn.destroy_node()
   finally:
+    cv2.destroyAllWindows()
     rclpy.shutdown()
 
 
