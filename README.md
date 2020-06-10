@@ -92,6 +92,7 @@ The following packages are exposed as ROS nodes:
 
 - Intel RS camera: TODO
 - CNN: `ros2 run crow_vision_ros2 detector &`
+  - optional cmd-line arguments: weights, config, input_topic (all position dependant). Ie `ros2 run crow_vision_ros2 detector ./data/yolact/weights/mycoolweights.pth yolact_base_config "/camera/color/image_raw" `
 - image publisher: `ros2 run crow_image_streamer_ros2 image_streamer_node '/tmp/images2/'`
 
 

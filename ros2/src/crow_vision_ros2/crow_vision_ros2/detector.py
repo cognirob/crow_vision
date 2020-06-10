@@ -17,11 +17,12 @@ from layers.output_utils import postprocess
 from eval import prep_display
 from data.config import Config
 
-import matplotlib.pyplot as plt
-
 class CrowVision(Node):
   """
   ROS2 node for CNN used in Crow.
+
+  Run as
+  `ros2 run crow_vision_ros2 detector [path_to_weights [config to use [input topic name]]]`
 
   This node listens on network for topic "/crow/camX/image",
   obtains raw RGB image, processes it in neural net, and publishes results in form of (for given camera):
@@ -40,12 +41,19 @@ class CrowVision(Node):
                top_k = 15,
                threshold=0.51,
                model='./data/yolact/weights/yolact_base_54_800000.pth', #relative to YOLACT_REPO
+               config='yolact_base_config', #one of the configs in `config.py` in yolact. Must match with weights. 
                ):
     super().__init__('CrowVision')
     self.cam = camera
 
     # there is 1 listener with raw images:
-    self.listener_ = self.create_subscription(sensor_msgs.msg.Image, camera+topic_in, self.input_callback, 1024)
+    if len(sys.argv) >= 4:
+      print("Using input ROS topic {} (3rd arg).".format(sys.argv[3]))
+      in_topic = sys.argv[3]
+    else:
+      in_topic = camera+topic_in
+
+    self.listener_ = self.create_subscription(sensor_msgs.msg.Image, in_topic, self.input_callback, 1) #the listener QoS has to be =1, "keep last only".
 
     # there are multiple publishers. We publish all the info for a single detection step (a single image)
     # but optionally the results are separated into different subtopics the clients can subscribe (eg 'labels', 'masks')
@@ -80,9 +88,17 @@ class CrowVision(Node):
     # CUDA setup for yolact
     torch.backends.cudnn.fastest = True
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    set_cfg('yolact_base_config') #TODO add and use crow_base_config
+
+    if len(sys.argv) >= 3:
+      print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
+      config = sys.argv[2]
+    set_cfg(config)
 
     self.net_ = Yolact().cuda()
+
+    if len(sys.argv) >= 2:
+      print("Using weights from file {} (1st argument).".format(sys.argv[1]))
+      model = sys.argv[1]
 
     model_abs = os.path.join(
                  os.path.abspath(os.path.expanduser(YOLACT_REPO)),
