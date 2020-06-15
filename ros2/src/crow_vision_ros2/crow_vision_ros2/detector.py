@@ -47,24 +47,31 @@ class CrowVision(Node):
     with open(CONFIG_DEFAULT) as configFile:
       self.config = commentjson.load(configFile)
 
-    # there is 1 listener with raw images: #TODO create N listeners
+    ## handle multiple inputs (cameras).
+    # store the ROS Listeners,Publishers in a dict{}, keys by topic.
+    self.ros = dict()
     assert len(self.config["inputs"]) >= 1
-    in_topic = config["inputs"][0]["camera"] + "/" + config["inputs"][0]["topic"]
-    self.listener_ = self.create_subscription(sensor_msgs.msg.Image, in_topic, self.input_callback, 1) #the listener QoS has to be =1, "keep last only".
-    self.get_logger().info('Input listener created on topic: "%s"' % in_topic)
+    for inp in self.config["inputs"]:
+      prefix = inp["camera"]
 
-    # there are multiple publishers. We publish all the info for a single detection step (a single image)
-    # but optionally the results are separated into different subtopics the clients can subscribe (eg 'labels', 'masks')
-    # If a topic_out_* is None, we skip publishing on that stream, it is disabled.
-    if config["output"]["image_annotated"] is not None:
-      topic = config["inputs"][0]["camera"] + "/" + config["output"]["image_annotated"] 
-      self.publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
-      self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-    else:
-      self.publisher_img = None
+      # create INput listener with raw images
+      topic = inp["topic"]
+      camera_topic = prefix + "/" + topic
+      listener = self.create_subscription(msg_type=sensor_msgs.msg.Image, topic=camera_topic, callback=self.input_callback, qos_profile=1) #the listener QoS has to be =1, "keep last only".
+      self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
+      self.ros[camera_topic] = listener
 
-    self.publisher_masks = None
-    #TODO others publishers
+
+      # there are multiple publishers (for each input/camera topic). 
+      # the results are separated into different (optional) subtopics the clients can subscribe to (eg 'labels', 'masks')
+      # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources. 
+      if config["output"]["image_annotated"]: 
+        topic = prefix + "/" + config["output"]["image_annotated"] 
+        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
+        self.get_logger().info('Output publisher created for topic: "%s"' % topic)
+        self.ros[topic] = publisher_img
+
+      #TODO others publishers
 
     self.cvb_ = CvBridge()
 
@@ -135,14 +142,15 @@ class CrowVision(Node):
   def input_callback(self, msg):
     self.get_logger().info('I heard: "%s"' % str(msg.height))
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
+    #TODO parse time from incoming msg, pass to outgoing msg
 
     masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
-    if self.publisher_img is not None:
+    if self.ros:
       img_labeled = self.label_image(img_raw)
       msg = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       self.get_logger().info("Publishing as Image {} x {}".format(msg.width, msg.height))
-      self.publisher_img.publish(msg)
+      self.publisher_img.publish(msg) #FIXME how do I know which listner (and aligned publisher) this callback runs for? Ie can I know topic or the parent(listener) in the callback??
 
     if self.publisher_masks is not None:
       message = std_msgs.msg.String()
