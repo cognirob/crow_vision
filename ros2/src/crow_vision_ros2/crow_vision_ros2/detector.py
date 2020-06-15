@@ -7,6 +7,9 @@ from cv_bridge import CvBridge
 import cv2
 import torch
 
+import commentjson
+import pkg_resources
+
 # import CNN - YOLACT
 YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
 import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
@@ -33,39 +36,34 @@ class CrowVision(Node):
   - "/detections/confidences", etc. TODO
   """
 
+
   def __init__(self,
-               camera='/crow/cam1',
-               topic_in="/raw", #TODO match with default RGB topic of RS camera node
-               topic_out_img="/detections/image",
-               topic_out_masks="/detections/masks",
-               top_k = 15,
-               threshold=0.51,
-               model='./data/yolact/weights/yolact_base_54_800000.pth', #relative to YOLACT_REPO
-               config='yolact_base_config', #one of the configs in `config.py` in yolact. Must match with weights. 
+               config='config.json',
                ):
     super().__init__('CrowVision')
-    self.cam = camera
 
-    # there is 1 listener with raw images:
-    if len(sys.argv) >= 4:
-      print("Using input ROS topic {} (3rd arg).".format(sys.argv[3]))
-      in_topic = sys.argv[3]
-    else:
-      in_topic = camera+topic_in
+    #parse config
+    CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
+    with open(CONFIG_DEFAULT) as configFile:
+      self.config = commentjson.load(configFile)
 
+    # there is 1 listener with raw images: #TODO create N listeners
+    assert len(self.config["inputs"]) >= 1
+    in_topic = config["inputs"][0]["camera"] + "/" + config["inputs"][0]["topic"]
     self.listener_ = self.create_subscription(sensor_msgs.msg.Image, in_topic, self.input_callback, 1) #the listener QoS has to be =1, "keep last only".
+    self.get_logger().info('Input listener created on topic: "%s"' % in_topic)
 
     # there are multiple publishers. We publish all the info for a single detection step (a single image)
     # but optionally the results are separated into different subtopics the clients can subscribe (eg 'labels', 'masks')
     # If a topic_out_* is None, we skip publishing on that stream, it is disabled.
-    if topic_out_img is not None:
-      self.publisher_img = self.create_publisher(sensor_msgs.msg.Image, camera+topic_out_img, 1024) #publishes the processed (annotated,detected) image
+    if config["output"]["image_annotated"] is not None:
+      topic = config["inputs"][0]["camera"] + "/" + config["output"]["image_annotated"] 
+      self.publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
+      self.get_logger().info('Output publisher created for topic: "%s"' % topic)
     else:
       self.publisher_img = None
-    if topic_out_masks is not None:
-      self.publisher_masks = self.create_publisher(std_msgs.msg.String, camera+topic_out_masks, 1024) #TODO change to correct dtype, not string
-    else:
-      self.publisher_masks = None
+
+    self.publisher_masks = None
     #TODO others publishers
 
     self.cvb_ = CvBridge()
@@ -91,14 +89,19 @@ class CrowVision(Node):
 
     if len(sys.argv) >= 3:
       print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
-      config = sys.argv[2]
+      cfg = sys.argv[2]
+    else:
+      cfg = config["config"]
     set_cfg(config)
 
     self.net_ = Yolact().cuda()
 
+    # load model weights
     if len(sys.argv) >= 2:
       print("Using weights from file {} (1st argument).".format(sys.argv[1]))
       model = sys.argv[1]
+    else:
+      model = config["weights"]
 
     model_abs = os.path.join(
                  os.path.abspath(os.path.expanduser(YOLACT_REPO)),
@@ -140,11 +143,6 @@ class CrowVision(Node):
       msg = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       self.get_logger().info("Publishing as Image {} x {}".format(msg.width, msg.height))
       self.publisher_img.publish(msg)
-    #   cv2.imshow('ros', img_labeled)
-    #   cv2.waitKey(50)
-      #plt.imshow(img_labeled)
-      #plt.title('ROS')
-      #plt.show()
 
     if self.publisher_masks is not None:
       message = std_msgs.msg.String()
