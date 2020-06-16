@@ -46,10 +46,11 @@ class CrowVision(Node):
     CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
     with open(CONFIG_DEFAULT) as configFile:
       self.config = json.load(configFile)
+      print(self.config)
 
     ## handle multiple inputs (cameras).
     # store the ROS Listeners,Publishers in a dict{}, keys by topic.
-    self.ros = dict()
+    self.ros = {}
     assert len(self.config["inputs"]) >= 1
     for inp in self.config["inputs"]:
       prefix = inp["camera"]
@@ -62,14 +63,15 @@ class CrowVision(Node):
                                           callback=lambda msg, topic=camera_topic: self.input_callback(msg, topic), 
                                           qos_profile=1) #the listener QoS has to be =1, "keep last only".
       self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
+      self.ros[camera_topic] = {} # camera_topic is used as an ID for this input, all I/O listeners,publishers will be based under that id.
       self.ros[camera_topic]["listener"] = listener
 
 
       # there are multiple publishers (for each input/camera topic). 
       # the results are separated into different (optional) subtopics the clients can subscribe to (eg 'labels', 'masks')
       # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources. 
-      if config["output"]["image_annotated"]: 
-        topic = prefix + "/" + config["output"]["image_annotated"] 
+      if self.config["outputs"]["image_annotated"] is not "": 
+        topic = prefix + "/" + self.config["outputs"]["image_annotated"] 
         publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_img"] = publisher_img
@@ -82,8 +84,8 @@ class CrowVision(Node):
     # setup yolact args
     global args
     args=Config({})
-    args.top_k = top_k
-    args.score_threshold = threshold
+    args.top_k = self.config["top_k"]
+    args.score_threshold = self.config["threshold"]
     # set here everything that would have been set by parsing arguments in yolact/eval.py:
     args.display_lincomb = False
     args.crop = False
@@ -101,8 +103,8 @@ class CrowVision(Node):
       print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
       cfg = sys.argv[2]
     else:
-      cfg = config["config"]
-    set_cfg(config)
+      cfg = self.config["config"]
+    set_cfg(cfg)
 
     self.net_ = Yolact().cuda()
 
@@ -111,7 +113,7 @@ class CrowVision(Node):
       print("Using weights from file {} (1st argument).".format(sys.argv[1]))
       model = sys.argv[1]
     else:
-      model = config["weights"]
+      model = self.config["weights"]
 
     model_abs = os.path.join(
                  os.path.abspath(os.path.expanduser(YOLACT_REPO)),
