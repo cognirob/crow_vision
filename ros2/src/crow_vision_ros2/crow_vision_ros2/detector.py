@@ -60,6 +60,7 @@ class CrowVision(Node):
       camera_topic = prefix + "/" + topic
       listener = self.create_subscription(msg_type=sensor_msgs.msg.Image, 
                                           topic=camera_topic, 
+                                          # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
                                           callback=lambda msg, topic=camera_topic: self.input_callback(msg, topic), 
                                           qos_profile=1) #the listener QoS has to be =1, "keep last only".
       self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
@@ -70,8 +71,8 @@ class CrowVision(Node):
       # there are multiple publishers (for each input/camera topic). 
       # the results are separated into different (optional) subtopics the clients can subscribe to (eg 'labels', 'masks')
       # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources. 
-      if self.config["outputs"]["image_annotated"] is not "": 
-        topic = prefix + "/" + self.config["outputs"]["image_annotated"] 
+      if self.config["outputs"]["image_annotated"]: 
+        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"] 
         publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_img"] = publisher_img
