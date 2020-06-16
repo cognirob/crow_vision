@@ -7,7 +7,7 @@ from cv_bridge import CvBridge
 import cv2
 import torch
 
-import commentjson
+import commentjson as json
 import pkg_resources
 
 # import CNN - YOLACT
@@ -45,7 +45,7 @@ class CrowVision(Node):
     #parse config
     CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
     with open(CONFIG_DEFAULT) as configFile:
-      self.config = commentjson.load(configFile)
+      self.config = json.load(configFile)
 
     ## handle multiple inputs (cameras).
     # store the ROS Listeners,Publishers in a dict{}, keys by topic.
