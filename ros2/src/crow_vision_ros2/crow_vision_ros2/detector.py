@@ -57,9 +57,12 @@ class CrowVision(Node):
       # create INput listener with raw images
       topic = inp["topic"]
       camera_topic = prefix + "/" + topic
-      listener = self.create_subscription(msg_type=sensor_msgs.msg.Image, topic=camera_topic, callback=self.input_callback, qos_profile=1) #the listener QoS has to be =1, "keep last only".
+      listener = self.create_subscription(msg_type=sensor_msgs.msg.Image, 
+                                          topic=camera_topic, 
+                                          callback=lambda msg, topic=camera_topic: self.input_callback(msg, topic), 
+                                          qos_profile=1) #the listener QoS has to be =1, "keep last only".
       self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
-      self.ros[camera_topic] = listener
+      self.ros[camera_topic]["listener"] = listener
 
 
       # there are multiple publishers (for each input/camera topic). 
@@ -69,7 +72,7 @@ class CrowVision(Node):
         topic = prefix + "/" + config["output"]["image_annotated"] 
         publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[topic] = publisher_img
+        self.ros[camera_topic]["pub_img"] = publisher_img
 
       #TODO others publishers
 
@@ -139,23 +142,30 @@ class CrowVision(Node):
       assert "Currently only Yolact is supported."
 
 
-  def input_callback(self, msg):
-    self.get_logger().info('I heard: "%s"' % str(msg.height))
+  def input_callback(self, msg, topic):
+    """
+    @param msg - ROS msg (Image data) to be processed. From camera
+    @param topic - str, from camera/input on given topic.
+    @return nothing, but send new message(s) via output Publishers. 
+    """
+    self.get_logger().info("I heard: {} for topic {}".format(str(msg.height), topic))
+    assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
+
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
     #TODO parse time from incoming msg, pass to outgoing msg
 
     masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
-    if self.ros:
+    if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.label_image(img_raw)
-      msg = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
-      self.get_logger().info("Publishing as Image {} x {}".format(msg.width, msg.height))
-      self.publisher_img.publish(msg) #FIXME how do I know which listner (and aligned publisher) this callback runs for? Ie can I know topic or the parent(listener) in the callback??
+      msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
+      self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
+      self.ros[topic]["pub_img"].publish(msg_img)
 
-    if self.publisher_masks is not None:
+    if self.ros[topic]["pub_masks"]:
       message = std_msgs.msg.String()
       message.data = str(masks)
-      self.publisher_masks.publish(message)
+      self.ros[topic]["pub_masks"].publish(message)
 
 
 def main(args=None):
