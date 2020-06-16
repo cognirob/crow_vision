@@ -155,20 +155,26 @@ class CrowVision(Node):
     assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
-    #TODO parse time from incoming msg, pass to outgoing msg
 
     masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
     if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.label_image(img_raw)
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
+      # parse time from incoming msg, pass to outgoing msg
+      msg_img.header.stamp.nsec = msg.header.stamp.nsec
+      msg_img.header.stamp.sec  = msg.header.stamp.sec
       self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if self.ros[topic]["pub_masks"]:
-      message = std_msgs.msg.String()
-      message.data = str(masks)
-      self.ros[topic]["pub_masks"].publish(message)
+      msg_mask = std_msgs.msg.String()
+      msg_mask.data = str(masks)
+      # parse time from incoming msg, pass to outgoing msg
+      msg_mask.header.stamp.nsec = msg.header.stamp.nsec
+      msg_mask.header.stamp.sec  = msg.header.stamp.sec
+      self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
+      self.ros[topic]["pub_masks"].publish(msg_mask)
 
 
 def main(args=None):
