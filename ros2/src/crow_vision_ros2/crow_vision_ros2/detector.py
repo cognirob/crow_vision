@@ -130,21 +130,32 @@ class CrowVision(Node):
     print('Hi from crow_vision_ros2.')
 
 
-  def label_image(self, img):
+  def net_process_predictions_(self, img):
     """
-    Visualize detections and display as an image. Apply CNN inference.
+    call Yolact on img, get preds.
+    Used in label_image, raw_inference.
     """
     if isinstance(self.net_, Yolact):
       frame = torch.from_numpy(img).cuda().float()
       batch = FastBaseTransform()(frame.unsqueeze(0))
       preds = self.net_(batch)
+      return preds
+    else:
+      assert "Currently only Yolact is supported."
+
+
+  def label_image(self, preds):
+    """
+    Visualize detections and display as an image. Apply CNN inference.
+    """
+    if isinstance(self.net_, Yolact):
       global args
       processed = prep_display(preds, frame, h=None, w=None, undo_transform=False, args=args)
       return processed
     else:
       assert "Currently only Yolact is supported."
 
-  def raw_inference(self, img):
+  def raw_inference(self, preds):
     """
     Inference, detections by YOLACT but without visualizations. 
     Should be fast and all that is needed.
@@ -152,9 +163,6 @@ class CrowVision(Node):
     @return list of lists: [classes, scores, boxes, masks] 
     """
     if isinstance(self.net_, Yolact):
-      frame = torch.from_numpy(img).cuda().float() #TODO merge the common path with label_image
-      batch = FastBaseTransform()(frame.unsqueeze(0))
-      preds = self.net_(batch)
       global args
       [classes, scores, boxes, masks] = postprocess(preds, w=None, h=None, batch_idx=0, interpolation_mode='bilinear', 
                                                     visualize_lincomb=False, crop_masks=True, score_threshold=args.score_threshold)
@@ -175,9 +183,11 @@ class CrowVision(Node):
 
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
 
+    preds = self.net_process_predictions_(img_raw)
+
     #the input callback triggers the publishers here.
     if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
-      img_labeled = self.label_image(img_raw)
+      img_labeled = self.label_image(preds)
 
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg
@@ -187,7 +197,7 @@ class CrowVision(Node):
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if self.ros[topic]["pub_masks"]:
-      classes, scores, bboxes, masks = self.raw_inference(img)
+      classes, scores, bboxes, masks = self.raw_inference(preds)
 
       msg_mask = std_msgs.msg.String()
       msg_mask.data = str(masks)
