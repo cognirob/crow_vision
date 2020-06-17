@@ -144,6 +144,25 @@ class CrowVision(Node):
     else:
       assert "Currently only Yolact is supported."
 
+  def raw_inference(self, img):
+    """
+    Inference, detections by YOLACT but without visualizations. 
+    Should be fast and all that is needed.
+
+    @return list of lists: [classes, scores, boxes, masks] 
+    """
+    if isinstance(self.net_, Yolact):
+      frame = torch.from_numpy(img).cuda().float() #TODO merge the common path with label_image
+      batch = FastBaseTransform()(frame.unsqueeze(0))
+      preds = self.net_(batch)
+      global args
+      [classes, scores, boxes, masks] = postprocess(preds, w=None, h=None, batch_idx=0, interpolation_mode='bilinear', 
+                                                    visualize_lincomb=False, crop_masks=True, score_threshold=args.score_threshold)
+      return [classes, scores, boxes, masks]
+    else:
+      assert "Currently only Yolact is supported."
+
+
 
   def input_callback(self, msg, topic):
     """
@@ -156,10 +175,10 @@ class CrowVision(Node):
 
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
 
-    masks = "TODO" #TODO process from cnn
     #the input callback triggers the publishers here.
     if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.label_image(img_raw)
+
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg
       msg_img.header.stamp.nsec = msg.header.stamp.nsec
@@ -168,6 +187,8 @@ class CrowVision(Node):
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if self.ros[topic]["pub_masks"]:
+      classes, scores, bboxes, masks = self.raw_inference(img)
+
       msg_mask = std_msgs.msg.String()
       msg_mask.data = str(masks)
       # parse time from incoming msg, pass to outgoing msg
