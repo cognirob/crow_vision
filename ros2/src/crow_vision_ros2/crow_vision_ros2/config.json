@@ -1,0 +1,19 @@
+{
+  "top_k": 15,
+  "threshold": 0.51, 
+  "weights": "./data/yolact/weights/yolact_base_54_800000.pth", #relative to YOLACT_REPO
+  "config": "yolact_base_config", #toggle yolact_base_config and crow_base_config. weights must change accordingly.
+  "inputs": [ #list of 1+ pairs {"camera":'/cam1', "topic": 'image_raw"}, 
+    {"camera": "/camera1", "topic": "color/image_raw" }, 
+    {"camera": "/camera2", "topic": "color/image_raw"} #uncomment to add another camera(s) as inputs. 
+  ],
+  "outputs": { #output ROS topics are formed as: config["inputs"][0]["camera"] + config["outputs"]["masks"] ,etc.
+    # pass an empty string "" to ignore/skip that output. 
+    "prefix": "detections",
+    "image_annotated": "image_annot",
+    "masks": "masks",
+    "labels": "labels",
+    "bboxes": "bboxes",
+    "confidences": ""
+  }
+}

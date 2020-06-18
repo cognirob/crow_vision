@@ -25,3 +25,4 @@ dependencies:
     - pillow <7.0 # bug PILLOW_VERSION in torchvision, must be < 7.0 until torchvision is upgraded
     - pycocotools
     - PyQt5 # needed on KDE/Qt envs for matplotlib
+    - commentjson

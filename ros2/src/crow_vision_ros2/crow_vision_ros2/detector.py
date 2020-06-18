@@ -7,6 +7,9 @@ from cv_bridge import CvBridge
 import cv2
 import torch
 
+import commentjson as json
+import pkg_resources
+
 # import CNN - YOLACT
 YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
 import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
@@ -33,40 +36,48 @@ class CrowVision(Node):
   - "/detections/confidences", etc. TODO
   """
 
+
   def __init__(self,
-               camera='/crow/cam1',
-               topic_in="/raw", #TODO match with default RGB topic of RS camera node
-               topic_out_img="/detections/image",
-               topic_out_masks="/detections/masks",
-               top_k = 15,
-               threshold=0.51,
-               model='./data/yolact/weights/yolact_base_54_800000.pth', #relative to YOLACT_REPO
-               config='yolact_base_config', #one of the configs in `config.py` in yolact. Must match with weights. 
+               config='config.json',
                ):
     super().__init__('CrowVision')
-    self.cam = camera
 
-    # there is 1 listener with raw images:
-    if len(sys.argv) >= 4:
-      print("Using input ROS topic {} (3rd arg).".format(sys.argv[3]))
-      in_topic = sys.argv[3]
-    else:
-      in_topic = camera+topic_in
+    #parse config
+    CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
+    with open(CONFIG_DEFAULT) as configFile:
+      self.config = json.load(configFile)
+      print(self.config)
 
-    self.listener_ = self.create_subscription(sensor_msgs.msg.Image, in_topic, self.input_callback, 1) #the listener QoS has to be =1, "keep last only".
+    ## handle multiple inputs (cameras).
+    # store the ROS Listeners,Publishers in a dict{}, keys by topic.
+    self.ros = {}
+    assert len(self.config["inputs"]) >= 1
+    for inp in self.config["inputs"]:
+      prefix = inp["camera"]
 
-    # there are multiple publishers. We publish all the info for a single detection step (a single image)
-    # but optionally the results are separated into different subtopics the clients can subscribe (eg 'labels', 'masks')
-    # If a topic_out_* is None, we skip publishing on that stream, it is disabled.
-    if topic_out_img is not None:
-      self.publisher_img = self.create_publisher(sensor_msgs.msg.Image, camera+topic_out_img, 1024) #publishes the processed (annotated,detected) image
-    else:
-      self.publisher_img = None
-    if topic_out_masks is not None:
-      self.publisher_masks = self.create_publisher(std_msgs.msg.String, camera+topic_out_masks, 1024) #TODO change to correct dtype, not string
-    else:
-      self.publisher_masks = None
-    #TODO others publishers
+      # create INput listener with raw images
+      topic = inp["topic"]
+      camera_topic = prefix + "/" + topic
+      listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
+                                          topic=camera_topic,
+                                          # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                          callback=lambda msg, topic=camera_topic: self.input_callback(msg, topic),
+                                          qos_profile=1) #the listener QoS has to be =1, "keep last only".
+      self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
+      self.ros[camera_topic] = {} # camera_topic is used as an ID for this input, all I/O listeners,publishers will be based under that id.
+      self.ros[camera_topic]["listener"] = listener
+
+
+      # there are multiple publishers (for each input/camera topic).
+      # the results are separated into different (optional) subtopics the clients can subscribe to (eg 'labels', 'masks')
+      # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources.
+      if self.config["outputs"]["image_annotated"]:
+        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"]
+        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
+        self.get_logger().info('Output publisher created for topic: "%s"' % topic)
+        self.ros[camera_topic]["pub_img"] = publisher_img
+
+      #TODO others publishers
 
     self.cvb_ = CvBridge()
 
@@ -74,8 +85,8 @@ class CrowVision(Node):
     # setup yolact args
     global args
     args=Config({})
-    args.top_k = top_k
-    args.score_threshold = threshold
+    args.top_k = self.config["top_k"]
+    args.score_threshold = self.config["threshold"]
     # set here everything that would have been set by parsing arguments in yolact/eval.py:
     args.display_lincomb = False
     args.crop = False
@@ -91,14 +102,19 @@ class CrowVision(Node):
 
     if len(sys.argv) >= 3:
       print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
-      config = sys.argv[2]
-    set_cfg(config)
+      cfg = sys.argv[2]
+    else:
+      cfg = self.config["config"]
+    set_cfg(cfg)
 
     self.net_ = Yolact().cuda()
 
+    # load model weights
     if len(sys.argv) >= 2:
       print("Using weights from file {} (1st argument).".format(sys.argv[1]))
       model = sys.argv[1]
+    else:
+      model = self.config["weights"]
 
     model_abs = os.path.join(
                  os.path.abspath(os.path.expanduser(YOLACT_REPO)),
@@ -114,42 +130,82 @@ class CrowVision(Node):
     print('Hi from crow_vision_ros2.')
 
 
-  def label_image(self, img):
+  def net_process_predictions_(self, img):
     """
-    Visualize detections and display as an image. Apply CNN inference.
+    call Yolact on img, get preds.
+    Used in label_image, raw_inference.
     """
     if isinstance(self.net_, Yolact):
       frame = torch.from_numpy(img).cuda().float()
       batch = FastBaseTransform()(frame.unsqueeze(0))
       preds = self.net_(batch)
+      return preds, frame
+    else:
+      assert "Currently only Yolact is supported."
+
+
+  def label_image(self, preds, frame):
+    """
+    Visualize detections and display as an image. Apply CNN inference.
+    """
+    if isinstance(self.net_, Yolact):
       global args
       processed = prep_display(preds, frame, h=None, w=None, undo_transform=False, args=args)
       return processed
     else:
       assert "Currently only Yolact is supported."
 
+  def raw_inference(self, preds):
+    """
+    Inference, detections by YOLACT but without visualizations.
+    Should be fast and all that is needed.
 
-  def input_callback(self, msg):
-    self.get_logger().info('I heard: "%s"' % str(msg.height))
+    @return list of lists: [classes, scores, boxes, masks]
+    """
+    if isinstance(self.net_, Yolact):
+      global args
+      [classes, scores, boxes, masks] = postprocess(preds, w=None, h=None, batch_idx=0, interpolation_mode='bilinear',
+                                                    visualize_lincomb=False, crop_masks=True, score_threshold=args.score_threshold)
+      return [classes, scores, boxes, masks]
+    else:
+      assert "Currently only Yolact is supported."
+
+
+
+  def input_callback(self, msg, topic):
+    """
+    @param msg - ROS msg (Image data) to be processed. From camera
+    @param topic - str, from camera/input on given topic.
+    @return nothing, but send new message(s) via output Publishers.
+    """
+    self.get_logger().info("I heard: {} for topic {}".format(str(msg.height), topic))
+    assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
+
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
 
-    masks = "TODO" #TODO process from cnn
-    #the input callback triggers the publishers here.
-    if self.publisher_img is not None:
-      img_labeled = self.label_image(img_raw)
-      msg = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
-      self.get_logger().info("Publishing as Image {} x {}".format(msg.width, msg.height))
-      self.publisher_img.publish(msg)
-    #   cv2.imshow('ros', img_labeled)
-    #   cv2.waitKey(50)
-      #plt.imshow(img_labeled)
-      #plt.title('ROS')
-      #plt.show()
+    preds, frame = self.net_process_predictions_(img_raw)
 
-    if self.publisher_masks is not None:
-      message = std_msgs.msg.String()
-      message.data = str(masks)
-      self.publisher_masks.publish(message)
+    #the input callback triggers the publishers here.
+    if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
+      img_labeled = self.label_image(preds, frame)
+
+      msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
+      # parse time from incoming msg, pass to outgoing msg
+      msg_img.header.stamp.nanosec = msg.header.stamp.nanosec
+      msg_img.header.stamp.sec  = msg.header.stamp.sec
+      self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
+      self.ros[topic]["pub_img"].publish(msg_img)
+
+    if False and self.ros[topic]["pub_masks"]:  # TODO: fix
+      classes, scores, bboxes, masks = self.raw_inference(preds)
+
+      msg_mask = std_msgs.msg.String()
+      msg_mask.data = str(masks)
+      # parse time from incoming msg, pass to outgoing msg
+      msg_mask.header.stamp.nsec = msg.header.stamp.nsec
+      msg_mask.header.stamp.sec  = msg.header.stamp.sec
+      self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
+      self.ros[topic]["pub_masks"].publish(msg_mask)
 
 
 def main(args=None):
