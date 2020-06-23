@@ -80,12 +80,11 @@ class CrowVision(Node):
 
     ## YOLACT setup
     # setup additional args
-    if len(sys.argv) >= 3: #TODO config switching should be merged to InfTool, not here. 
+    if len(sys.argv) >= 3:
       print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
       cfg = sys.argv[2]
     else:
       cfg = self.config["config"]
-    set_cfg(cfg)
 
     # load model weights
     if len(sys.argv) >= 2:
@@ -100,7 +99,7 @@ class CrowVision(Node):
                  )
     assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
 
-    self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"])
+    self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"], config=cfg)
     print('Hi from crow_vision_ros2.')
 
 
