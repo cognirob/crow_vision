@@ -13,12 +13,9 @@ import pkg_resources
 # import CNN - YOLACT
 YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
 import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
+from inference_tool import InfTool
 from yolact import Yolact
 from data import set_cfg
-from utils.augmentations import FastBaseTransform
-from layers.output_utils import postprocess
-from eval import prep_display
-from data.config import Config
 
 class CrowVision(Node):
   """
@@ -83,31 +80,16 @@ class CrowVision(Node):
 
     ## YOLACT setup
     # setup yolact args
-    global args
-    args=Config({})
     args.top_k = self.config["top_k"]
     args.score_threshold = self.config["threshold"]
-    # set here everything that would have been set by parsing arguments in yolact/eval.py:
-    args.display_lincomb = False
-    args.crop = False
-    args.display_fps = False
-    args.display_text = True
-    args.display_bboxes = True
-    args.display_masks =True
-    args.display_scores = True
 
-    # CUDA setup for yolact
-    torch.backends.cudnn.fastest = True
-    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
-    if len(sys.argv) >= 3:
+    if len(sys.argv) >= 3: #TODO config switching should be merged to InfTool, not here. 
       print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
       cfg = sys.argv[2]
     else:
       cfg = self.config["config"]
     set_cfg(cfg)
-
-    self.net_ = Yolact().cuda()
 
     # load model weights
     if len(sys.argv) >= 2:
@@ -122,53 +104,8 @@ class CrowVision(Node):
                  )
     assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
 
-    self.net_.load_weights(model_abs)
-    self.net_.eval()
-    self.net_.detect.use_fast_nms = True
-    self.net_.detect.use_cross_class_nms = False
-
+    self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"])
     print('Hi from crow_vision_ros2.')
-
-
-  def net_process_predictions_(self, img):
-    """
-    call Yolact on img, get preds.
-    Used in label_image, raw_inference.
-    """
-    if isinstance(self.net_, Yolact):
-      frame = torch.from_numpy(img).cuda().float()
-      batch = FastBaseTransform()(frame.unsqueeze(0))
-      preds = self.net_(batch)
-      return preds, frame
-    else:
-      assert "Currently only Yolact is supported."
-
-
-  def label_image(self, preds, frame):
-    """
-    Visualize detections and display as an image. Apply CNN inference.
-    """
-    if isinstance(self.net_, Yolact):
-      global args
-      processed = prep_display(preds, frame, h=None, w=None, undo_transform=False, args=args)
-      return processed
-    else:
-      assert "Currently only Yolact is supported."
-
-  def raw_inference(self, preds):
-    """
-    Inference, detections by YOLACT but without visualizations.
-    Should be fast and all that is needed.
-
-    @return list of lists: [classes, scores, boxes, masks]
-    """
-    if isinstance(self.net_, Yolact):
-      global args
-      [classes, scores, boxes, masks] = postprocess(preds, w=None, h=None, batch_idx=0, interpolation_mode='bilinear',
-                                                    visualize_lincomb=False, crop_masks=True, score_threshold=args.score_threshold)
-      return [classes, scores, boxes, masks]
-    else:
-      assert "Currently only Yolact is supported."
 
 
 
@@ -183,11 +120,11 @@ class CrowVision(Node):
 
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
 
-    preds, frame = self.net_process_predictions_(img_raw)
+    preds, frame = self.cnn.process_batch(img_raw)
 
     #the input callback triggers the publishers here.
     if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
-      img_labeled = self.label_image(preds, frame)
+      img_labeled = self.cnn.label_image(img_raw, preds, frame)
 
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg
@@ -197,7 +134,7 @@ class CrowVision(Node):
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if False and self.ros[topic]["pub_masks"]:  # TODO: fix
-      classes, scores, bboxes, masks = self.raw_inference(preds)
+      classes, scores, bboxes, masks = self.cnn.raw_inference(img_raw, preds)
 
       msg_mask = std_msgs.msg.String()
       msg_mask.data = str(masks)
