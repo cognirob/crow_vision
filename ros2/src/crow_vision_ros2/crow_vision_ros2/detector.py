@@ -79,11 +79,7 @@ class CrowVision(Node):
     self.cvb_ = CvBridge()
 
     ## YOLACT setup
-    # setup yolact args
-    args.top_k = self.config["top_k"]
-    args.score_threshold = self.config["threshold"]
-
-
+    # setup additional args
     if len(sys.argv) >= 3: #TODO config switching should be merged to InfTool, not here. 
       print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
       cfg = sys.argv[2]
