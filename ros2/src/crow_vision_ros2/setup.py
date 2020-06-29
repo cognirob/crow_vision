@@ -10,6 +10,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, ['launch/all_cameras.launch.py']),
+        ('share/' + package_name, ['launch/cameras_detection.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -20,7 +21,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'detector = crow_vision_ros2.detector:main'
+            'detector = crow_vision_ros2.detector:main',
+            'calibrator = crow_vision_ros2.calibrator:main'
         ],
     },
 )
