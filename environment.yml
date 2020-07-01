@@ -26,3 +26,5 @@ dependencies:
     - pycocotools
     - PyQt5 # needed on KDE/Qt envs for matplotlib
     - commentjson
+    - dill # YOLACT
+    - catkin_pkg #for ROS
