@@ -9,6 +9,7 @@ import cv_bridge
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
+from crow_vision_ros2.utils import make_vector3, make_quaternion
 
 import transforms3d as tf3
 
@@ -50,9 +51,8 @@ class Calibrator(Node):
             tf_msg.header.stamp = self.get_clock().now().to_msg()
             tf_msg.header.frame_id = f"{camera_ns[1:]}_link"
             tf_msg.child_frame_id = optical_frame
-            tf_msg.transform.translation = Vector3(**{c: tt for c, tt in zip(["x", "y", "z"], [-0.00030501, 0.015123, 0.0])})
-            # tf_msg.transform.translation = Vector3(**{c: tt for c, tt in zip(["x", "y", "z"], [1., 2., 3.])})
-            tf_msg.transform.rotation = Quaternion(**{c: tt for c, tt in zip(["x", "y", "z", "w"], [-0.5, 0.5, -0.5, 0.5])})
+            tf_msg.transform.translation = make_vector3([-0.00030501, 0.015123, 0.0])
+            tf_msg.transform.rotation = make_quaternion([-0.5, 0.5, -0.5, 0.5])
             # print(tf_msg)
 
             self.tf_static_broadcaster.sendTransform(tf_msg)
@@ -96,8 +96,8 @@ class Calibrator(Node):
                     tf_msg.header.stamp = self.get_clock().now().to_msg()
                     tf_msg.header.frame_id = "world"
                     tf_msg.child_frame_id = optical_frame
-                    tf_msg.transform.translation = Vector3(**{c: tt for c, tt in zip(["x", "y", "z"], tvec.ravel().tolist())})
-                    tf_msg.transform.rotation = Quaternion(**{c: tt for c, tt in zip(["w", "x", "y", "z"], quat.ravel().tolist())})
+                    tf_msg.transform.translation = make_vector3(tvec)
+                    tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
                     # print(tf_msg)
 
                     self.tf_broadcaster.sendTransform(tf_msg)
@@ -108,8 +108,6 @@ class Calibrator(Node):
             except Exception as e:
                 print(e)
                 # pass
-
-
 
 
 def main(args=[]):
