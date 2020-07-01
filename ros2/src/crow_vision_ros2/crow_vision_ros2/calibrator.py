@@ -20,7 +20,6 @@ class Calibrator(Node):
     squareLength = 0.042  # mm
     squareMarkerLengthRate = squareLength / markerLength
     dictionary = cv2.aruco.Dictionary_create(48, 4, 65536)
-    color_K = np.r_[609.6669921875, 0.0, 327.0022277832031, 0.0, 609.7865600585938, 244.9646453857422, 0.0, 0.0, 1.0].reshape((3, 3))
     distCoeffs = np.r_[0, 0, 0, 0, 0]
 
     def __init__(self, node_name="calibrator"):
@@ -38,6 +37,7 @@ class Calibrator(Node):
         self.get_logger().info(f"Found {len(self.color_image_topics)} cameras.")
 
         self.optical_frames = dict()
+        self.intrinsics = dict()
 
         for topic, camera_ns in self.cam_info_topics:
             # camera = next(ns + "/" + cam for cam, ns in self.cameras if ns in topic)
@@ -58,7 +58,7 @@ class Calibrator(Node):
             self.tf_static_broadcaster.sendTransform(tf_msg)
 
     def camera_info_cb(self, msg, camera_ns):
-        print(msg.k)
+        self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
         self.create_subscription(Image, self.color_image_topics[camera_ns], lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=self.optical_frames[camera_ns]: self.image_cb(msg, cam_frame, opt_frame), 1)
         self.get_logger().info(f"Connected to '{self.color_image_topics[camera_ns]}' image topic for camera '{camera_ns}' and '{self.optical_frames[camera_ns]}' frame.")
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))
@@ -68,20 +68,21 @@ class Calibrator(Node):
         image = self.bridge.imgmsg_to_cv2(msg)
         start = self.get_clock().now()
         image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.dictionary, cameraMatrix=self.color_K)
+        color_K = self.intrinsics[optical_frame]
+        markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.dictionary, cameraMatrix=color_K)
         # print(np.shape(markerCorners))
 
         if len(markerCorners) > 3:
             try:
                 # print(np.shape(markerCorners))
-                diamondCorners, diamondIds = cv2.aruco.detectCharucoDiamond(image, markerCorners, markerIds, self.squareMarkerLengthRate, cameraMatrix=self.color_K)
+                diamondCorners, diamondIds = cv2.aruco.detectCharucoDiamond(image, markerCorners, markerIds, self.squareMarkerLengthRate, cameraMatrix=color_K)
                 # print(diamondIds)
                 # print(diamondCorners)
 
                 if diamondIds is not None and len(diamondIds) > 0:
                     img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
                     img_out = cv2.aruco.drawDetectedDiamonds(img_out, diamondCorners, diamondIds)
-                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(diamondCorners, (-1, 4, 2)), self.squareLength, self.color_K, self.distCoeffs, )
+                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(diamondCorners, (-1, 4, 2)), self.squareLength, color_K, self.distCoeffs, )
                     rmat = cv2.Rodrigues(rvec)[0]
                     # transform = tf3.affines.compose(tvec.ravel(), rmat, [1, 1, 1])
                     # transform_inv = np.linalg.inv(transform)
