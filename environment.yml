@@ -28,3 +28,5 @@ dependencies:
     - commentjson
     - pyrealsense2
     - filterpy
+    - dill # YOLACT
+    - catkin_pkg #for ROS
