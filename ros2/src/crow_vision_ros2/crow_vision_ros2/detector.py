@@ -120,6 +120,9 @@ class CrowVision(Node):
     #the input callback triggers the publishers here.
     if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.cnn.label_image(img_raw, preds, frame)
+      batch,w,h,c = img_labeled.shape
+      assert batch==1,"Batch mode not supported in ROS yet"
+      img_labeled = img_labeled[0]
 
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg

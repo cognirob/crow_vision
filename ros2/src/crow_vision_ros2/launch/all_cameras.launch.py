@@ -27,61 +27,34 @@ from launch.substitutions import ThisLaunchFileDir
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 import pyrealsense2 as rs
+import rclpy
+
 
 def generate_launch_description():
     camera_configs = []
     for i, device in enumerate(rs.context().devices):
         if device.get_info(rs.camera_info.name).lower() != 'platform camera':
-            camera_serial_no = LaunchConfiguration('serial_no', default=device.get_info(rs.camera_info.serial_number))
-            camera_base_frame_id = LaunchConfiguration('base_frame_id', default=f'camera{i + 1}_link')
+            launchParams = {'align_depth': True,
+                            'enable_pointcloud': True,
+                            'dense_pointcloud': True,
+                            }
+
+            launchParams['serial_no'] = LaunchConfiguration('serial_no', default=device.get_info(rs.camera_info.serial_number))
+            launchParams['base_frame_id'] = LaunchConfiguration('base_frame_id', default=f'camera{i + 1}_link')
+            # launchParams['depth_optical_frame_id'] = LaunchConfiguration('depth_optical_frame_id', default=f'camera{i + 1}_depth_optical_frame')
+            # launchParams['camera_infra1_optical_frame'] = LaunchConfiguration('camera_infra1_optical_frame', default=f'camera{i + 1}_infra1_optical_frame')
+            # launchParams['camera_infra2_optical_frame'] = LaunchConfiguration('camera_infra2_optical_frame', default=f'camera{i + 1}_infra2_optical_frame')
+            # launchParams['camera_color_optical_frame'] = LaunchConfiguration('camera_color_optical_frame', default=f'camera{i + 1}_color_optical_frame')
+            # launchParams['camera_accel_optical_frame'] = LaunchConfiguration('camera_accel_optical_frame', default=f'camera{i + 1}_accel_optical_frame')
+            # launchParams['camera_gyro_optical_frame'] = LaunchConfiguration('camera_gyro_optical_frame', default=f'camera{i + 1}_gyro_optical_frame')
+
 
             camera_node = Node(
                 package='realsense_node',
                 node_executable='realsense_node',
                 node_namespace=f"/camera{i + 1}",
                 output='screen',
-                parameters=[{'serial_no': camera_serial_no,
-                             'base_frame_id': camera_base_frame_id,
-                             'align_depth': True,
-                             'enable_pointcloud': True,
-                             'dense_pointcloud': True,
-                             }]
+                parameters=[launchParams]
             )
             camera_configs.append(camera_node)
     return launch.LaunchDescription(camera_configs)
-
-    # config the serial number and base frame id of each camera
-    # camera1_base_frame_id = LaunchConfiguration('base_frame_id', default='camera1_link')
-    # camera2_base_frame_id = LaunchConfiguration('base_frame_id', default='camera2_link')
-    # camera3_base_frame_id = LaunchConfiguration('base_frame_id', default='camera3_link')
-    # camera1_serial_no = LaunchConfiguration('serial_no', default='837212070294')
-    # camera2_serial_no = LaunchConfiguration('serial_no', default='819312071869')
-    # camera3_serial_no = LaunchConfiguration('serial_no', default='845412111144')
-
-
-    # camera1_node = Node(
-    #     package='realsense_node',
-    #     node_executable='realsense_node',
-    #     node_namespace="/camera1",
-    #     output='screen',
-    #     parameters=[{'serial_no':camera1_serial_no,
-    #                 'base_frame_id': camera1_base_frame_id}]
-    #     )
-    # camera2_node = Node(
-    #     package='realsense_node',
-    #     node_executable='realsense_node',
-    #     node_namespace="/camera2",
-    #     output='screen',
-    #     parameters=[{'serial_no':camera2_serial_no,
-    #                 'base_frame_id': camera2_base_frame_id}]
-    #     )
-    # camera3_node = Node(
-    #     package='realsense_node',
-    #     node_executable='realsense_node',
-    #     node_namespace="/camera3",
-    #     output='screen',
-    #     parameters=[{'serial_no':camera3_serial_no,
-    #                 'base_frame_id': camera3_base_frame_id}]
-    #     )
-    # return launch.LaunchDescription([camera1_node, camera2_node, camera3_node])
-
