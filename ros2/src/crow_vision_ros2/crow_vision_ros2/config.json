@@ -1,16 +1,16 @@
 {
   "top_k": 15,
-  "threshold": 0.51, 
+  "threshold": 0.51,
   "weights": "./data/yolact/weights/yolact_base_54_800000.pth", #relative to YOLACT_REPO
   #"weights": "./data/yolact/weights/weights_yolact_kuka_17/crow_base_35_457142.pth", # uncomment to use CROW model
   "config": "yolact_base_config", #toggle yolact_base_config and crow_base_config. weights must change accordingly.
   #"config": "./data/yolact/weights/weights_yolact_kuka_17/config_train.obj", # uncomment for use with CROW weights
-  "inputs": [ #list of 1+ pairs {"camera":'/cam1', "topic": 'image_raw"}, 
-    {"camera": "/d435/camera", "topic": "color/image_raw" }, 
-    {"camera": "/camera2", "topic": "color/image_raw"} #uncomment to add another camera(s) as inputs. Note: there must not be a comma',' after the last item in the list, otherwise crashes with a very confusing err. 
+  "inputs": [ #list of 1+ pairs {"camera":'/cam1', "topic": 'image_raw"},
+    {"camera": "/camera1/camera", "topic": "color/image_raw" }
+    # {"camera": "/camera2", "topic": "color/image_raw"} #uncomment to add another camera(s) as inputs. Note: there must not be a comma',' after the last item in the list, otherwise crashes with a very confusing err.
   ],
   "outputs": { #output ROS topics are formed as: config["inputs"][0]["camera"] + config["outputs"]["masks"] ,etc.
-    # pass an empty string "" to ignore/skip that output. 
+    # pass an empty string "" to ignore/skip that output.
     "prefix": "detections",
     "image_annotated": "image_annot",
     "masks": "masks",
