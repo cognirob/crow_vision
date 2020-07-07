@@ -38,7 +38,7 @@ class CrowVision(Node):
   def __init__(self,
                config='config.json',
                ):
-    super().__init__('CrowVision')
+    super().__init__('crow_detector')
 
     #parse config
     CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
