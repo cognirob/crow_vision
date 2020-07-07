@@ -9,6 +9,7 @@ import torch
 
 import commentjson as json
 import pkg_resources
+import argparse
 
 # import CNN - YOLACT
 YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
@@ -80,18 +81,14 @@ class CrowVision(Node):
 
     ## YOLACT setup
     # setup additional args
-    if len(sys.argv) >= 3:
-      print("Using config {} from command-line (2nd argument).".format(sys.argv[2]))
-      cfg = sys.argv[2]
-    else:
-      cfg = self.config["config"]
+    self.declare_parameter("config", self.config["config"])
+    cfg = self.get_parameter_or("config").value
+    print("Using config '{}'.".format(cfg))
 
     # load model weights
-    if len(sys.argv) >= 2:
-      print("Using weights from file {} (1st argument).".format(sys.argv[1]))
-      model = sys.argv[1]
-    else:
-      model = self.config["weights"]
+    self.declare_parameter("weights", self.config["weights"])
+    model = self.get_parameter_or("weights").value
+    print("Using weights from file '{}'.".format(model))
 
     model_abs = os.path.join(
                  os.path.abspath(os.path.expanduser(YOLACT_REPO)),
