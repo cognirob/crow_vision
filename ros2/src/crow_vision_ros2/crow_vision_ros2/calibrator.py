@@ -10,6 +10,7 @@ import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
 from crow_vision_ros2.utils import make_vector3, make_quaternion
+from crow_vision_ros2.filters import CameraPoser
 
 import transforms3d as tf3
 
@@ -39,6 +40,8 @@ class Calibrator(Node):
         self.optical_frames = dict()
         self.intrinsics = dict()
 
+        self.camMarkers = {}
+
         for topic, camera_ns in self.cam_info_topics:
             # camera = next(ns + "/" + cam for cam, ns in self.cameras if ns in topic)
             self.create_subscription(CameraInfo, topic, lambda msg, cam=camera_ns: self.camera_info_cb(msg, cam), 1)
@@ -60,6 +63,8 @@ class Calibrator(Node):
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
         self.create_subscription(Image, self.color_image_topics[camera_ns], lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=self.optical_frames[camera_ns]: self.image_cb(msg, cam_frame, opt_frame), 1)
+        self.camMarkers[self.optical_frames[camera_ns]] = CameraPoser(self.optical_frames[camera_ns])
+
         self.get_logger().info(f"Connected to '{self.color_image_topics[camera_ns]}' image topic for camera '{camera_ns}' and '{self.optical_frames[camera_ns]}' frame.")
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))
 
@@ -67,17 +72,28 @@ class Calibrator(Node):
         # TODO: get optical_frame -> base link transform and set the output position to world -> base_link
         image = self.bridge.imgmsg_to_cv2(msg)
         start = self.get_clock().now()
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        # image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         color_K = self.intrinsics[optical_frame]
         markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.dictionary, cameraMatrix=color_K)
+
+        cameraMarkers = self.camMarkers[optical_frame]
         # print(np.shape(markerCorners))
 
-        if len(markerCorners) > 3:
+        if len(markerCorners) > 0:
+            for m_idx, (markerId, mrkCorners) in enumerate(zip(markerIds, markerCorners)):
+                cameraMarkers.updateMarker(markerId, mrkCorners)
+
+            markerCorners, markerIds = cameraMarkers.getMarkers()
+
+        if len(markerCorners) > 3 and cameraMarkers.markersReady:
             try:
                 # print(np.shape(markerCorners))
                 diamondCorners, diamondIds = cv2.aruco.detectCharucoDiamond(image, markerCorners, markerIds, self.squareMarkerLengthRate, cameraMatrix=color_K)
-                # print(diamondIds)
-                # print(diamondCorners)
+                markerImage = cv2.aruco.drawDetectedDiamonds(image, diamondCorners, diamondIds)
+                cv2.imshow("computed marekrs", markerImage)
+                cv2.waitKey(1)
+                print(diamondIds)
+                print(diamondCorners)
 
                 if diamondIds is not None and len(diamondIds) > 0:
                     img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
@@ -109,6 +125,7 @@ class Calibrator(Node):
             except Exception as e:
                 print(e)
                 # pass
+
 
 
 def main(args=[]):
