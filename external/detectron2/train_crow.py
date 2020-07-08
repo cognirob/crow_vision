@@ -5,19 +5,19 @@
 
 from detectron2.data.datasets import load_coco_json, register_coco_instances
 
-DATASET="dataset_kuka_env_pybullet_19"
+DATASET="/nfs/projects/crow/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor/"
 
 register_coco_instances(
     "kuka_train",
     {},
-    "./datasets/"+DATASET+"/train/annotations.json",
-    "./datasets/"+DATASET+"/train",
+    DATASET+"/train/annotations.json",
+    DATASET+"/train",
 )
 register_coco_instances(
     "kuka_val",
     {},
-    "./datasets/"+DATASET+"/test/annotations.json",
-    "./datasets/"+DATASET+"/test",
+    DATASET+"/test/annotations.json",
+    DATASET+"/test",
 )
 
 exec(open("./tools/train_net.py").read(), globals())  # TODO better pass args
