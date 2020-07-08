@@ -12,10 +12,18 @@ def generate_launch_description():
 
     all_cam_launcher = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([ThisLaunchFileDir(), os.path.sep, "all_cameras.launch.py"]),
-        launch_arguments={'node_name': 'bar'}.items()
+        # launch_arguments={'node_name': 'bar'}.items()
     )
     launchConfigs.append(LogInfo(msg="Launching all available cameras"))
     launchConfigs.append(all_cam_launcher)
+
+    detector_node = launch_ros.actions.Node(
+                package='crow_vision_ros2',
+                node_executable='detector',
+                output='screen',
+                # parameters=[{"weights": "aaaaa"}]
+            )
+    launchConfigs.append(detector_node)
 
     launchDescription = LaunchDescription(launchConfigs)
 
