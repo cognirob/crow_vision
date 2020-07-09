@@ -2,10 +2,12 @@ import rclpy #add to package.xml deps
 from rclpy.node import Node
 import sensor_msgs
 import std_msgs
+from crow_msgs.msg import DetectionMask, DetectionBBox, BBox
 from cv_bridge import CvBridge
 
 import cv2
 import torch
+import numpy as np
 
 import commentjson as json
 import pkg_resources
@@ -71,9 +73,18 @@ class CrowVision(Node):
       # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources.
       if self.config["outputs"]["image_annotated"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"]
-        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 1024) #publishes the processed (annotated,detected) image
+        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, 10) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_img"] = publisher_img
+      if self.config["outputs"]["masks"]:
+        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
+        self.get_logger().info('Output publisher created for topic: "%s"' % topic)
+        self.ros[camera_topic]["pub_mask"] = self.create_publisher(DetectionMask, topic, 10) #publishes the processed (annotated,detected) image
+      if self.config["outputs"]["bboxes"]:
+        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
+        self.get_logger().info('Output publisher created for topic: "%s"' % topic)
+        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, 10) #publishes the processed (annotated,detected) image
+
 
       #TODO others publishers
 
@@ -115,7 +126,7 @@ class CrowVision(Node):
     preds, frame = self.cnn.process_batch(img_raw)
 
     #the input callback triggers the publishers here.
-    if self.ros[topic]["pub_img"]: # labeled image publisher. (Use "" to disable)
+    if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.cnn.label_image(img_raw, preds, frame)
       batch,w,h,c = img_labeled.shape
       assert batch==1,"Batch mode not supported in ROS yet"
@@ -128,16 +139,30 @@ class CrowVision(Node):
       self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
       self.ros[topic]["pub_img"].publish(msg_img)
 
-    if False and self.ros[topic]["pub_masks"]:  # TODO: fix
+    if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
       classes, scores, bboxes, masks = self.cnn.raw_inference(img_raw, preds)
-
-      msg_mask = std_msgs.msg.String()
-      msg_mask.data = str(masks)
-      # parse time from incoming msg, pass to outgoing msg
-      msg_mask.header.stamp.nsec = msg.header.stamp.nsec
-      msg_mask.header.stamp.sec  = msg.header.stamp.sec
-      self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
-      self.ros[topic]["pub_masks"].publish(msg_mask)
+      classes = classes.cpu().numpy().astype(int).tolist()
+      scores = scores.cpu().numpy().astype(float).tolist()
+      if "pub_masks" in self.ros[topic]:
+        msg_mask = DetectionMask()
+        msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in  masks.cpu().numpy().astype(np.uint8)]
+        # parse time from incoming msg, pass to outgoing msg
+        msg_mask.header.stamp = msg.header.stamp
+        msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+        msg_mask.classes = classes
+        msg_mask.scores = scores
+        # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
+        self.ros[topic]["pub_masks"].publish(msg_mask)
+      if "pub_bboxes" in self.ros[topic]:
+        msg_bbox = DetectionBBox()
+        msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes.cpu()]
+        # parse time from incoming msg, pass to outgoing msg
+        msg_bbox.header.stamp = msg.header.stamp
+        msg_bbox.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+        msg_bbox.classes = classes
+        msg_bbox.scores = scores
+        # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
+        self.ros[topic]["pub_bboxes"].publish(msg_bbox)
 
 
 def main(args=None):
