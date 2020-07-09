@@ -1,0 +1,29 @@
+name: detectron2-env
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.7
+  - pip
+  - cython
+  - cudatoolkit=10.2
+  - cudnn
+  - pytorch::pytorch>=1.4
+  - pytorch::torchvision
+    #  - gcc_linux-64 ## gcc, g++ only needed for source installs of Detectron
+    #  - gxx_linux-64
+  - git
+  - wget
+  - unzip
+  - matplotlib
+  - numpy
+  - pip:
+    - tensorboard
+    - tensorflow-gpu
+    - opencv-python
+    - pyyaml==5.1 
+    - pycocotools>=2.0.1
+    ## install Detectron v2 itself:
+    #- git+https://github.com/facebookresearch/detectron2.git ## source build (needed if you use custom compiled pytorch etc) 
+    #or run: pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/index.html # replace cu101 with cu100,90, or cpu. 
+
