@@ -13,8 +13,8 @@ module load gcccuda/2020
 module load Anaconda3/5.0.1
 source /opt/apps/software/Anaconda3/5.0.1/etc/profile.d/conda.sh
 
-CROW_VISION_REPO="~/crow_vision"
-DETECTRON_REPO="~/detectron2"
+CROW_VISION_REPO="/home/$USER/crow_vision"
+DETECTRON_REPO="/home/$USER/detectron2"
 
 nvidia-smi
 echo "Installing.."
@@ -27,7 +27,7 @@ conda info
 module list
 python --version
 conda list|grep torch
-python -c 'import torch; print(torch.cuda.is_available())' || exit 1
+python -c 'import torch.cuda; print(torch.cuda.is_available())' || exit 1
 
 python -m pip install --user ${DETECTRON_REPO}
 
