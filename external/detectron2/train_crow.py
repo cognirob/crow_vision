@@ -2,6 +2,10 @@
 #
 # Run as: 
 # nohup python train_crow.py --config-file configs/COCO-InstanceSegmentation/coco_instance_segm_mask_rcnn_R_50_FNP_3x_kuka.yaml --resume &
+# README: 
+# Somehow, now we fail to compile from sources, using the binary detectron (cuda 10.2) for pip. 
+# TODO cluster might work now
+
 import os
 
 # Some basic setup:
@@ -24,8 +28,9 @@ from detectron2.data.datasets import load_coco_json, register_coco_instances
 #DATASET="/nfs/projects/crow/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor"
 DATASET=os.path.expanduser("~/crow_vision_yolact/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor")
 DETECTRON_REPO=os.path.expanduser("~/detectron2")
-CONFIG="COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
+CONFIG="COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x_giou.yaml"
 NUM_GPUS=1
+#TODO pars cmdline args to get NUM_GPUS, resume, dataset, ... 
 
 # first, register custom COCO-like dataset
 register_coco_instances(
@@ -50,9 +55,7 @@ cfg.DATALOADER.NUM_WORKERS = 2
 cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(CONFIG)  # Let training initialize from model zoo
 cfg.SOLVER.IMS_PER_BATCH = 8*NUM_GPUS
 cfg.SOLVER.BASE_LR = 0.00025*NUM_GPUS  # pick a good LR
-cfg.SOLVER.MAX_ITER = 300    # 300 iterations seems good enough for this toy dataset; you may need to train longer for a practical dataset
-cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128   # faster, and good enough for this toy dataset (default: 512)
-cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # only has one class (ballon)
+#cfg.SOLVER.MAX_ITER = 300    # 300 iterations seems good enough for this toy dataset; you may need to train longer for a practical dataset
 
 os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
 trainer = DefaultTrainer(cfg)
