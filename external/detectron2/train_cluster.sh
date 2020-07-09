@@ -33,7 +33,7 @@ python -m pip install --user ${DETECTRON_REPO}
 
 echo "Running detectron2 training..."
 #python detectron2/train_crow.py 
-python ${DETECTRON_REPO}/tools/train_net.py --config-file  --config-file ${CROW_VISION_REPO}/external/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml \
+python ${DETECTRON_REPO}/tools/train_net.py --config-file ${CROW_VISION_REPO}/external/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml \
   --num-gpus 1 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.0025 
 nvidia-smi 
 
