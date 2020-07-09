@@ -10,8 +10,8 @@
 module purge
 module load gcccuda/2020
 #module load cuDNN
-module load Anaconda3/5.3.0
-source /opt/apps/software/Anaconda3/5.3.0/etc/profile.d/conda.sh
+module load Anaconda3/5.0.1
+source /opt/apps/software/Anaconda3/5.0.1/etc/profile.d/conda.sh
 
 CROW_VISION_REPO="~/crow_vision"
 DETECTRON_REPO="~/detectron2"
