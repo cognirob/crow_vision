@@ -27,8 +27,7 @@ from detectron2.data.datasets import load_coco_json, register_coco_instances
 
 #DATASET="/nfs/projects/crow/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor"
 DATASET=os.path.expanduser("~/crow_vision_yolact/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor")
-DETECTRON_REPO=os.path.expanduser("~/detectron2")
-CONFIG="COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x_giou.yaml"
+CONFIG=os.path.abspath("./external/detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x_giou.yaml")
 NUM_GPUS=1
 #TODO pars cmdline args to get NUM_GPUS, resume, dataset, ... 
 
@@ -48,11 +47,11 @@ register_coco_instances(
 
 from detectron2.engine import DefaultTrainer
 cfg = get_cfg()
-cfg.merge_from_file(model_zoo.get_config_file(CONFIG))
+cfg.merge_from_file(CONFIG)
 cfg.DATASETS.TRAIN = ("kuka_train",)
 cfg.DATASETS.TEST = ("kuka_test",)
 cfg.DATALOADER.NUM_WORKERS = 2
-cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(CONFIG)  # Let training initialize from model zoo
+cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")  #MUST match with the config .yaml # Let training initialize from model zoo
 cfg.SOLVER.IMS_PER_BATCH = 8*NUM_GPUS
 cfg.SOLVER.BASE_LR = 0.00025*NUM_GPUS  # pick a good LR
 #cfg.SOLVER.MAX_ITER = 300    # 300 iterations seems good enough for this toy dataset; you may need to train longer for a practical dataset
