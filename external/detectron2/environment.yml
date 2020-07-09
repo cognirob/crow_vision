@@ -4,14 +4,14 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python==3.7
+  - python=3.7
   - pip
   - cython
   - cudatoolkit=10.2
   - cudnn
   - pytorch::pytorch>=1.4
   - pytorch::torchvision
-  - pyyaml==5.1
+  - pyyaml=5.1
   - gcc_linux-64 ## gcc, g++ only needed for source installs of Detectron
   - gxx_linux-64
   - git
