@@ -1,0 +1,48 @@
+_BASE_: "../Base-RCNN-FPN.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  MASK_ON: True
+  RESNETS:
+    DEPTH: 50
+  BACKBONE: 
+    FREEZE_AT: 3 #crow: freeze model at layer, default 2
+  ANCHOR_GENERATOR:
+    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
+    ASPECT_RATIOS: [[0.25, 0.5, 1.0, 2.0, 4.0]]  # aspect ratios (same for all in feature maps) #crow - we have long objects (screw,..)
+    ANGLES: [[-90, -45, 0, 45, 90]]
+  PROPOSAL_GENERATOR:
+    MIN_SIZE: 7 #crow
+  FPN:
+    NORM: "GN" #crow "GN" or "" (none, default)
+  RPN:
+    BBOX_REG_LOSS_TYPE: "giou"
+    BBOX_REG_LOSS_WEIGHT: 2.0
+    BOUNDARY_THRESH: 40000
+    IOU_THRESHOLDS: [0.5, 0.8] #crow
+  ROI_BOX_HEAD:
+    BBOX_REG_LOSS_TYPE: "giou"
+    BBOX_REG_LOSS_WEIGHT: 10.0
+    NORM: "GN" #crow "", "SyncBN", "GN"
+  ROI_MASK_HEAD:
+    NORM: "GN"
+SOLVER:
+  STEPS: (80000, 100000)
+  MAX_ITER: 120000
+  CHECKPOINT_PERIOD: 5000
+  IMS_PER_BATCH: 10
+  BASE_LR: 0.0002 
+  #REFERENCE_WORLD_SIZE: 8 #propagetes to LR, BATCH with NUM_GPUS
+INPUT:
+  MIN_SIZE_TRAIN: (480,) #crow fixed sizes to cams' resolution 640x480
+  MAX_SIZE_TRAIN: 640
+  MIN_SIZE_TEST: 0 #crow disables resize in testing
+  MASK_FORMAT: "polygon"  # alternative: "bitmask"
+  CROP:
+    SIZE: [0.8, 0.8]
+TEST:
+  EVAL_PERIOD: 5000
+  DETECTIONS_PER_IMAGE: 15
+DATALOADER:
+  NUM_WORKERS: 4 #crow: reduces mem footprint, but at cost of throughput
+CUDNN_BENCHMARK: True
+VIS_PERIOD: 10
