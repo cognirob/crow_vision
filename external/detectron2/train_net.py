@@ -122,9 +122,9 @@ class Trainer(DefaultTrainer):
 
 ##CROW - this is like the default <detectron2_repo>/tools/train_net.py
 # only extended to support our custom datasets
-def register_custom_dataset():
+def register_custom_dataset(dataset_path):
     #DATASET="/nfs/projects/crow/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor"
-    DATASET=os.path.expanduser("~/crow_vision_yolact/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor")
+    DATASET=os.path.expanduser(dataset_path)
     # first, register custom COCO-like dataset
     register_coco_instances(
       "kuka_train",
@@ -147,11 +147,9 @@ def setup(args):
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     #use custom dataset
-    register_custom_dataset()
+    register_custom_dataset(args.dataset)
     cfg.DATASETS.TRAIN = ("kuka_train",)
     cfg.DATASETS.TEST = ("kuka_test",)
-    print(model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")  #MUST match with the config .yaml # Let training initialize from model zoo
     cfg.freeze()
     default_setup(cfg, args)
     return cfg
@@ -187,7 +185,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = default_argument_parser().parse_args()
+    parser = default_argument_parser()
+    parser.add_argument("--dataset", default="", metavar="FILE", help="path to dataset directory")
+    args = parser.parse_args()
     print("Command Line Args:", args)
     launch(
         main,

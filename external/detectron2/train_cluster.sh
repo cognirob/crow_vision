@@ -33,6 +33,8 @@ python -c 'import torch.cuda; print(torch.cuda.is_available())' || exit 1
 
 
 echo "Running detectron2 training..."
-python ${CROW_VISION_REPO}/external/detectron2/train_net.py --config-file ${CROW_VISION_REPO}/external/detectron2/configs/COCO-InstanceSegmentation/crow_mask_rcnn_R_50_FPN_3x_giou.yaml
+python ${CROW_VISION_REPO}/external/detectron2/train_net.py \
+  --config-file "${CROW_VISION_REPO}/external/detectron2/configs/COCO-InstanceSegmentation/crow_mask_rcnn_R_50_FPN_3x_giou.yaml" \
+  --dataset "/nfs/projects/crow/data/yolact/datasets/dataset_kuka_env_pybullet_fixedcolor/"
 
 echo "done"
