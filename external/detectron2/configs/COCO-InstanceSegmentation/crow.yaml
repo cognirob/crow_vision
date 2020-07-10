@@ -1,18 +1,18 @@
 _BASE_: "../COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"
 MODEL:
-        #  BACKBONE: 
-        #    FREEZE_AT: 3 #crow: freeze model at layer, default 2
-        #  ANCHOR_GENERATOR:
-        #    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
-        #    ASPECT_RATIOS: [[0.25, 0.5, 1.0, 2.0, 4.0]]  # aspect ratios (same for all in feature maps) #crow - we have long objects (screw,..)
-        #    ANGLES: [[-90, -45, 0, 45, 90]]
+  BACKBONE: 
+    FREEZE_AT: 3 #crow: freeze model at layer, default 2
+  ANCHOR_GENERATOR:
+#    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
+    ASPECT_RATIOS: [[0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0]]  # aspect ratios (same for all in feature maps) #crow - we have long objects (screw,..)
+    ANGLES: [[-90, -45, 0, 45, 90]]
   PROPOSAL_GENERATOR:
     MIN_SIZE: 7 #crow
   RPN:
     BBOX_REG_LOSS_TYPE: "giou"
     BBOX_REG_LOSS_WEIGHT: 2.0
     BOUNDARY_THRESH: 40000
-    IOU_THRESHOLDS: [0.5, 0.8] #crow
+    IOU_THRESHOLDS: [0.3, 0.8] #crow
   ROI_BOX_HEAD:
     BBOX_REG_LOSS_TYPE: "giou"
     BBOX_REG_LOSS_WEIGHT: 10.0
@@ -25,7 +25,7 @@ SOLVER:
   REFERENCE_WORLD_SIZE: 1 #propagetes to LR, BATCH with NUM_GPUS
 INPUT:
   MIN_SIZE_TRAIN: (480,) #crow fixed sizes to cams' resolution 640x480
-  MAX_SIZE_TRAIN: 640
+  MAX_SIZE_TRAIN: 480
   MIN_SIZE_TEST: 0 #crow disables resize in testing
   MASK_FORMAT: "polygon"  # alternative: "bitmask"
   CROP:
