@@ -1,19 +1,13 @@
-_BASE_: "../Base-RCNN-FPN.yaml"
+_BASE_: "../COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"
 MODEL:
-  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
-  MASK_ON: True
-  RESNETS:
-    DEPTH: 50
-  BACKBONE: 
-    FREEZE_AT: 3 #crow: freeze model at layer, default 2
-  ANCHOR_GENERATOR:
-    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
-    ASPECT_RATIOS: [[0.25, 0.5, 1.0, 2.0, 4.0]]  # aspect ratios (same for all in feature maps) #crow - we have long objects (screw,..)
-    ANGLES: [[-90, -45, 0, 45, 90]]
+        #  BACKBONE: 
+        #    FREEZE_AT: 3 #crow: freeze model at layer, default 2
+        #  ANCHOR_GENERATOR:
+        #    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
+        #    ASPECT_RATIOS: [[0.25, 0.5, 1.0, 2.0, 4.0]]  # aspect ratios (same for all in feature maps) #crow - we have long objects (screw,..)
+        #    ANGLES: [[-90, -45, 0, 45, 90]]
   PROPOSAL_GENERATOR:
     MIN_SIZE: 7 #crow
-  FPN:
-    NORM: "GN" #crow "GN" or "" (none, default)
   RPN:
     BBOX_REG_LOSS_TYPE: "giou"
     BBOX_REG_LOSS_WEIGHT: 2.0
@@ -22,9 +16,6 @@ MODEL:
   ROI_BOX_HEAD:
     BBOX_REG_LOSS_TYPE: "giou"
     BBOX_REG_LOSS_WEIGHT: 10.0
-    NORM: "GN" #crow "", "SyncBN", "GN"
-  ROI_MASK_HEAD:
-    NORM: "GN"
 SOLVER:
   STEPS: (8000, 10000)
   MAX_ITER: 12000
