@@ -31,7 +31,7 @@ SOLVER:
   CHECKPOINT_PERIOD: 5000
   IMS_PER_BATCH: 10
   BASE_LR: 0.0002 
-  #REFERENCE_WORLD_SIZE: 8 #propagetes to LR, BATCH with NUM_GPUS
+  REFERENCE_WORLD_SIZE: 1 #propagetes to LR, BATCH with NUM_GPUS
 INPUT:
   MIN_SIZE_TRAIN: (480,) #crow fixed sizes to cams' resolution 640x480
   MAX_SIZE_TRAIN: 640
