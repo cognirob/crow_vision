@@ -40,7 +40,7 @@ INPUT:
   CROP:
     SIZE: [0.8, 0.8]
 TEST:
-  EVAL_PERIOD: 5000
+  EVAL_PERIOD: 0 #FIXME temporarily disabled, eval crashes on unknown class_id
   DETECTIONS_PER_IMAGE: 15
 DATALOADER:
   NUM_WORKERS: 4 #crow: reduces mem footprint, but at cost of throughput
