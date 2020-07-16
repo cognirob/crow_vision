@@ -140,7 +140,7 @@ class CrowVision(Node):
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
-      classes, scores, bboxes, masks. centroids = self.cnn.raw_inference(img_raw, preds)
+      classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds)
       classes = classes.cpu().numpy().astype(int).tolist()
       scores = scores.cpu().numpy().astype(float).tolist()
       if "pub_masks" in self.ros[topic]:
