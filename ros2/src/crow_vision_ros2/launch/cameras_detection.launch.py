@@ -18,11 +18,14 @@ def generate_launch_description():
     launchConfigs.append(all_cam_launcher)
 
     detector_node = launch_ros.actions.Node(
-                package='crow_vision_ros2',
-                node_executable='detector',
-                output='screen',
-                # parameters=[{"weights": "aaaaa"}]
-            )
+        package='crow_vision_ros2',
+        node_executable='detector',
+        output='screen',
+        parameters=[{
+                    "weights": "data/yolact/weights/crow_base_53_120000.pth",
+                    "config": "data/yolact/weights/config_train.obj"
+                    }]
+    )
     launchConfigs.append(detector_node)
 
     launchDescription = LaunchDescription(launchConfigs)

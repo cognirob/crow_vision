@@ -93,20 +93,22 @@ class CrowVision(Node):
     ## YOLACT setup
     # setup additional args
     self.declare_parameter("config", self.config["config"])
-    cfg = self.get_parameter_or("config").value
-    print("Using config '{}'.".format(cfg))
+    cfg = self.get_parameter("config").get_parameter_value().string_value
 
     # load model weights
     self.declare_parameter("weights", self.config["weights"])
-    model = self.get_parameter_or("weights").value
-    print("Using weights from file '{}'.".format(model))
+    model = self.get_parameter("weights").get_parameter_value().string_value
 
+    if ".obj" in cfg:
+        cfg = os.path.join(os.path.abspath(os.path.expanduser(YOLACT_REPO)), cfg)
     model_abs = os.path.join(
                  os.path.abspath(os.path.expanduser(YOLACT_REPO)),
                  str(model)
                  )
-    assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
 
+    print("Using config '{}'.".format(cfg))
+    print("Using weights from file '{}'.".format(model))
+    assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
     self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"], config=cfg)
     print('Hi from crow_vision_ros2.')
 
@@ -128,9 +130,14 @@ class CrowVision(Node):
     #the input callback triggers the publishers here.
     if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.cnn.label_image(img_raw, preds, frame)
-      batch,w,h,c = img_labeled.shape
+      if img_labeled.ndim == 3:
+        batch,w,h,c = 1, *img_labeled.shape
+      else:
+        batch,w,h,c = img_labeled.shape
+        img_labeled = img_labeled[0]
       assert batch==1,"Batch mode not supported in ROS yet"
-      img_labeled = img_labeled[0]
+
+      print(img_labeled.shape)
 
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg
