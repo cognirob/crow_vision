@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.msg import ParameterType
 from rclpy.time_source import ROSClock
 from ros2node import api
 from sensor_msgs.msg import Image, CameraInfo
@@ -11,7 +12,7 @@ import tf2_ros
 from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
 from crow_vision_ros2.utils import make_vector3, make_quaternion
 from crow_vision_ros2.filters import CameraPoser
-
+from time import sleep
 import transforms3d as tf3
 
 
@@ -30,6 +31,18 @@ class Calibrator(Node):
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.tf_static_broadcaster = tf2_ros.StaticTransformBroadcaster(self)
 
+        # DECLARE PARAMS
+        haltCalibrationDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_BOOL, description='If True, node will not run camera pose estimation')
+        self.declare_parameter("halt_calibration", descriptor=haltCalibrationDesc)
+        imageTopicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available image topics')
+        self.declare_parameter("image_topics", descriptor=imageTopicsParamDesc)
+        cameraNodesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available camera nodes (or camera node namespaces for topics)')
+        self.declare_parameter("camera_nodes", descriptor=cameraNodesParamDesc)
+
+        self.get_logger().info(f"Sleeping to allow the cameras to come online.")
+        sleep(2)
+
+        # Get cameras
         self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
         topic_list = [(self.get_publisher_names_and_types_by_node(node_name, namespace), namespace) for node_name, namespace in self.cameras]
         self.cam_info_topics = [(topic_name, namespace) for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])]
@@ -66,9 +79,15 @@ class Calibrator(Node):
         self.camMarkers[self.optical_frames[camera_ns]] = CameraPoser(self.optical_frames[camera_ns])
 
         self.get_logger().info(f"Connected to '{self.color_image_topics[camera_ns]}' image topic for camera '{camera_ns}' and '{self.optical_frames[camera_ns]}' frame.")
+        paramImageTopics = self.get_parameter_or("image_topics", [])
+        paramCameraNodes = self.get_parameter_or("camera_nodes", [])
+        self.set_parameters([])
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))
 
     def image_cb(self, msg, camera_frame, optical_frame):
+        if self.get_parameter_or("halt_calibration", False).get_parameter_value().bool_value:
+            return
+
         # TODO: get optical_frame -> base link transform and set the output position to world -> base_link
         image = self.bridge.imgmsg_to_cv2(msg)
         start = self.get_clock().now()

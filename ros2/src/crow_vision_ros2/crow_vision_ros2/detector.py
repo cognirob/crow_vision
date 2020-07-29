@@ -100,14 +100,18 @@ class CrowVision(Node):
     model = self.get_parameter("weights").get_parameter_value().string_value
 
     if ".obj" in cfg:
-        cfg = os.path.join(os.path.abspath(os.path.expanduser(YOLACT_REPO)), cfg)
-    model_abs = os.path.join(
-                 os.path.abspath(os.path.expanduser(YOLACT_REPO)),
-                 str(model)
-                 )
+      cfg = os.path.join(os.path.abspath(
+          os.path.expanduser(YOLACT_REPO)), cfg)
+    elif "none" in cfg.lower():
+      cfg = None
 
     print("Using config '{}'.".format(cfg))
     print("Using weights from file '{}'.".format(model))
+
+    model_abs = os.path.join(
+        os.path.abspath(os.path.expanduser(YOLACT_REPO)),
+        str(model)
+    )
     assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
     self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"], config=cfg)
     print('Hi from crow_vision_ros2.')
@@ -148,8 +152,8 @@ class CrowVision(Node):
 
     if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
       classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds)
-      classes = classes.cpu().numpy().astype(int).tolist()
-      scores = scores.cpu().numpy().astype(float).tolist()
+      classes = classes.astype(int).tolist()
+      scores = scores.astype(float).tolist()
       if "pub_masks" in self.ros[topic]:
         msg_mask = DetectionMask()
         msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in  masks.cpu().numpy().astype(np.uint8)]
@@ -162,7 +166,7 @@ class CrowVision(Node):
         self.ros[topic]["pub_masks"].publish(msg_mask)
       if "pub_bboxes" in self.ros[topic]:
         msg_bbox = DetectionBBox()
-        msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes.cpu()]
+        msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes]
         # parse time from incoming msg, pass to outgoing msg
         msg_bbox.header.stamp = msg.header.stamp
         msg_bbox.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
