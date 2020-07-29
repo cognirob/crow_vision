@@ -79,7 +79,7 @@ class CrowVision(Node):
       if self.config["outputs"]["masks"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_mask"] = self.create_publisher(DetectionMask, topic, 10) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, 10) #publishes the processed (annotated,detected) image
       if self.config["outputs"]["bboxes"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
@@ -158,7 +158,7 @@ class CrowVision(Node):
       scores = scores.astype(float).tolist()
       if "pub_masks" in self.ros[topic]:
         msg_mask = DetectionMask()
-        msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in  masks.cpu().numpy().astype(np.uint8)]
+        msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in masks.astype(np.uint8)]
         # parse time from incoming msg, pass to outgoing msg
         msg_mask.header.stamp = msg.header.stamp
         msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
