@@ -46,7 +46,7 @@ class Calibrator(Node):
         self.declare_parameter("camera_nodes", value=[], descriptor=cameraNodesParamDesc)
 
         self.get_logger().info(f"Sleeping to allow the cameras to come online.")
-        sleep(5)
+        # sleep(0)
 
         # Get cameras
         self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
