@@ -30,3 +30,6 @@ dependencies:
     - filterpy
     - dill # YOLACT
     - catkin_pkg #for ROS
+    - scipy #ROS calibrator
+    - filterpy #ROS filter
+    - transforms3d #ROS calibrator
