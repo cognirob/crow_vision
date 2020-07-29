@@ -21,7 +21,11 @@ class Calibrator(Node):
     markerLength = 0.036  # mm
     squareLength = 0.042  # mm
     squareMarkerLengthRate = squareLength / markerLength
-    dictionary = cv2.aruco.Dictionary_create(48, 4, 65536)
+    try:
+      dictionary = cv2.aruco.Dictionary_create(48, 4, 65536)
+    except:
+      dictionary = cv2.aruco.Dictionary_create(48, 4) #TODO hack for (old?) cv2 version, fallback to API with 2 args only
+
     distCoeffs = np.r_[0, 0, 0, 0, 0]
 
     def __init__(self, node_name="calibrator"):
