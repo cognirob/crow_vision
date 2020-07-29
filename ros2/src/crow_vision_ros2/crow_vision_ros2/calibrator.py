@@ -33,14 +33,16 @@ class Calibrator(Node):
 
         # DECLARE PARAMS
         haltCalibrationDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_BOOL, description='If True, node will not run camera pose estimation')
-        self.declare_parameter("halt_calibration", descriptor=haltCalibrationDesc)
+        self.declare_parameter("halt_calibration", value=False, descriptor=haltCalibrationDesc)
         imageTopicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available image topics')
-        self.declare_parameter("image_topics", descriptor=imageTopicsParamDesc)
+        self.declare_parameter("image_topics", value=[], descriptor=imageTopicsParamDesc)
+        infoTopicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera_info topics for the available cameras')
+        self.declare_parameter("info_topics", value=[], descriptor=infoTopicsParamDesc)
         cameraNodesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available camera nodes (or camera node namespaces for topics)')
-        self.declare_parameter("camera_nodes", descriptor=cameraNodesParamDesc)
+        self.declare_parameter("camera_nodes", value=[], descriptor=cameraNodesParamDesc)
 
         self.get_logger().info(f"Sleeping to allow the cameras to come online.")
-        sleep(2)
+        sleep(5)
 
         # Get cameras
         self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
@@ -75,17 +77,43 @@ class Calibrator(Node):
 
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
-        self.create_subscription(Image, self.color_image_topics[camera_ns], lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=self.optical_frames[camera_ns]: self.image_cb(msg, cam_frame, opt_frame), 1)
+        image_topic = self.color_image_topics[camera_ns]
+
+        self.create_subscription(Image, image_topic, lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=self.optical_frames[camera_ns]: self.image_cb(msg, cam_frame, opt_frame), 1)
         self.camMarkers[self.optical_frames[camera_ns]] = CameraPoser(self.optical_frames[camera_ns])
 
-        self.get_logger().info(f"Connected to '{self.color_image_topics[camera_ns]}' image topic for camera '{camera_ns}' and '{self.optical_frames[camera_ns]}' frame.")
-        paramImageTopics = self.get_parameter_or("image_topics", [])
-        paramCameraNodes = self.get_parameter_or("camera_nodes", [])
-        self.set_parameters([])
+        self.get_logger().info(f"Connected to '{image_topic}' image topic for camera '{camera_ns}' and '{self.optical_frames[camera_ns]}' frame.")
+
+        paramImageTopics = self.get_parameter("image_topics").get_parameter_value().string_array_value
+        paramImageTopics.append(image_topic)
+        paramInfoTopics = self.get_parameter("info_topics").get_parameter_value().string_array_value
+        info_topic, ns = next(filter(lambda item: camera_ns in item, self.cam_info_topics))
+        paramInfoTopics.append(info_topic)
+        paramCameraNodes = self.get_parameter("camera_nodes").get_parameter_value().string_array_value
+        cname, ns = next(filter(lambda item: camera_ns in item, self.cameras))
+        paramCameraNodes.append(ns + "/" + cname)
+
+        self.set_parameters([
+            rclpy.parameter.Parameter(
+                "image_topics",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramImageTopics
+            ),
+            rclpy.parameter.Parameter(
+                "info_topics",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramInfoTopics
+            ),
+            rclpy.parameter.Parameter(
+                "camera_nodes",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramCameraNodes
+            )
+        ])
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))
 
     def image_cb(self, msg, camera_frame, optical_frame):
-        if self.get_parameter_or("halt_calibration", False).get_parameter_value().bool_value:
+        if self.get_parameter("halt_calibration").get_parameter_value().bool_value:
             return
 
         # TODO: get optical_frame -> base link transform and set the output position to world -> base_link
