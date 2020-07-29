@@ -87,7 +87,7 @@ class CrowVision(Node):
 
 
       #TODO others publishers
-
+    self.noMessagesYet = True
     self.cvb_ = CvBridge()
 
     ## YOLACT setup
@@ -124,7 +124,11 @@ class CrowVision(Node):
     @param topic - str, from camera/input on given topic.
     @return nothing, but send new message(s) via output Publishers.
     """
-    self.get_logger().info("I heard: {} for topic {}".format(str(msg.height), topic))
+    if self.noMessagesYet:
+        self.get_logger().info("Image received from camera! (will not report on next image callbacks)")
+        self.noMessagesYet = False
+
+    # self.get_logger().info("I heard: {} for topic {}".format(str(msg.height), topic))
     assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
     img_raw = self.cvb_.imgmsg_to_cv2(msg)
@@ -141,13 +145,11 @@ class CrowVision(Node):
         img_labeled = img_labeled[0]
       assert batch==1,"Batch mode not supported in ROS yet"
 
-      print(img_labeled.shape)
-
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg
       msg_img.header.stamp.nanosec = msg.header.stamp.nanosec
       msg_img.header.stamp.sec  = msg.header.stamp.sec
-      self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
+    #   self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
@@ -161,6 +163,7 @@ class CrowVision(Node):
         msg_mask.header.stamp = msg.header.stamp
         msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
         msg_mask.classes = classes
+        msg_mask.class_names = class_names
         msg_mask.scores = scores
         # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
         self.ros[topic]["pub_masks"].publish(msg_mask)
@@ -171,6 +174,7 @@ class CrowVision(Node):
         msg_bbox.header.stamp = msg.header.stamp
         msg_bbox.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
         msg_bbox.classes = classes
+        msg_bbox.class_names = class_names
         msg_bbox.scores = scores
         # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
         self.ros[topic]["pub_bboxes"].publish(msg_bbox)
