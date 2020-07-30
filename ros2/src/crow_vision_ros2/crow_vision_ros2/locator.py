@@ -46,6 +46,7 @@ class Locator(Node):
     def detection_callback(self, pcl_msg, mask_msg, camera):
         #print(self.getCameraData(camera))
         if not mask_msg.masks:
+            print("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
         cameraData = self.getCameraData(camera)
@@ -61,17 +62,35 @@ class Locator(Node):
         #pcd = pcd.select_by_index(inliers, invert=True) #drop plane from the pcl
 
         #o3d.visualization.draw_geometries([pcd])
-        print(len(pcd))
+        print(pcd)
 
-        #process pcd
-        mean, cov = pcd.compute_mean_and_covariance()
-        print(mean)
-        bbox3d = pcd.get_axis_aligned_bounding_box()
-        print(bbox3d.get_print_info())
+        ##process pcd
+        # 1. convert 3d pcl to 2d image-space
+        point_cloud = np.asarray(pcd.points)
+        camera_matrix = cameraData["camera_matrix"]
+        assert camera_matrix.shape[1] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
+        imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
+        imspace = imspace/imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
+        assert imspace[2].all() == 1
+        imspace = imspace[:2]
+        assert imspace.ndim == 2,'should now be in 2D'
+
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # TODO: segment PCL & compute median
+            assert imspace.shape == mask.shape
+            isin_idx = (imspace.T[:,None] == mask.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
+            seg_pcd = point_cloud.T[isin_idx]
 
-            self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, [1, 1, 1])
+            mean = seg_pcd.mean(axis=1)
+            assert len(mean) == 3, 'incorrect mean dim'
+            self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
+            
+            #TODO 3d bbox?
+            #bbox3d = pcd.get_axis_aligned_bounding_box()
+            #print(bbox3d.get_print_info())
+            
+            #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
+            print(seg_pcd.shape)
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
         tf_msg = TransformStamped()
