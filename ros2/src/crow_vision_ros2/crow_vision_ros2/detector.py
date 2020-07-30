@@ -134,6 +134,8 @@ class CrowVision(Node):
     img_raw = cv2.cvtColor(self.cvb_.imgmsg_to_cv2(msg), cv2.COLOR_BGR2RGB)
 
     preds, frame = self.cnn.process_batch(img_raw)
+    if preds[0]["detection"] is None:
+        return  # do not publish if nothing was detected
 
     #the input callback triggers the publishers here.
     if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
