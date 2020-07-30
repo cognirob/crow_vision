@@ -27,12 +27,11 @@ class Locator(Node):
         for cam, pclTopic, maskTopic in zip(self.cameras, self.pcl_topics, self.mask_topics):
             self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=10)
             self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=10)
-            self.get_logger().info("Created Subscriber for masks at topic: {}".format(maskTopic))
+            self.get_logger().info("LOCATOR: Created Subscriber for masks at topic: {}".format(maskTopic))
             self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.005)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
-        self.get_logger().info("DoYo callback is alive!")
         print(self.getCameraData(camera))
 
     def getCameraData(self, camera):
