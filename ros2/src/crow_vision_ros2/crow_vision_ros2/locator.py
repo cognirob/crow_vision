@@ -48,6 +48,7 @@ class Locator(Node):
         if not mask_msg.masks:
             return  # no mask detections (for some reason)
 
+        cameraData = self.getCameraData(camera)
         masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
@@ -67,6 +68,10 @@ class Locator(Node):
         print(mean)
         bbox3d = pcd.get_axis_aligned_bounding_box()
         print(bbox3d.get_print_info())
+        for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
+            # TODO: segment PCL & compute median
+
+            self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, [1, 1, 1])
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
         tf_msg = TransformStamped()
@@ -74,7 +79,6 @@ class Locator(Node):
         tf_msg.header.frame_id = camera_frame
         tf_msg.child_frame_id = object_frame
         tf_msg.transform.translation = make_vector3(xyz)
-        # tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
 
         self.tf_broadcaster.sendTransform(tf_msg)
 
