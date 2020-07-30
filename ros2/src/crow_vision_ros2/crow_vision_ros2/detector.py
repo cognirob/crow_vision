@@ -165,7 +165,7 @@ class CrowVision(Node):
         msg_mask.classes = classes
         msg_mask.class_names = class_names
         msg_mask.scores = scores
-        # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
+        #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
         self.ros[topic]["pub_masks"].publish(msg_mask)
       if "pub_bboxes" in self.ros[topic]:
         msg_bbox = DetectionBBox()
