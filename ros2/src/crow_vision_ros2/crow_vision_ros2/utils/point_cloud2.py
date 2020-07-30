@@ -47,6 +47,7 @@ import ctypes
 import math
 import struct
 
+import sensor_msgs
 from sensor_msgs.msg import PointCloud2, PointField
 
 _DATATYPES = {}

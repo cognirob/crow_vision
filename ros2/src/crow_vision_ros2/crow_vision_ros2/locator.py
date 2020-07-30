@@ -36,6 +36,8 @@ class Locator(Node):
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
         print(self.getCameraData(camera))
+        pcl = convertCloudFromRosToOpen3d(pcl_msg)
+        print(pcl)
 
     def getCameraData(self, camera):
         idx = self.cameras.index(camera)
