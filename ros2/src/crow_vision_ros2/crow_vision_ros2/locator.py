@@ -11,6 +11,9 @@ from rclpy.qos import QoSReliabilityPolicy
 import json
 import numpy as np
 
+import pkg_resources
+from .utils.convertor_ros_open3d import convertCloudFromOpen3dToRos, convertCloudFromRosToOpen3d
+
 
 class Locator(Node):
 

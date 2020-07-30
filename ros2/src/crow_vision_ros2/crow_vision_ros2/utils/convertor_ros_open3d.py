@@ -21,10 +21,12 @@ import open3d
 import numpy as np
 from ctypes import * # convert float to uint32
 
-import rospy
 from std_msgs.msg import Header
 from sensor_msgs.msg import PointCloud2, PointField
-import sensor_msgs.point_cloud2 as pc2
+
+#FIXME replace the local file with official ROS2 when available:
+#import sensor_msgs.point_cloud2 as pc2
+from . import point_cloud2 as pc2
 
 
 # Convert the datatype of point cloud from Open3D to ROS PointCloud2 (XYZRGB only)
