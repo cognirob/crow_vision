@@ -131,7 +131,7 @@ class CrowVision(Node):
     # self.get_logger().info("I heard: {} for topic {}".format(str(msg.height), topic))
     assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
-    img_raw = cv2.cvtColor(self.cvb_.imgmsg_to_cv2(msg), cv2.COLOR_BGR2RGB)
+    img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
 
     preds, frame = self.cnn.process_batch(img_raw)
     if preds[0]["detection"] is None:

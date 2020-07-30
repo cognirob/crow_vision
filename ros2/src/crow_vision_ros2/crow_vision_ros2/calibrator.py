@@ -150,7 +150,7 @@ class Calibrator(Node):
         # TODO: get optical_frame -> base link transform and set the output position to world -> base_link
         image = self.bridge.imgmsg_to_cv2(msg)
         start = self.get_clock().now()
-        # image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         color_K = self.intrinsics[optical_frame]
         markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.dictionary, cameraMatrix=color_K)
 
@@ -168,10 +168,10 @@ class Calibrator(Node):
                 # print(np.shape(markerCorners))
                 diamondCorners, diamondIds = cv2.aruco.detectCharucoDiamond(image, markerCorners, markerIds, self.squareMarkerLengthRate, cameraMatrix=color_K)
                 markerImage = cv2.aruco.drawDetectedDiamonds(image, diamondCorners, diamondIds)
-                cv2.imshow("computed marekrs", markerImage)
+                cv2.imshow("computed markers", markerImage)
                 cv2.waitKey(1)
-                print(diamondIds)
-                print(diamondCorners)
+                # print(diamondIds)
+                # print(diamondCorners)
 
                 if diamondIds is not None and len(diamondIds) > 0:
                     img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
