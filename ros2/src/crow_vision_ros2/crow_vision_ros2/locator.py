@@ -76,7 +76,7 @@ class Locator(Node):
         assert imspace.ndim == 2,'should now be in 2D'
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
-            # TODO: segment PCL & compute median
+            # segment PCL & compute median
             assert imspace.shape == mask.shape
             isin_idx = (imspace.T[:,None] == mask.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
             seg_pcd = point_cloud.T[isin_idx]
@@ -90,6 +90,8 @@ class Locator(Node):
             #print(bbox3d.get_print_info())
             
             #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
+            #pcd.points = o3d.utility.Vector3dVector(seg_pcd)
+            #o3d.visualization.draw_geometries([pcd])
             print(seg_pcd.shape)
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
