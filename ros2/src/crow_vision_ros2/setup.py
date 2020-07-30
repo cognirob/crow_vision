@@ -11,6 +11,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, ['launch/all_cameras.launch.py']),
         ('share/' + package_name, ['launch/cameras_detection.launch.py']),
+        ('share/' + package_name, ['launch/dual_detection_cameras.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
