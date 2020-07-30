@@ -14,6 +14,7 @@ from crow_vision_ros2.utils import make_vector3, make_quaternion
 from crow_vision_ros2.filters import CameraPoser
 from time import sleep
 import transforms3d as tf3
+import json
 
 
 class Calibrator(Node):
@@ -44,6 +45,10 @@ class Calibrator(Node):
         self.declare_parameter("info_topics", value=[], descriptor=infoTopicsParamDesc)
         cameraNodesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available camera nodes (or camera node namespaces for topics)')
         self.declare_parameter("camera_nodes", value=[], descriptor=cameraNodesParamDesc)
+        cameraMatricesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera intrinsic parameters for available cameras')
+        self.declare_parameter("camera_intrinsics", value=[], descriptor=cameraMatricesParamDesc)
+        cameraFramesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera coordinate frames for available cameras')
+        self.declare_parameter("camera_frames", value=[], descriptor=cameraFramesParamDesc)
 
         self.get_logger().info(f"Sleeping to allow the cameras to come online.")
         # sleep(0)
@@ -82,21 +87,33 @@ class Calibrator(Node):
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
         image_topic = self.color_image_topics[camera_ns]
+        optical_frame = self.optical_frames[camera_ns]
 
-        self.create_subscription(Image, image_topic, lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=self.optical_frames[camera_ns]: self.image_cb(msg, cam_frame, opt_frame), 1)
-        self.camMarkers[self.optical_frames[camera_ns]] = CameraPoser(self.optical_frames[camera_ns])
+        # create subscription
+        self.create_subscription(Image, image_topic, lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=optical_frame: self.image_cb(msg, cam_frame, opt_frame), 1)
+        self.camMarkers[optical_frame] = CameraPoser(optical_frame)
 
-        self.get_logger().info(f"Connected to '{image_topic}' image topic for camera '{camera_ns}' and '{self.optical_frames[camera_ns]}' frame.")
+        self.get_logger().info(f"Connected to '{image_topic}' image topic for camera '{camera_ns}' and '{optical_frame}' frame.")
 
+        # Image topics parameter
         paramImageTopics = self.get_parameter("image_topics").get_parameter_value().string_array_value
         paramImageTopics.append(image_topic)
+        # Camera Info topics parameter
         paramInfoTopics = self.get_parameter("info_topics").get_parameter_value().string_array_value
         info_topic, ns = next(filter(lambda item: camera_ns in item, self.cam_info_topics))
         paramInfoTopics.append(info_topic)
+        # Camera node address paramter
         paramCameraNodes = self.get_parameter("camera_nodes").get_parameter_value().string_array_value
         cname, ns = next(filter(lambda item: camera_ns in item, self.cameras))
         paramCameraNodes.append(ns + "/" + cname)
+        # Camera intrinsics parameter
+        paramCameraIntrinsics = self.get_parameter("camera_intrinsics").get_parameter_value().string_array_value
+        paramCameraIntrinsics.append(json.dumps({"camera_matrix": np.random.rand(3, 3).tolist(), "distortion_coefficients": np.random.rand(5).tolist()}))
+        # Camera coordinate frame name parameter
+        paramCameraFrames = self.get_parameter("camera_frames").get_parameter_value().string_array_value
+        paramCameraFrames.append(optical_frame)
 
+        # Update the parameters
         self.set_parameters([
             rclpy.parameter.Parameter(
                 "image_topics",
@@ -112,6 +129,16 @@ class Calibrator(Node):
                 "camera_nodes",
                 rclpy.Parameter.Type.STRING_ARRAY,
                 paramCameraNodes
+            ),
+            rclpy.parameter.Parameter(
+                "camera_intrinsics",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramCameraIntrinsics
+            ),
+            rclpy.parameter.Parameter(
+                "camera_frames",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramCameraFrames
             )
         ])
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))

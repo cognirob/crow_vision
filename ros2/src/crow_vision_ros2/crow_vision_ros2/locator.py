@@ -8,13 +8,16 @@ from sensor_msgs.msg import PointCloud2
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
+import json
+import numpy as np
 
 
 class Locator(Node):
 
-    def __init__(self, node_name="locator_node"):
+    def __init__(self, node_name="locator"):
         super().__init__(node_name)
-        self.image_topics, self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_nodes"]).values]
+        self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_nodes", "camera_intrinsics", "camera_frames"]).values]
+        self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras]
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras]
 
@@ -26,11 +29,21 @@ class Locator(Node):
             self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=10)
             self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.005)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
-            print(self.sync.queue_size)
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
-        print("Got messages!!!!")
+        print(self.getCameraData(camera))
 
+    def getCameraData(self, camera):
+        idx = self.cameras.index(camera)
+        return {
+            "camera": camera,
+            "image_topic": self.image_topics[idx],
+            "camera_matrix": np.array(self.camera_instrinsics[idx]["camera_matrix"]),
+            "distortion_coefficients": np.array(self.camera_instrinsics[idx]["distortion_coefficients"]),
+            "optical_frame": self.camera_frames[idx],
+            "mask_topic": self.mask_topics[idx],
+            "pcl_topic": self.pcl_topics[idx],
+        }
 
 def main():
     rclpy.init()
