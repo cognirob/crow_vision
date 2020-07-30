@@ -10,6 +10,7 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 import json
 import numpy as np
+import cv_bridge
 
 import pkg_resources
 from .utils.convertor_ros_open3d import convertCloudFromOpen3dToRos, convertCloudFromRosToOpen3d
@@ -23,6 +24,7 @@ class Locator(Node):
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras]
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras]
+        self.cvb = cv_bridge.CvBridge()
 
         qos_profile = QoSProfile(
             depth=10,
@@ -35,6 +37,12 @@ class Locator(Node):
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
+        if not mask_msg.masks:
+            return  # no mask detections (for some reason)
+
+        masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
+        class_names, scores = mask_msg.class_names, mask_msg.scores
+
         print(self.getCameraData(camera))
         pcl = convertCloudFromRosToOpen3d(pcl_msg)
         print(pcl)
