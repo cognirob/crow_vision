@@ -33,3 +33,4 @@ dependencies:
     - scipy #ROS calibrator
     - filterpy #ROS filter
     - transforms3d #ROS calibrator
+    - open3d==0.10.0 #locator 

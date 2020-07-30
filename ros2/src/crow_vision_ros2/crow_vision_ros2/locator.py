@@ -13,6 +13,7 @@ import numpy as np
 
 import pkg_resources
 from .utils.convertor_ros_open3d import convertCloudFromOpen3dToRos, convertCloudFromRosToOpen3d
+import open3d as o3d
 
 
 class Locator(Node):
@@ -35,9 +36,27 @@ class Locator(Node):
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
-        print(self.getCameraData(camera))
-        pcl = convertCloudFromRosToOpen3d(pcl_msg)
-        print(pcl)
+        #print(self.getCameraData(camera))
+        # get pointcloud data from ROS2 msg to open3d format
+        pcd = convertCloudFromRosToOpen3d(pcl_msg)
+        # optimizations for performance:
+        pcd = pcd.voxel_down_sample(voxel_size=0.02) #optional, downsampling for speed up
+        #optional, remove plane for speedup
+        plane_model, inliers = pcd.segment_plane(distance_threshold=0.01,
+                                                 ransac_n=3,
+                                                 num_iterations=1000)
+        pcd = pcd.select_by_index(inliers, invert=True) #drop plane from the pcl
+        #o3d.visualization.draw_geometries([pcd], zoom=0.8, #FIXME neumim to vykreslit
+        #                          front=[-0.4999, -0.1659, -0.8499],
+        #                          lookat=[2.1813, 2.0619, 2.0999],
+        #                          up=[0.1204, -0.9852, 0.1215])
+        print(pcd)
+
+        #process pcd
+        mean, cov = pcd.compute_mean_and_covariance()
+        print(mean)
+        bbox3d = pcd.get_axis_aligned_bounding_box()
+        print(bbox3d.get_print_info())
 
     def getCameraData(self, camera):
         idx = self.cameras.index(camera)
