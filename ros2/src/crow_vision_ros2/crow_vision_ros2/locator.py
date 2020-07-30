@@ -49,16 +49,12 @@ class Locator(Node):
         pcd = convertCloudFromRosToOpen3d(pcl_msg)
         # optimizations for performance:
         pcd = pcd.voxel_down_sample(voxel_size=0.02) #optional, downsampling for speed up
-        #optional, remove plane for speedup
-        plane_model, inliers = pcd.segment_plane(distance_threshold=0.01,
-                                                 ransac_n=3,
-                                                 num_iterations=1000)
-        pcd = pcd.select_by_index(inliers, invert=True) #drop plane from the pcl
-        #o3d.visualization.draw_geometries([pcd], zoom=0.8, #FIXME neumim to vykreslit
-        #                          front=[-0.4999, -0.1659, -0.8499],
-        #                          lookat=[2.1813, 2.0619, 2.0999],
-        #                          up=[0.1204, -0.9852, 0.1215])
-        print(pcd)
+        #optional, remove plane for speedup #Note: may not be reasonable to use, as RS is noisy, problem with detection of objects ON table, ...
+        #plane_model, inliers = pcd.segment_plane(distance_threshold=0.01, ransac_n=3, num_iterations=1000)
+        #pcd = pcd.select_by_index(inliers, invert=True) #drop plane from the pcl
+
+        #o3d.visualization.draw_geometries([pcd])
+        print(len(pcd))
 
         #process pcd
         mean, cov = pcd.compute_mean_and_covariance()
