@@ -11,6 +11,10 @@ from rclpy.qos import QoSReliabilityPolicy
 import json
 import numpy as np
 import cv_bridge
+import tf2_py as tf
+import tf2_ros
+from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
+from crow_vision_ros2.utils import make_vector3
 
 import pkg_resources
 from .utils.convertor_ros_open3d import convertCloudFromOpen3dToRos, convertCloudFromRosToOpen3d
@@ -25,7 +29,9 @@ class Locator(Node):
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras]
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras]
+
         self.cvb = cv_bridge.CvBridge()
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
         qos_profile = QoSProfile(
             depth=10,
@@ -41,7 +47,7 @@ class Locator(Node):
         #print(self.getCameraData(camera))
         if not mask_msg.masks:
             return  # no mask detections (for some reason)
-        
+
         masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
@@ -65,6 +71,16 @@ class Locator(Node):
         print(mean)
         bbox3d = pcd.get_axis_aligned_bounding_box()
         print(bbox3d.get_print_info())
+
+    def sendPosition(self, camera_frame, object_frame, time, xyz):
+        tf_msg = TransformStamped()
+        tf_msg.header.stamp = time
+        tf_msg.header.frame_id = camera_frame
+        tf_msg.child_frame_id = object_frame
+        tf_msg.transform.translation = make_vector3(xyz)
+        # tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
+
+        self.tf_broadcaster.sendTransform(tf_msg)
 
     def getCameraData(self, camera):
         idx = self.cameras.index(camera)
