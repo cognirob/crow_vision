@@ -78,25 +78,22 @@ class Locator(Node):
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # segment PCL & compute median
             m = []
-            for x in range(mask.shape[0]): #TODO write this vectorized in np? 
+            for x in range(mask.shape[0]): #TODO write this vectorized in np?
                 for y in range(mask.shape[1]):
                     if mask[x][y]==1:
                         m.append([x,y])
-            m = np.array(m).T 
-            isin_idx = (imspace.T[:,None] == m.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
-            print(isin_idx.shape)
-            print(point_cloud.shape)
-            seg_pcd = point_cloud.T[isin_idx] #FIXME the select by indexing is fails to select any here?
-            print(seg_pcd.shape)
+            m = np.array(m).T
+            isin_idx = (imspace.T[:,None].astype(int) == m.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
+            seg_pcd = point_cloud[:, isin_idx]
 
             mean = seg_pcd.mean(axis=1)
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
-            
+
             #TODO 3d bbox?
             #bbox3d = pcd.get_axis_aligned_bounding_box()
             #print(bbox3d.get_print_info())
-            
+
             #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
             #pcd.points = o3d.utility.Vector3dVector(seg_pcd)
             #o3d.visualization.draw_geometries([pcd])
