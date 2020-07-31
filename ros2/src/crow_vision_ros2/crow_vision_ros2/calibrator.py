@@ -171,8 +171,8 @@ class Calibrator(Node):
                 # print(np.shape(markerCorners))
                 diamondCorners, diamondIds = cv2.aruco.detectCharucoDiamond(image, markerCorners, markerIds, self.squareMarkerLengthRate, cameraMatrix=color_K)
                 markerImage = cv2.aruco.drawDetectedDiamonds(image, diamondCorners, diamondIds)
-                cv2.imshow("computed markers", markerImage)
-                cv2.waitKey(1)
+                # cv2.imshow("computed markers", markerImage)
+                # cv2.waitKey(1)
                 # print(diamondIds)
                 # print(diamondCorners)
 
@@ -188,7 +188,7 @@ class Calibrator(Node):
                     quat = tf3.quaternions.mat2quat(rmat)
 
                     end = self.get_clock().now()
-                    print(f"TF computed in {(end - start).nanoseconds / 1e9} seconds.")
+                    self.get_logger().info(f"TF computed in {(end - start).nanoseconds / 1e9} seconds.")
 
                     tf_msg = TransformStamped()
                     tf_msg.header.stamp = self.get_clock().now().to_msg()
@@ -198,7 +198,16 @@ class Calibrator(Node):
                     tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
                     # print(tf_msg)
 
-                    self.tf_broadcaster.sendTransform(tf_msg)
+                    self.tf_static_broadcaster.sendTransform(tf_msg)
+                    self.get_logger().info("TF published")
+
+                    self.set_parameters([
+                        rclpy.parameter.Parameter(
+                            "halt_calibration",
+                            rclpy.Parameter.Type.BOOL,
+                            True
+                        )
+                    ])
 
                     # cv2.imshow("out", img_out)
                     # cv2.waitKey(1)
