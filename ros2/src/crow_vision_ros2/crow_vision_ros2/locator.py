@@ -68,23 +68,20 @@ class Locator(Node):
         # 1. convert 3d pcl to 2d image-space
         point_cloud = np.asarray(pcd.points).T
         camera_matrix = cameraData["camera_matrix"]
-        assert camera_matrix.shape[1] == camera_matrix.shape[0] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
+        # assert camera_matrix.shape[1] == camera_matrix.shape[0] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
-        imspace = imspace/imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
-        assert imspace[2].all() == 1
+        imspace = imspace / imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
+        # assert imspace[2].all() == 1
         imspace = imspace[:2]
         assert imspace.ndim == 2,'should now be in 2D'
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # segment PCL & compute median
-            m = []
-            for x in range(mask.shape[0]): #TODO write this vectorized in np?
-                for y in range(mask.shape[1]):
-                    if mask[x][y]==1:
-                        m.append([x,y])
-            m = np.array(m).T
-            isin_idx = (imspace.T[:,None].astype(int) == m.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
-            seg_pcd = point_cloud[:, isin_idx]
+
+            a = imspace.astype(int)
+            b = np.array(np.where(mask))
+            seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
+            # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
 
             mean = seg_pcd.mean(axis=1)
             assert len(mean) == 3, 'incorrect mean dim'
@@ -95,8 +92,8 @@ class Locator(Node):
             #print(bbox3d.get_print_info())
 
             #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
-            #pcd.points = o3d.utility.Vector3dVector(seg_pcd)
-            #o3d.visualization.draw_geometries([pcd])
+            pcd.points = o3d.utility.Vector3dVector(seg_pcd)
+            o3d.visualization.draw_geometries([pcd])
             print(seg_pcd.shape)
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
