@@ -66,9 +66,9 @@ class Locator(Node):
 
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
-        point_cloud = np.asarray(pcd.points)
+        point_cloud = np.asarray(pcd.points).T
         camera_matrix = cameraData["camera_matrix"]
-        assert camera_matrix.shape[1] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
+        assert camera_matrix.shape[1] == camera_matrix.shape[0] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace/imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         assert imspace[2].all() == 1
@@ -77,9 +77,16 @@ class Locator(Node):
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # segment PCL & compute median
-            assert imspace.shape == mask.shape
-            isin_idx = (imspace.T[:,None] == mask.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
-            seg_pcd = point_cloud.T[isin_idx]
+            m = []
+            for x in range(mask.shape[0]): #TODO write this vectorized in np? 
+                for y in range(mask.shape[1]):
+                    if mask[x][y]==1:
+                        m.append([x,y])
+            m = np.array(m).T 
+            isin_idx = (imspace.T[:,None] == m.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
+            print(isin_idx.shape)
+            seg_pcd = point_cloud.T[[isin_idx]] #FIXME the select by indexing is fails to select any here?
+            print(seg_pcd.shape)
 
             mean = seg_pcd.mean(axis=1)
             assert len(mean) == 3, 'incorrect mean dim'
