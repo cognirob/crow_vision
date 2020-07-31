@@ -15,10 +15,14 @@ import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
 from crow_vision_ros2.utils import make_vector3
+import cv2
 
 import pkg_resources
 from .utils.convertor_ros_open3d import convertCloudFromOpen3dToRos, convertCloudFromRosToOpen3d
 import open3d as o3d
+from time import time
+from crow_vision_ros2.utils import point_cloud2 as pc2
+from ctypes import * # convert float to uint32
 
 
 class Locator(Node):
@@ -33,6 +37,7 @@ class Locator(Node):
         self.cvb = cv_bridge.CvBridge()
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
+        self.pubPCL = self.create_publisher(PointCloud2, "test_pcl", qos_profile=10)
         qos_profile = QoSProfile(
             depth=10,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
@@ -53,59 +58,93 @@ class Locator(Node):
         masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
+        start = time()
+        field_names=[field.name for field in pcl_msg.fields]
+        cloud_data = list(pc2.read_points(pcl_msg, skip_nans=True, field_names = field_names))
+        xyz = np.array([(x,y,z) for x,y,z,rgb in cloud_data])
+        end = time()
+        print("Convert: ", end - start)
         # get pointcloud data from ROS2 msg to open3d format
-        pcd = convertCloudFromRosToOpen3d(pcl_msg)
+        # pcd = convertCloudFromRosToOpen3d(pcl_msg)
         # optimizations for performance:
-        pcd = pcd.voxel_down_sample(voxel_size=0.02) #optional, downsampling for speed up
+        # pcd = pcd.voxel_down_sample(voxel_size=0.02) #optional, downsampling for speed up
         #optional, remove plane for speedup #Note: may not be reasonable to use, as RS is noisy, problem with detection of objects ON table, ...
         #plane_model, inliers = pcd.segment_plane(distance_threshold=0.01, ransac_n=3, num_iterations=1000)
         #pcd = pcd.select_by_index(inliers, invert=True) #drop plane from the pcl
 
         #o3d.visualization.draw_geometries([pcd])
-        print(pcd)
 
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
-        point_cloud = np.asarray(pcd.points).T
+        point_cloud = xyz.T
+        # point_cloud = np.asarray(pcd.points).T
         camera_matrix = cameraData["camera_matrix"]
         # assert camera_matrix.shape[1] == camera_matrix.shape[0] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace / imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
-        # assert imspace[2].all() == 1
-        imspace = imspace[:2]
-        assert imspace.ndim == 2,'should now be in 2D'
+        imspace[np.where(np.isnan(imspace))] = -1
+        imspace = imspace[:2, :].astype(int)
+
+        # IDX_RGB_IN_FIELD = 3
+        # convert_rgbUint32_to_tuple = lambda rgb_uint32: (
+        #   (rgb_uint32 & 0x00ff0000)>>16, (rgb_uint32 & 0x0000ff00)>>8, (rgb_uint32 & 0x000000ff)
+        # )
+        # convert_rgbFloat_to_tuple = lambda rgb_float: convert_rgbUint32_to_tuple(
+        #   int(cast(pointer(c_float(rgb_float)), POINTER(c_uint32)).contents.value)
+        # )
+        # if type(cloud_data[0][IDX_RGB_IN_FIELD])==float: # if float (from pcl::toROSMsg)
+        #     rgb = [convert_rgbFloat_to_tuple(rgb) for x,y,z,rgb in cloud_data ]
+        # else:
+        #     rgb = [convert_rgbUint32_to_tuple(rgb) for x,y,z,rgb in cloud_data ]
+        # colors = np.array(rgb)
+
+        # img = np.zeros((480, 640, 3), dtype=np.uint8)
+        # for i in range(imspace.shape[1]):
+        #     # if (imspace[:, i] > np.r_[640, 480]).any() or (imspace[:, i] < np.r_[0, 0]).any():
+        #     #     continue
+        #     img[imspace[1, i], imspace[0, i], :] = colors[i, :]
+        # cv2.imshow("img", img)
+        # cv2.imshow("mask", masks[0] * 255)
+        # cv2.waitKey(1)
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # segment PCL & compute median
 
-            where = self.compareMaskPCL(np.array(np.where(mask)), imspace.astype(int))
+            start = time()
+            # mask = np.concatenate((mask[1, :][np.newaxis], mask[0, :][np.newaxis]), axis=0)
+            # imspace = np.concatenate((imspace[1, :][np.newaxis], imspace[0, :][np.newaxis]), axis=0)
+            where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
+            # FIXME: x-y axis might be swapped
+            # m = np.array(np.where(mask))
+            # isin_idx = (imspace.T[:,None] == m.T).all(-1).any(-1)
             seg_pcd = point_cloud[:, where]
             # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
             # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
 
-            mean = seg_pcd.mean(axis=1)
+            mean = seg_pcd.min(axis=1)
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
-
+            end = time()
+            print(end - start)
             #TODO 3d bbox?
             #bbox3d = pcd.get_axis_aligned_bounding_box()
             #print(bbox3d.get_print_info())
 
             #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
-            # pcd.points = o3d.utility.Vector3dVector(seg_pcd)
+            # new_pcl = o3d.geometry.PointCloud()
+            # new_pcl.points = o3d.utility.Vector3dVector(seg_pcd.T)
+            # print(new_pcl)
             # o3d.visualization.draw_geometries([pcd])
             # print(seg_pcd.shape)
+            # self.pubPCL.publish(convertCloudFromOpen3dToRos(new_pcl, pcl_msg.header.stamp, cameraData["optical_frame"]))
 
     def compareMaskPCL(self, mask_array, projected_points):
-        a = mask_array.reshape(-1, 2)
-        b = projected_points.reshape(-1, 2)
-        nrows, ncols = a.shape
-        dtype={'names':['f{}'.format(i) for i in range(ncols)],
-            'formats':ncols * [a.dtype]}
-
+        a = mask_array.T.astype(np.int32).copy()
+        b = projected_points.T.astype(np.int32).copy()
+        dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
         result = np.intersect1d(a.view(dtype), b.view(dtype), return_indices=True)
 
-        return result[1]
+        return result[2]
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
         tf_msg = TransformStamped()
@@ -121,8 +160,8 @@ class Locator(Node):
         return {
             "camera": camera,
             "image_topic": self.image_topics[idx],
-            # "camera_matrix": np.array(self.camera_instrinsics[idx]["camera_matrix"]),
-            "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
+            "camera_matrix": np.array(self.camera_instrinsics[idx]["camera_matrix"]),
+            # "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
             "distortion_coefficients": np.array(self.camera_instrinsics[idx]["distortion_coefficients"]),
             "optical_frame": self.camera_frames[idx],
             "mask_topic": self.mask_topics[idx],
