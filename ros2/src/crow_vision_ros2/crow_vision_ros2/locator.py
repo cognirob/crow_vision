@@ -78,9 +78,9 @@ class Locator(Node):
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # segment PCL & compute median
 
-            a = imspace.astype(int)
-            b = np.array(np.where(mask))
-            seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
+            where = self.compareMaskPCL(np.array(np.where(mask)), imspace.astype(int))
+            seg_pcd = point_cloud[:, where]
+            # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
             # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
 
             mean = seg_pcd.mean(axis=1)
@@ -92,9 +92,20 @@ class Locator(Node):
             #print(bbox3d.get_print_info())
 
             #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
-            pcd.points = o3d.utility.Vector3dVector(seg_pcd)
-            o3d.visualization.draw_geometries([pcd])
-            print(seg_pcd.shape)
+            # pcd.points = o3d.utility.Vector3dVector(seg_pcd)
+            # o3d.visualization.draw_geometries([pcd])
+            # print(seg_pcd.shape)
+
+    def compareMaskPCL(self, mask_array, projected_points):
+        a = mask_array.reshape(-1, 2)
+        b = projected_points.reshape(-1, 2)
+        nrows, ncols = a.shape
+        dtype={'names':['f{}'.format(i) for i in range(ncols)],
+            'formats':ncols * [a.dtype]}
+
+        result = np.intersect1d(a.view(dtype), b.view(dtype), return_indices=True)
+
+        return result[1]
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
         tf_msg = TransformStamped()
@@ -110,7 +121,8 @@ class Locator(Node):
         return {
             "camera": camera,
             "image_topic": self.image_topics[idx],
-            "camera_matrix": np.array(self.camera_instrinsics[idx]["camera_matrix"]),
+            # "camera_matrix": np.array(self.camera_instrinsics[idx]["camera_matrix"]),
+            "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
             "distortion_coefficients": np.array(self.camera_instrinsics[idx]["distortion_coefficients"]),
             "optical_frame": self.camera_frames[idx],
             "mask_topic": self.mask_topics[idx],
