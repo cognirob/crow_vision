@@ -63,7 +63,7 @@ def generate_launch_description():
         node_executable='calibrator',
         output='screen',
         parameters=[{
-                    "halt_calibration": True
+                    "halt_calibration": False
                     }]
     )
     camera_configs.append(calibrator_node)
