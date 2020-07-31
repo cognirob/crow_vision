@@ -61,7 +61,8 @@ class Locator(Node):
         start = time()
         field_names=[field.name for field in pcl_msg.fields]
         cloud_data = list(pc2.read_points(pcl_msg, skip_nans=True, field_names = field_names))
-        xyz = np.array([(x,y,z) for x,y,z,rgb in cloud_data])
+        # xyz = np.array([(x,y,z) for x,y,z,rgb in cloud_data])
+        xyz = np.array(cloud_data)[:, :3]
         end = time()
         print("Convert: ", end - start)
         # get pointcloud data from ROS2 msg to open3d format
@@ -76,14 +77,15 @@ class Locator(Node):
 
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
+        start = time()
         point_cloud = xyz.T
-        # point_cloud = np.asarray(pcd.points).T
         camera_matrix = cameraData["camera_matrix"]
-        # assert camera_matrix.shape[1] == camera_matrix.shape[0] == point_cloud.shape[0] == 3, 'matrix must be 3x3, pcl 3xN'
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace / imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         imspace[np.where(np.isnan(imspace))] = -1
         imspace = imspace[:2, :].astype(int)
+        end = time()
+        print("Transform: ", end - start)
 
         # IDX_RGB_IN_FIELD = 3
         # convert_rgbUint32_to_tuple = lambda rgb_uint32: (
@@ -109,23 +111,15 @@ class Locator(Node):
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # segment PCL & compute median
-
             start = time()
-            # mask = np.concatenate((mask[1, :][np.newaxis], mask[0, :][np.newaxis]), axis=0)
-            # imspace = np.concatenate((imspace[1, :][np.newaxis], imspace[0, :][np.newaxis]), axis=0)
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
-            # FIXME: x-y axis might be swapped
-            # m = np.array(np.where(mask))
-            # isin_idx = (imspace.T[:,None] == m.T).all(-1).any(-1)
             seg_pcd = point_cloud[:, where]
-            # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
-            # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
 
             mean = np.median(seg_pcd, axis=1)
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
-            print(end - start)
+            print("Filter: ", end - start)
             #TODO 3d bbox?
             #bbox3d = pcd.get_axis_aligned_bounding_box()
             #print(bbox3d.get_print_info())
