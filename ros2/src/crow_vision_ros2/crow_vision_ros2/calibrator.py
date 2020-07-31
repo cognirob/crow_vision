@@ -19,8 +19,8 @@ import json
 
 class Calibrator(Node):
 
-    markerLength = 0.036  # mm
-    squareLength = 0.042  # mm
+    markerLength = 0.050  # mm
+    squareLength = 0.060  # mm
     squareMarkerLengthRate = squareLength / markerLength
     try:
       dictionary = cv2.aruco.Dictionary_create(48, 4, 65536)
@@ -87,7 +87,7 @@ class Calibrator(Node):
 
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
-        self.distCoeffs[self.optical_frames[camera_ns]] = msg.d
+        self.distCoeffs[self.optical_frames[camera_ns]] = np.r_[msg.d]
         image_topic = self.color_image_topics[camera_ns]
         optical_frame = self.optical_frames[camera_ns]
 
@@ -154,6 +154,7 @@ class Calibrator(Node):
         start = self.get_clock().now()
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         color_K = self.intrinsics[optical_frame]
+        distCoeffs = self.distCoeffs[optical_frame]
         markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.dictionary, cameraMatrix=color_K)
 
         cameraMarkers = self.camMarkers[optical_frame]
@@ -178,7 +179,7 @@ class Calibrator(Node):
                 if diamondIds is not None and len(diamondIds) > 0:
                     img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
                     img_out = cv2.aruco.drawDetectedDiamonds(img_out, diamondCorners, diamondIds)
-                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(diamondCorners, (-1, 4, 2)), self.squareLength, color_K, self.distCoeffs, )
+                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(diamondCorners, (-1, 4, 2)), self.squareLength, color_K, distCoeffs)
                     rmat = cv2.Rodrigues(rvec)[0]
                     # transform = tf3.affines.compose(tvec.ravel(), rmat, [1, 1, 1])
                     # transform_inv = np.linalg.inv(transform)

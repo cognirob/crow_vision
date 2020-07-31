@@ -36,6 +36,7 @@ class Locator(Node):
 
         self.cvb = cv_bridge.CvBridge()
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
+        self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
         self.pubPCL = self.create_publisher(PointCloud2, "test_pcl", qos_profile=10)
         qos_profile = QoSProfile(
@@ -83,7 +84,7 @@ class Locator(Node):
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace / imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         imspace[np.where(np.isnan(imspace))] = -1
-        imspace = imspace[:2, :].astype(int)
+        imspace = imspace[:2, :].astype(np.int32)
         end = time()
         print("Transform: ", end - start)
 
@@ -134,9 +135,9 @@ class Locator(Node):
 
     def compareMaskPCL(self, mask_array, projected_points):
         a = mask_array.T.astype(np.int32).copy()
-        b = projected_points.T.astype(np.int32).copy()
-        dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
-        result = np.intersect1d(a.view(dtype), b.view(dtype), return_indices=True)
+        b = projected_points.T.copy()
+        self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
+        result = np.intersect1d(a.view(self.mask_dtype), b.view(self.mask_dtype), return_indices=True)
 
         return result[2]
 
