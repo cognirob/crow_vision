@@ -121,7 +121,7 @@ class Locator(Node):
             # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
             # seg_pcd = point_cloud[:, np.where(imspace.T[:, None].astype(int) == np.where(mask))]
 
-            mean = seg_pcd.min(axis=1)
+            mean = np.median(seg_pcd, axis=1)
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
