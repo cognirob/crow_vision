@@ -85,7 +85,8 @@ class Locator(Node):
             m = np.array(m).T 
             isin_idx = (imspace.T[:,None] == m.T).all(-1).any(-1) # cols in mask found in data; from https://stackoverflow.com/questions/51352527/check-for-identical-rows-in-different-numpy-arrays
             print(isin_idx.shape)
-            seg_pcd = point_cloud.T[[isin_idx]] #FIXME the select by indexing is fails to select any here?
+            print(point_cloud.shape)
+            seg_pcd = point_cloud.T[isin_idx] #FIXME the select by indexing is fails to select any here?
             print(seg_pcd.shape)
 
             mean = seg_pcd.mean(axis=1)
