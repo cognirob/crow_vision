@@ -27,7 +27,7 @@ class Calibrator(Node):
     except:
       dictionary = cv2.aruco.Dictionary_create(48, 4) #TODO hack for (old?) cv2 version, fallback to API with 2 args only
 
-    distCoeffs = np.r_[0, 0, 0, 0, 0]
+    # distCoeffs = np.r_[0, 0, 0, 0, 0]
 
     def __init__(self, node_name="calibrator"):
         super().__init__(node_name)
@@ -63,6 +63,7 @@ class Calibrator(Node):
 
         self.optical_frames = dict()
         self.intrinsics = dict()
+        self.distCoeffs = dict()
 
         self.camMarkers = {}
 
@@ -86,6 +87,7 @@ class Calibrator(Node):
 
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
+        self.distCoeffs[self.optical_frames[camera_ns]] = msg.d
         image_topic = self.color_image_topics[camera_ns]
         optical_frame = self.optical_frames[camera_ns]
 
@@ -108,7 +110,7 @@ class Calibrator(Node):
         paramCameraNodes.append(ns + "/" + cname)
         # Camera intrinsics parameter
         paramCameraIntrinsics = self.get_parameter("camera_intrinsics").get_parameter_value().string_array_value
-        paramCameraIntrinsics.append(json.dumps({"camera_matrix": np.random.rand(3, 3).tolist(), "distortion_coefficients": np.random.rand(5).tolist()}))
+        paramCameraIntrinsics.append(json.dumps({"camera_matrix": self.intrinsics[self.optical_frames[camera_ns]].tolist(), "distortion_coefficients": self.distCoeffs[self.optical_frames[camera_ns]].tolist()}))
         # Camera coordinate frame name parameter
         paramCameraFrames = self.get_parameter("camera_frames").get_parameter_value().string_array_value
         paramCameraFrames.append(optical_frame)
