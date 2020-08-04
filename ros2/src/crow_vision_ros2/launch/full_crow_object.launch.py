@@ -23,11 +23,12 @@ def generate_launch_description():
         output='screen',
         node_name="detector_crow",
         parameters=[{
-                    "weights": "data/yolact/weights/crow_base_25_133333.pth",
-                    "config": "data/yolact/weights/config_train.obj"
+                    "weights": "data/yolact/weights/weights_yolact_kuka_21/crow_base_25_133333.pth",
+                    "config": "data/yolact/weights/weights_yolact_kuka_21/config_train.obj"
                     }]
     )
     launchConfigs.append(detector_node)
+
     locator_node = launch_ros.actions.Node(
         package='crow_vision_ros2',
         node_executable='locator',

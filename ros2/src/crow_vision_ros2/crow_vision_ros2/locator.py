@@ -61,12 +61,15 @@ class Locator(Node):
 
         start = time()
         field_names=[field.name for field in pcl_msg.fields]
-        cloud_data = list(pc2.read_points(pcl_msg, skip_nans=True, field_names = field_names))
+        ## convert from ROS pcl_msg to np.array , drop nans
+        cloud_data = list(pc2.read_points(pcl_msg, skip_nans=True))
+        #cloud_data = np.array(pcl_msg.data).view(np.float32).reshape(4, -1).T #TODO try replacing the above with this and drop pc2 file
+        #cloud_data = cloud_data[np.where(~np.isnan(cloud_data).any(axis=1))]
         # xyz = np.array([(x,y,z) for x,y,z,rgb in cloud_data])
         xyz = np.array(cloud_data)[:, :3]
         end = time()
         print("Convert: ", end - start)
-        # get pointcloud data from ROS2 msg to open3d format
+        ## get pointcloud data from ROS2 msg to open3d format
         # pcd = convertCloudFromRosToOpen3d(pcl_msg)
         # optimizations for performance:
         # pcd = pcd.voxel_down_sample(voxel_size=0.02) #optional, downsampling for speed up
@@ -84,6 +87,8 @@ class Locator(Node):
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace / imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         imspace[np.where(np.isnan(imspace))] = -1
+        assert np.isnan(imspace).any() == False, 'must not have NaN element'
+        #imspace[np.where(np.isnan(imspace))] = -1
         imspace = imspace[:2, :].astype(np.int32)
         end = time()
         print("Transform: ", end - start)
@@ -117,6 +122,7 @@ class Locator(Node):
             seg_pcd = point_cloud[:, where]
 
             mean = np.median(seg_pcd, axis=1)
+            print("{} Centroid: {} accuracy: {}".format(class_name, mean, score))
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
