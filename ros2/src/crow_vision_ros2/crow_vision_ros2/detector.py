@@ -132,6 +132,7 @@ class CrowVision(Node):
     assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
     img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
+    #img_raw = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 
     preds, frame = self.cnn.process_batch(img_raw)
     if preds[0]["detection"] is None:
@@ -140,6 +141,8 @@ class CrowVision(Node):
     #the input callback triggers the publishers here.
     if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.cnn.label_image(img_raw, preds, frame)
+      img_labeled = cv2.cvtColor(img_labeled, cv2.COLOR_BGR2RGB)
+
       if img_labeled.ndim == 3:
         batch,w,h,c = 1, *img_labeled.shape
       else:
