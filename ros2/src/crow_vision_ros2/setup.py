@@ -11,6 +11,10 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name, ['launch/all_cameras.launch.py']),
         ('share/' + package_name, ['launch/cameras_detection.launch.py']),
+        ('share/' + package_name, ['launch/dual_detection_cameras.launch.py']),
+        ('share/' + package_name, ['launch/full_crow_object.launch.py']),
+        ('share/' + package_name, ['launch/full_coco.launch.py']),
+        ('share/' + package_name, ['launch/full_dual.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -22,7 +26,8 @@ setup(
     entry_points={
         'console_scripts': [
             'detector = crow_vision_ros2.detector:main',
-            'calibrator = crow_vision_ros2.calibrator:main'
+            'calibrator = crow_vision_ros2.calibrator:main',
+            'locator = crow_vision_ros2.locator:main'
         ],
     },
 )

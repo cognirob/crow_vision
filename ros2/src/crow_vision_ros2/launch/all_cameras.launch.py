@@ -57,4 +57,14 @@ def generate_launch_description():
                 parameters=[launchParams]
             )
             camera_configs.append(camera_node)
+
+    calibrator_node = Node(
+        package='crow_vision_ros2',
+        node_executable='calibrator',
+        output='screen',
+        parameters=[{
+                    "halt_calibration": False
+                    }]
+    )
+    camera_configs.append(calibrator_node)
     return launch.LaunchDescription(camera_configs)

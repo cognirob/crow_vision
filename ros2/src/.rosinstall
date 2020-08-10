@@ -6,3 +6,7 @@
     local-name: crow_vision_yolact
     uri: https://gitlab.ciirc.cvut.cz/imitrob/project_crow/crow_vision_yolact.git
     version: master
+- git:
+    local-name: crow
+    uri: https://gitlab.ciirc.cvut.cz/imitrob/project_crow/crow.git
+    version: master
