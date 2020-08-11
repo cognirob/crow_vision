@@ -17,9 +17,9 @@ MODEL:
     BBOX_REG_LOSS_TYPE: "giou"
     BBOX_REG_LOSS_WEIGHT: 10.0
 SOLVER:
-  STEPS: (80000, 100000)
-  MAX_ITER: 120000
-  CHECKPOINT_PERIOD: 2000
+  STEPS: (300000, 350000)
+  MAX_ITER: 400000
+  CHECKPOINT_PERIOD: 10000
   IMS_PER_BATCH: 10
   BASE_LR: 0.001 
   REFERENCE_WORLD_SIZE: 1 #propagetes to LR, BATCH with NUM_GPUS
@@ -31,9 +31,9 @@ INPUT:
   CROP:
     SIZE: [0.8, 0.8]
 TEST:
-  EVAL_PERIOD: 0 #FIXME temporarily disabled, eval crashes on unknown class_id
+  EVAL_PERIOD: 1000 #FIXME temporarily disabled, eval crashes on unknown class_id
   DETECTIONS_PER_IMAGE: 15
 DATALOADER:
   NUM_WORKERS: 4 #crow: reduces mem footprint, but at cost of throughput
 CUDNN_BENCHMARK: True
-VIS_PERIOD: 10
+VIS_PERIOD: 0
