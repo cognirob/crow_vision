@@ -1,9 +1,9 @@
-_BASE_: "../COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"
+_BASE_: "../COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
 MODEL:
   BACKBONE: 
     FREEZE_AT: 3 #crow: freeze model at layer, default 2
   ANCHOR_GENERATOR:
-#    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
+    SIZES: [[8], [32], [64], [128], [256]]  # One size for each in feature map #crow 7x7 is our minimal object - nut
     ASPECT_RATIOS: [[0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0]]  # aspect ratios (same for all in feature maps) #crow - we have long objects (screw,..)
     ANGLES: [[-90, -45, 0, 45, 90]]
   PROPOSAL_GENERATOR:
@@ -31,7 +31,7 @@ INPUT:
   CROP:
     SIZE: [0.8, 0.8]
 TEST:
-  EVAL_PERIOD: 1000 #FIXME temporarily disabled, eval crashes on unknown class_id
+  EVAL_PERIOD: 10000 
   DETECTIONS_PER_IMAGE: 15
 DATALOADER:
   NUM_WORKERS: 4 #crow: reduces mem footprint, but at cost of throughput
