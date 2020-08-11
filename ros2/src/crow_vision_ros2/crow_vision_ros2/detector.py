@@ -13,12 +13,6 @@ import commentjson as json
 import pkg_resources
 import argparse
 
-# import CNN - YOLACT
-YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
-import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
-from inference_tool import InfTool
-from yolact import Yolact
-from data import set_cfg
 
 class CrowVision(Node):
   """
@@ -47,6 +41,19 @@ class CrowVision(Node):
     with open(CONFIG_DEFAULT) as configFile:
       self.config = json.load(configFile)
       print(self.config)
+
+    # specific imports based on YOLACT / Detectron2
+    if config["type"] == "YOLACT":
+        # import CNN - YOLACT
+        YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
+        import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
+        from inference_tool import InfTool
+        from yolact import Yolact
+        from data import set_cfg
+    elif config["type"] == "Detectron2":
+        import detectron2
+    else:
+        raise Exception("Supported types only: 'Detectron2', 'YOLACT'. Set in config.type. ")
 
     ## handle multiple inputs (cameras).
     # store the ROS Listeners,Publishers in a dict{}, keys by topic.
