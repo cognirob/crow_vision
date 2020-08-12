@@ -68,6 +68,9 @@ def get_parser():
 
 
 if __name__ == "__main__":
+    ##crow
+    from train_net import register_custom_dataset
+
     mp.set_start_method("spawn", force=True)
     args = get_parser().parse_args()
     setup_logger(name="fvcore")
@@ -75,6 +78,12 @@ if __name__ == "__main__":
     logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
+
+    register_custom_dataset('/home/imitrob/dataset_kuka_env_pybullet_merge_addnoise/')
+    cfg.defrost()
+    cfg.DATASETS.TRAIN = ("kuka_train",)
+    cfg.DATASETS.TEST = ("kuka_test",)
+
 
     demo = VisualizationDemo(cfg)
 

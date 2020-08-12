@@ -95,11 +95,7 @@ class VisualizationDemo(object):
                 )
             elif "instances" in predictions:
                 predictions = predictions["instances"].to(self.cpu_device)
-                try:
-                    vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
-                except:
-                    print("Visualizing predictions failed. Skip")
-                    return None
+                vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
             elif "sem_seg" in predictions:
                 vis_frame = video_visualizer.draw_sem_seg(
                     frame, predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
@@ -122,15 +118,26 @@ class VisualizationDemo(object):
                 if cnt >= buffer_size:
                     frame = frame_data.popleft()
                     predictions = self.predictor.get()
-                    yield process_predictions(frame, predictions)
+                    try:
+                      yield process_predictions(frame, predictions)
+                    except:
+                        print("nah")
+                        continue
 
             while len(frame_data):
                 frame = frame_data.popleft()
                 predictions = self.predictor.get()
-                yield process_predictions(frame, predictions)
+                try:
+                    yield process_predictions(frame, predictions)
+                except:
+                    print("ah")
+                    continue
         else:
             for frame in frame_gen:
-                yield process_predictions(frame, self.predictor(frame))
+                try:
+                    yield process_predictions(frame, self.predictor(frame))
+                except:
+                    print("oh")
 
 
 class AsyncPredictor:
