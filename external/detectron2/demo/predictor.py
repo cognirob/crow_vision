@@ -95,7 +95,11 @@ class VisualizationDemo(object):
                 )
             elif "instances" in predictions:
                 predictions = predictions["instances"].to(self.cpu_device)
-                vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
+                try:
+                    vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
+                except:
+                    print("Visualizing predictions failed. Skip")
+                    return None
             elif "sem_seg" in predictions:
                 vis_frame = video_visualizer.draw_sem_seg(
                     frame, predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
