@@ -60,13 +60,7 @@ class Locator(Node):
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
         start = time()
-        field_names=[field.name for field in pcl_msg.fields]
-        ## convert from ROS pcl_msg to np.array , drop nans
-        cloud_data = list(pc2.read_points(pcl_msg, skip_nans=True))
-        #cloud_data = np.array(pcl_msg.data).view(np.float32).reshape(4, -1).T #TODO try replacing the above with this and drop pc2 file
-        #cloud_data = cloud_data[np.where(~np.isnan(cloud_data).any(axis=1))]
-        # xyz = np.array([(x,y,z) for x,y,z,rgb in cloud_data])
-        xyz = np.array(cloud_data)[:, :3]
+        xyz = np.array(pcl_msg.data).view(np.float32).reshape(-1, 8)[:, :3]
         end = time()
         print("Convert: ", end - start)
         ## get pointcloud data from ROS2 msg to open3d format
