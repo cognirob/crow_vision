@@ -60,6 +60,7 @@ class Locator(Node):
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
         start = time()
+        # 0. convert ROS2 msg -> numpy
         xyz = np.array(pcl_msg.data).view(np.float32).reshape(-1, 8)[:, :3]
         end = time()
         print("Convert: ", end - start)
@@ -110,13 +111,13 @@ class Locator(Node):
         # cv2.waitKey(1)
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
-            # segment PCL & compute median
+            # 2. segment PCL & compute median
             start = time()
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
             seg_pcd = point_cloud[:, where]
 
             mean = np.median(seg_pcd, axis=1)
-            print("{} Centroid: {} accuracy: {}".format(class_name, mean, score))
+            print("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
