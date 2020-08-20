@@ -18,10 +18,8 @@ from crow_vision_ros2.utils import make_vector3
 import cv2
 
 import pkg_resources
-from .utils.convertor_ros_open3d import convertCloudFromOpen3dToRos, convertCloudFromRosToOpen3d
-import open3d as o3d
+#import open3d as o3d
 from time import time
-from crow_vision_ros2.utils import point_cloud2 as pc2
 from ctypes import * # convert float to uint32
 
 
@@ -64,14 +62,6 @@ class Locator(Node):
         xyz = np.array(pcl_msg.data).view(np.float32).reshape(-1, 8)[:, :3]
         end = time()
         print("Convert: ", end - start)
-        ## get pointcloud data from ROS2 msg to open3d format
-        # pcd = convertCloudFromRosToOpen3d(pcl_msg)
-        # optimizations for performance:
-        # pcd = pcd.voxel_down_sample(voxel_size=0.02) #optional, downsampling for speed up
-        #optional, remove plane for speedup #Note: may not be reasonable to use, as RS is noisy, problem with detection of objects ON table, ...
-        #plane_model, inliers = pcd.segment_plane(distance_threshold=0.01, ransac_n=3, num_iterations=1000)
-        #pcd = pcd.select_by_index(inliers, invert=True) #drop plane from the pcl
-
         #o3d.visualization.draw_geometries([pcd])
 
         ##process pcd
