@@ -43,14 +43,14 @@ class CrowVision(Node):
       print(self.config)
 
     # specific imports based on YOLACT / Detectron2
-    if config["type"] == "YOLACT":
+    if self.config["type"] == "YOLACT":
         # import CNN - YOLACT
         YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
         import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
         from inference_tool import InfTool
         from yolact import Yolact
         from data import set_cfg
-    elif config["type"] == "Detectron2":
+    elif self.config["type"] == "Detectron2":
         import detectron2
     else:
         raise Exception("Supported types only: 'Detectron2', 'YOLACT'. Set in config.type. ")
