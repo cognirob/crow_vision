@@ -11,3 +11,4 @@ install/
 **_ws/
 ros2/src/ros2_intel_realsense/**
 ros2/src/crow_vision_yolact/**
+tools/*.png
