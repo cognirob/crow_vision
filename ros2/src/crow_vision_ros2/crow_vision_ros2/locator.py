@@ -40,7 +40,13 @@ class Locator(Node):
         qos_profile = QoSProfile(
             depth=10,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
-        for cam, pclTopic, maskTopic in zip(self.cameras, self.pcl_topics, self.mask_topics):
+
+        for i, (cam, pclTopic, maskTopic, camera_instrinsics) in enumerate(zip(self.cameras, self.pcl_topics, self.mask_topics, self.camera_instrinsics)):
+            # convert camera data to numpy
+            self.camera_instrinsics[i]["camera_matrix"] = np.array(camera_instrinsics["camera_matrix"], dtype=np.float32)
+            self.camera_instrinsics[i]["distortion_coefficients"] = np.array(camera_instrinsics["distortion_coefficients"], dtype=np.float32)
+
+            # create approx syncro callbacks
             self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=10)
             self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=10)
             self.get_logger().info("LOCATOR: Created Subscriber for masks at topic: {}".format(maskTopic))
@@ -57,24 +63,19 @@ class Locator(Node):
         masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
-        start = time()
-        # 0. convert ROS2 msg -> numpy
-        xyz = np.array(pcl_msg.data).view(np.float32).reshape(-1, 8)[:, :3]
-        end = time()
-        print("Convert: ", end - start)
-        #o3d.visualization.draw_geometries([pcd])
+        point_cloud = np.array(pcl_msg.data).view(np.float32).reshape(-1, 8)[:, :3].T
+        ## get pointcloud data from ROS2 msg to open3d format
+        # pcd = convertCloudFromRosTo.astype(np.float32)
 
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
         start = time()
-        point_cloud = xyz.T
         camera_matrix = cameraData["camera_matrix"]
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
-        imspace = imspace / imspace[2] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
-        imspace[np.where(np.isnan(imspace))] = -1
-        assert np.isnan(imspace).any() == False, 'must not have NaN element'
-        #imspace[np.where(np.isnan(imspace))] = -1
-        imspace = imspace[:2, :].astype(np.int32)
+        imspace = imspace[:2, :] / imspace[2, :] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
+        imspace[np.isnan(imspace)] = -1
+        # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
+        imspace = imspace.astype(np.int32)
         end = time()
         print("Transform: ", end - start)
 
@@ -146,9 +147,9 @@ class Locator(Node):
         return {
             "camera": camera,
             "image_topic": self.image_topics[idx],
-            "camera_matrix": np.array(self.camera_instrinsics[idx]["camera_matrix"]),
+            "camera_matrix": self.camera_instrinsics[idx]["camera_matrix"],
             # "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
-            "distortion_coefficients": np.array(self.camera_instrinsics[idx]["distortion_coefficients"]),
+            "distortion_coefficients": self.camera_instrinsics[idx]["distortion_coefficients"],
             "optical_frame": self.camera_frames[idx],
             "mask_topic": self.mask_topics[idx],
             "pcl_topic": self.pcl_topics[idx],

@@ -110,7 +110,7 @@ class Calibrator(Node):
         paramCameraNodes.append(ns + "/" + cname)
         # Camera intrinsics parameter
         paramCameraIntrinsics = self.get_parameter("camera_intrinsics").get_parameter_value().string_array_value
-        paramCameraIntrinsics.append(json.dumps({"camera_matrix": self.intrinsics[self.optical_frames[camera_ns]].tolist(), "distortion_coefficients": self.distCoeffs[self.optical_frames[camera_ns]].tolist()}))
+        paramCameraIntrinsics.append(json.dumps({"camera_matrix": self.intrinsics[self.optical_frames[camera_ns]].astype(np.float32).tolist(), "distortion_coefficients": self.distCoeffs[self.optical_frames[camera_ns]].astype(np.float32).tolist()}))
         # Camera coordinate frame name parameter
         paramCameraFrames = self.get_parameter("camera_frames").get_parameter_value().string_array_value
         paramCameraFrames.append(optical_frame)

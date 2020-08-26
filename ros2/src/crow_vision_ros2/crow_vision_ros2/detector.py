@@ -50,7 +50,7 @@ class CrowVision(Node):
         from inference_tool import InfTool
         from yolact import Yolact
         from data import set_cfg
-    elif config["type"] == "Detectron2":
+    elif self.config["type"] == "Detectron2":
         import detectron2
     else:
         raise Exception("Supported types only: 'Detectron2', 'YOLACT'. Set in config.type. ")

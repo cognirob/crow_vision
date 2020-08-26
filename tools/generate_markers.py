@@ -6,9 +6,9 @@ import png
 
 
 # input setup
-marker_size_mm = 36  # length of a side of the markers in mm
-square_size_mm = 42
-num_of_diamonds = 12
+marker_size_mm = 50  # length of a side of the markers in mm
+square_size_mm = 60
+num_of_diamonds = 3
 markers_bits = 4  # bits per side of the markers data matrix
 
 safety_margin_mm = np.r_[10, 10, 10, 10]  # offsets around the paper due to printing (top, down, left, right)
