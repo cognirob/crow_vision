@@ -34,3 +34,4 @@ dependencies:
     - filterpy #ROS filter
     - transforms3d #ROS calibrator
     - open3d==0.10.0 #locator 
+    - empy # realsense_msgs fail with 'em', we need empy instead! 
