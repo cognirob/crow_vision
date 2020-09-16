@@ -22,9 +22,12 @@ class Match3D(Node):
 
     def __init__(self, node_name="match3d"):
         super().__init__(node_name)
-        self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
+        #FIXME nefunguje?? pritom v locator.py jo!: self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
+        self.cameras = ["/camera/camera1"]
+        print(self.cameras)
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
+        print(self.seg_pcl_topics)
         #TODO merge (segmented) pcls before this node
         #TODO create output publisher (what exactly to publish?)
 
