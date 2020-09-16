@@ -31,12 +31,18 @@ class Locator(Node):
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras] #input pcl data
+        # create output topic and publisher dynamically for each cam
+        self.pubPCL = {} #output: segmented pcl sent as PointCloud2, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
+        for cam in self.cameras:
+            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud"
+            out_pcl_publisher = self.create_publisher(PointCloud2, out_pcl_topic, qos_profile=10)
+            self.pubPCL[cam] = out_pcl_publisher
+            self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
         self.cvb = cv_bridge.CvBridge()
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
-        self.pubPCL = self.create_publisher(PointCloud2, "/crow/segmented_pcl", qos_profile=10) #output: segmented pcl #TODO separate publisher for each cam?
         qos_profile = QoSProfile(
             depth=10,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
@@ -139,7 +145,7 @@ class Locator(Node):
             print("Segmented PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.height,
               seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
 
-            self.pubPCL.publish(seg_pcl_msg) #TODO publish seg pcl on camera-specific topics, or in general? 
+            self.pubPCL[camera].publish(seg_pcl_msg)
 
 
     def compareMaskPCL(self, mask_array, projected_points):
