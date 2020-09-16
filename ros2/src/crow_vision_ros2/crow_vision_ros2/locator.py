@@ -4,7 +4,7 @@ from rcl_interfaces.msg import ParameterType
 from ros2param.api import call_get_parameters
 import message_filters
 from crow_msgs.msg import DetectionMask
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointCloud2, PointField
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
