@@ -133,14 +133,13 @@ class Locator(Node):
                      data=seg_pcd.tobytes()
                      )
             seg_pcl_msg.header.stamp = mask_msg.header.stamp
-            print(pcl_msg.height)
-            print(pcl_msg.width)
-            print(pcl_msg.fields)
-            print(pcl_msg.point_step)
-            print(pcl_msg.row_step)
-            print(np.shape(pcl_msg.data))
+            print("Orig PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.height,
+              pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
 
-            self.pubPCL.publish(seg_pcl_msg)
+            print("Segmented PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.height,
+              seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
+
+            self.pubPCL.publish(seg_pcl_msg) #TODO publish seg pcl on camera-specific topics, or in general? 
 
 
     def compareMaskPCL(self, mask_array, projected_points):
