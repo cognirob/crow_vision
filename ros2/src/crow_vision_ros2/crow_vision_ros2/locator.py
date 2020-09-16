@@ -29,14 +29,14 @@ class Locator(Node):
         super().__init__(node_name)
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_nodes", "camera_intrinsics", "camera_frames"]).values]
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
-        self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras]
-        self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras]
+        self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
+        self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras] #input pcl data
 
         self.cvb = cv_bridge.CvBridge()
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
-        self.pubPCL = self.create_publisher(PointCloud2, "test_pcl", qos_profile=10)
+        self.pubPCL = self.create_publisher(PointCloud2, "/crow/segmented_pcl", qos_profile=10) #output: segmented pcl #TODO separate publisher for each cam?
         qos_profile = QoSProfile(
             depth=10,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
@@ -52,6 +52,7 @@ class Locator(Node):
             self.get_logger().info("LOCATOR: Created Subscriber for masks at topic: {}".format(maskTopic))
             self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.005)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
+
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
         #print(self.getCameraData(camera))
@@ -125,6 +126,7 @@ class Locator(Node):
             # print(seg_pcd.shape)
             # self.pubPCL.publish(convertCloudFromOpen3dToRos(new_pcl, pcl_msg.header.stamp, cameraData["optical_frame"]))
 
+
     def compareMaskPCL(self, mask_array, projected_points):
         a = mask_array.T.astype(np.int32).copy()
         b = projected_points.T.copy()
@@ -132,6 +134,7 @@ class Locator(Node):
         result = np.intersect1d(a.view(self.mask_dtype), b.view(self.mask_dtype), return_indices=True)
 
         return result[2]
+
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
         tf_msg = TransformStamped()
@@ -141,6 +144,7 @@ class Locator(Node):
         tf_msg.transform.translation = make_vector3(xyz)
 
         self.tf_broadcaster.sendTransform(tf_msg)
+
 
     def getCameraData(self, camera):
         idx = self.cameras.index(camera)
@@ -154,6 +158,8 @@ class Locator(Node):
             "mask_topic": self.mask_topics[idx],
             "pcl_topic": self.pcl_topics[idx],
         }
+
+
 
 def main():
     rclpy.init()
