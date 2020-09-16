@@ -63,7 +63,7 @@ class Locator(Node):
     def detection_callback(self, pcl_msg, mask_msg, camera):
         #print(self.getCameraData(camera))
         if not mask_msg.masks:
-            print("no masks, no party. Quitting early.")
+            self.get_logger.info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
         cameraData = self.getCameraData(camera)
@@ -84,7 +84,7 @@ class Locator(Node):
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
         end = time()
-        print("Transform: ", end - start)
+        #print("Transform: ", end - start)
 
         # IDX_RGB_IN_FIELD = 3
         # convert_rgbUint32_to_tuple = lambda rgb_uint32: (
@@ -115,11 +115,11 @@ class Locator(Node):
             seg_pcd = point_cloud[:, where]
 
             mean = np.median(seg_pcd, axis=1)
-            print("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
+            self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
-            print("Filter: ", end - start)
+            #print("Filter: ", end - start)
             #TODO 3d bbox?
             #bbox3d = pcd.get_axis_aligned_bounding_box()
             #print(bbox3d.get_print_info())
@@ -129,7 +129,7 @@ class Locator(Node):
             fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate('xyz')]
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             seg_pcl_msg = PointCloud2(
-                     #header=header,
+                     header=pcl_msg.header,
                      height=1,
                      width=seg_pcd.shape[1],
                      fields=fields,
@@ -137,12 +137,10 @@ class Locator(Node):
                      row_step=(itemsize*3*seg_pcd.shape[1]),
                      data=seg_pcd.tobytes()
                      )
-            seg_pcl_msg.header.stamp = mask_msg.header.stamp
-            #print("Orig PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.height,
-            #  pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
+            assert seg_pcl_msg.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
+            #print("Orig PCL:\n header: {}\nheight: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.header, pcl_msg.height, pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
 
-            #print("Segmented PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.height,
-            #  seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
+            #print("Segmented PCL:\n header: {}\nheight: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.header, seg_pcl_msg.height, seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
 
             self.pubPCL[camera].publish(seg_pcl_msg)
 
