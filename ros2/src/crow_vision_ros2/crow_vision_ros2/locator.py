@@ -118,13 +118,29 @@ class Locator(Node):
             #bbox3d = pcd.get_axis_aligned_bounding_box()
             #print(bbox3d.get_print_info())
 
-            #TODO if we wanted, create back a pcl from seg_pcd and publish it as ROS PointCloud2
-            # new_pcl = o3d.geometry.PointCloud()
-            # new_pcl.points = o3d.utility.Vector3dVector(seg_pcd.T)
-            # print(new_pcl)
-            # o3d.visualization.draw_geometries([pcd])
-            # print(seg_pcd.shape)
-            # self.pubPCL.publish(convertCloudFromOpen3dToRos(new_pcl, pcl_msg.header.stamp, cameraData["optical_frame"]))
+            # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
+            ros_dtype = PointField.FLOAT32
+            itemsize = np.dtype(np.float32).itemsize
+            fields = [PointField(name=n, offset=i*itemsize, datatype=ros_dtype, count=1) for i, n in enumerate('xyz')]
+            #TODO fill correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
+            seg_pcl_msg = PointCloud2(
+                     #header=header,
+                     height=1,
+                     width=seg_pcd.shape[1],
+                     fields=fields,
+                     point_step=(itemsize*3), #3=RGB
+                     row_step=(itemsize*3*seg_pcd.shape[1]),
+                     data=seg_pcd.tobytes()
+                     )
+            seg_pcl_msg.header.stamp = mask_msg.header.stamp
+            print(pcl_msg.height)
+            print(pcl_msg.width)
+            print(pcl_msg.fields)
+            print(pcl_msg.point_step)
+            print(pcl_msg.row_step)
+            print(np.shape(pcl_msg.data))
+
+            self.pubPCL.publish(seg_pcl_msg)
 
 
     def compareMaskPCL(self, mask_array, projected_points):
