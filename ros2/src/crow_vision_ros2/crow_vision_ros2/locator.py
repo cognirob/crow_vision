@@ -125,10 +125,9 @@ class Locator(Node):
             #print(bbox3d.get_print_info())
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
-            ros_dtype = PointField.FLOAT32
             itemsize = np.dtype(np.float32).itemsize
-            fields = [PointField(name=n, offset=i*itemsize, datatype=ros_dtype, count=1) for i, n in enumerate('xyz')]
-            #TODO fill correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
+            fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate('xyz')]
+            #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             seg_pcl_msg = PointCloud2(
                      #header=header,
                      height=1,
@@ -139,11 +138,11 @@ class Locator(Node):
                      data=seg_pcd.tobytes()
                      )
             seg_pcl_msg.header.stamp = mask_msg.header.stamp
-            print("Orig PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.height,
-              pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
+            #print("Orig PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.height,
+            #  pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
 
-            print("Segmented PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.height,
-              seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
+            #print("Segmented PCL:\n height: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.height,
+            #  seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
 
             self.pubPCL[camera].publish(seg_pcl_msg)
 
