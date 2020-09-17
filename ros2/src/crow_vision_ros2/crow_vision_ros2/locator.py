@@ -35,7 +35,7 @@ class Locator(Node):
         self.pubPCL = {} #output: segmented pcl sent as PointCloud2, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
         for cam in self.cameras:
             out_pcl_topic = cam + "/" + "detections/segmented_pointcloud"
-            out_pcl_publisher = self.create_publisher(PointCloud2, out_pcl_topic, qos_profile=10)
+            out_pcl_publisher = self.create_publisher(PointCloud2, out_pcl_topic, qos_profile=100)
             self.pubPCL[cam] = out_pcl_publisher
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
@@ -53,10 +53,10 @@ class Locator(Node):
             self.camera_instrinsics[i]["distortion_coefficients"] = np.array(camera_instrinsics["distortion_coefficients"], dtype=np.float32)
 
             # create approx syncro callbacks
-            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=10)
-            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=10)
+            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=100)
+            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=100)
             self.get_logger().info("LOCATOR: Created Subscriber for masks at topic: {}".format(maskTopic))
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.005)
+            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 200, 0.005)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
 

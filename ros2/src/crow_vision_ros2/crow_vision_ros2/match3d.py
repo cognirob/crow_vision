@@ -37,10 +37,10 @@ class Match3D(Node):
 
         for i, (cam, pclTopic, maskTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics, self.mask_topics)):
             # create approx syncro callbacks
-            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=10)
-            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=10)
+            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=100)
+            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=100)
             self.get_logger().info("Created synced subscriber for masks: \"{}\" & segmented_pcl \"{}\"".format(maskTopic, pclTopic))
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.005)
+            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 200, 0.005)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.objects = {} # map str:label -> .stl model #TODO load STL
