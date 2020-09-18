@@ -23,15 +23,13 @@ class Match3D(Node):
     def __init__(self, node_name="match3d"):
         super().__init__(node_name)
         #FIXME nefunguje?? pritom v locator.py jo!: 
-        #self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
+        #FIXME self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
         self.cameras = ["/camera1/camera"]
 
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
         self.get_logger().info(str(self.seg_pcl_topics))
         self.get_logger().info(str(self.mask_topics))
-        assert len(self.mask_topics) == len(self.seg_pcl_topics)
-        assert len(self.mask_topics) > 0
 
         #TODO merge (segmented) pcls before this node
         #TODO create output publisher (what exactly to publish?)
@@ -60,7 +58,7 @@ class Match3D(Node):
         # labels & score from detections masks
         class_names, scores = mask_msg.class_names, mask_msg.scores
         # pointcloud in numpy from pcl_msg
-        point_cloud = np.array(pcl_msg.data).view(np.float32).reshape(-1, 3)[:, :3].T #FIXME <- taken from locator, cannot reshape 8. find correct number (4? :P)
+        point_cloud = np.array(pcl_msg.data).view(np.float32).reshape(-1, 3).T # 3 as we have x,y,z only in the pcl
 
         for i, (class_name, score) in enumerate(zip(class_names, scores)):
             icp_score = 0.0 #TODO ICP match self.objects["class_name"] to point_cloud
