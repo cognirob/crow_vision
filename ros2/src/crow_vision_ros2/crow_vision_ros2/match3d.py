@@ -135,6 +135,7 @@ class Match3D(Node):
         real_pcl = o3d.geometry.PointCloud()
         #real_pcl.points = o3d.utility.Vector3dVector(ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg.pcl)) #using ros2_numpy 
         real_pcl.points = o3d.utility.Vector3dVector(pcd)
+        real_pcl = real_pcl.voxel_down_sample(voxel_size=0.05) #TODO should we also downsample the incoming pcl? (slower conversion to o3d, but might do faster ICP)
         end = time()
         self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
 
