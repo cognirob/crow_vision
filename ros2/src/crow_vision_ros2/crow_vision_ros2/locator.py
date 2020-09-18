@@ -3,24 +3,31 @@ from rclpy.node import Node
 from rcl_interfaces.msg import ParameterType
 from ros2param.api import call_get_parameters
 import message_filters
-from crow_msgs.msg import DetectionMask
+
+#Pointcloud
+from crow_msgs.msg import DetectionMask, SegmentedPointcloud
 from sensor_msgs.msg import PointCloud2, PointField
+
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
+
 import json
 import numpy as np
+import cv2
 import cv_bridge
+
+#TF 
 import tf2_py as tf
 import tf2_ros
-from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
+from geometry_msgs.msg import TransformStamped
 from crow_vision_ros2.utils import make_vector3
-import cv2
 
 import pkg_resources
-#import open3d as o3d
+#import open3d as o3d #we don't use o3d, as it's too slow
 from time import time
 from ctypes import * # convert float to uint32
+
 
 
 class Locator(Node):
@@ -38,9 +45,8 @@ class Locator(Node):
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = {} #output: segmented pcl sent as PointCloud2, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
         for cam in self.cameras:
-            print(cam)
             out_pcl_topic = cam + "/" + "detections/segmented_pointcloud"
-            out_pcl_publisher = self.create_publisher(PointCloud2, out_pcl_topic, qos_profile=qos)
+            out_pcl_publisher = self.create_publisher(SegmentedPointcloud, out_pcl_topic, qos_profile=qos)
             self.pubPCL[cam] = out_pcl_publisher
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
@@ -130,15 +136,12 @@ class Locator(Node):
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
             #print("Filter: ", end - start)
-            #TODO 3d bbox?
-            #bbox3d = pcd.get_axis_aligned_bounding_box()
-            #print(bbox3d.get_print_info())
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             itemsize = np.dtype(np.float32).itemsize
             fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate('xyz')]
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
-            seg_pcl_msg = PointCloud2(
+            segmented_pcl = PointCloud2(
                      header=pcl_msg.header,
                      height=1,
                      width=seg_pcd.shape[1],
@@ -147,8 +150,15 @@ class Locator(Node):
                      row_step=(itemsize*3*seg_pcd.shape[1]),
                      data=seg_pcd.tobytes()
                      )
-            seg_pcl_msg.header.stamp = mask_msg.header.stamp
-            assert seg_pcl_msg.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
+            segmented_pcl.header.stamp = mask_msg.header.stamp
+            assert segmented_pcl.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
+            
+            # wrap together PointCloud2 + label + score => SegmentedPointcloud
+            seg_pcl_msg = SegmentedPointcloud()
+            seg_pcl_msg.header = segmented_pcl.header
+            seg_pcl_msg.pcl = segmented_pcl
+            seg_pcl_msg.label = str(class_name)
+            seg_pcl_msg.confidence = float(score)
 
             self.pubPCL[camera].publish(seg_pcl_msg)
 
