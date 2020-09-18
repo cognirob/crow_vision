@@ -119,14 +119,41 @@ class Match3D(Node):
 
 
     def detection_callback(self, msg, camera):
+
         # model (as a pointcloud) to be matched to a real-world position
-        #FIXME model_pcl = self.objects[xxx] #which mask from multiple masks in mask_msg???
+        model_pcl = None
+        try:
+            model_pcl = self.objects[msg.label]
+        except:
+            self.get_logger().info("Unknown model for detected label {}. Skipping.".format(msg.label))
+            return
+
         
         # pointcloud from msg PointCloud2 -> numpy -> o3d.PointCloud
-        real_pcl = np.array(msg.pcl.data).view(np.float32).reshape(-1, 3).T # 3 as we have x,y,z only in the pcl
+        start = time()
+        pcd = np.array(msg.pcl.data).view(np.float32).reshape(-1, 3) # 3 as we have x,y,z only in the pcl
+        real_pcl = o3d.geometry.PointCloud()
+        #real_pcl.points = o3d.utility.Vector3dVector(ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg.pcl)) #using ros2_numpy 
+        real_pcl.points = o3d.utility.Vector3dVector(pcd)
+        end = time()
+        self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
 
-        icp_score = 0.0 #TODO ICP match self.objects["class_name"] to point_cloud
-        self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with match confidence: {}".format(np.shape(real_pcl), msg.label, msg.confidence, icp_score))
+
+        # fit model to real pcl: ICP
+        # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
+        print("Apply point-to-point ICP")
+        start = time()
+        reg_p2p = o3d.registration.registration_icp(
+            source=model_pcl, 
+            target=real_pcl, 
+            max_correspondence_distance=0.1, 
+            #init=trans_init, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?)
+            estimation_method=o3d.registration.TransformationEstimationPointToPoint())
+        end = time()
+        print(reg_p2p)
+        print("Transformation is:")
+        print(reg_p2p.transformation)
+        self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with fit success: {} in {} sec.".format(real_pcl, msg.label, msg.confidence, reg_p2p.fitness, (end-start)))
 
 
 
