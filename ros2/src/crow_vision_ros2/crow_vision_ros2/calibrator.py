@@ -77,10 +77,12 @@ class Calibrator(Node):
 
             tf_msg = TransformStamped()
             tf_msg.header.stamp = self.get_clock().now().to_msg()
-            tf_msg.header.frame_id = f"{camera_ns[1:]}_link"
-            tf_msg.child_frame_id = optical_frame
+            tf_msg.header.frame_id = optical_frame
+            tf_msg.child_frame_id = f"{camera_ns[1:]}_link"
             tf_msg.transform.translation = make_vector3([-0.00030501, 0.015123, 0.0])
             tf_msg.transform.rotation = make_quaternion([-0.5, 0.5, -0.5, 0.5])
+            # tf_msg.transform.translation = make_vector3([-0.29318, -0.22518, 2.1675])
+            # tf_msg.transform.rotation = make_quaternion([-0.49032, 0.35335, 0.47915, 0.63651])
             # print(tf_msg)
 
             self.tf_static_broadcaster.sendTransform(tf_msg)
