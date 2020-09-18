@@ -27,7 +27,8 @@ setup(
         'console_scripts': [
             'detector = crow_vision_ros2.detector:main',
             'calibrator = crow_vision_ros2.calibrator:main',
-            'locator = crow_vision_ros2.locator:main'
+            'locator = crow_vision_ros2.locator:main',
+            'merger = crow_vision_ros2.merger:main'
         ],
     },
 )
