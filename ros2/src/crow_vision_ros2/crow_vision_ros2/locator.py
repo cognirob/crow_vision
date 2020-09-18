@@ -25,7 +25,10 @@ from ctypes import * # convert float to uint32
 
 class Locator(Node):
 
-    def __init__(self, node_name="locator"):
+    def __init__(self, node_name="locator", min_points_pcl=500):
+        """
+        @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud. 
+        """
         super().__init__(node_name)
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_nodes", "camera_intrinsics", "camera_frames"]).values]
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
@@ -56,6 +59,9 @@ class Locator(Node):
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos) #listener for masks from detector node
             sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 20, slop=0.03) #create and register callback for syncing these 2 message streams, slop=tolerance [sec] 
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
+
+        self.min_points_pcl = min_points_pcl
+
 
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
@@ -110,6 +116,12 @@ class Locator(Node):
             # 2. segment PCL & compute median
             start = time()
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
+            # skip pointclouds with too few datapoints to be useful
+            if len(where) < self.min_points_pcl:
+                self.get_logger().info("Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
+                continue
+
+            # create segmented pcl
             seg_pcd = point_cloud[:, where]
 
             mean = np.median(seg_pcd, axis=1)
