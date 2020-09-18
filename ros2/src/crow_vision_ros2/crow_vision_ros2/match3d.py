@@ -93,25 +93,9 @@ class Match3D(Node):
         MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
         #MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
         self.get_logger().info(MODEL_PATH)
-        self.objects = self.load_models(
-                list_path_stl=[
-                    MODEL_PATH+"car_roof.stl",
-                    MODEL_PATH+"pliers.stl",
-                    MODEL_PATH+"cube_holes.stl",
-                    MODEL_PATH+"screw_round.stl",
-                    MODEL_PATH+"ex_bucket.stl",
-                    MODEL_PATH+"screwdriver.stl",
-                    MODEL_PATH+"hammer.stl",
-                    MODEL_PATH+"shere_holes.stl",
-                    MODEL_PATH+"wafer.stl",
-                    MODEL_PATH+"nut.stl",
-                    MODEL_PATH+"wheel.stl",
-                    MODEL_PATH+"peg_screw.stl",
-                    MODEL_PATH+"wrench.stl",
-                    MODEL_PATH+"peg_simple.stl"
-                    ],
-                list_labels=["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer",
-                    "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench", "peg_simple"],
+        self.objects = self.load_models(list_path_stl=[MODEL_PATH+"car_roof.stl", MODEL_PATH+"pliers.stl", MODEL_PATH+"cube_holes.stl", MODEL_PATH+"screw_round.stl", MODEL_PATH+"ex_bucket.stl", MODEL_PATH+"screwdriver.stl", MODEL_PATH+"hammer.stl",\
+                MODEL_PATH+"shere_holes.stl", MODEL_PATH+"wafer.stl", MODEL_PATH+"nut.stl", MODEL_PATH+"wheel.stl", MODEL_PATH+"peg_screw.stl", MODEL_PATH+"wrench.stl", MODEL_PATH+"peg_simple.stl" ],
+                list_labels=["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer", "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench", "peg_simple"],
                 num_points=1000) 
 
 
