@@ -125,14 +125,17 @@ class Match3D(Node):
             print("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
-        # labels & score from detections masks
-        class_names, scores = mask_msg.class_names, mask_msg.scores
-        # pointcloud in numpy from pcl_msg
-        point_cloud = np.array(pcl_msg.data).view(np.float32).reshape(-1, 3).T # 3 as we have x,y,z only in the pcl
+        # model (as a pointcloud) to be matched to a real-world position
+        #FIXME model_pcl = self.objects[xxx] #which mask from multiple masks in mask_msg???
+        
+        # pointcloud from pcl_msg PointCloud2 -> numpy -> o3d.PointCloud
+        real_pcl = np.array(pcl_msg.data).view(np.float32).reshape(-1, 3).T # 3 as we have x,y,z only in the pcl
 
-        for i, (class_name, score) in enumerate(zip(class_names, scores)):
+
+
+        for i, (class_name, score) in enumerate(zip(mask_msg.class_names, mask_msg.scores)):
             icp_score = 0.0 #TODO ICP match self.objects["class_name"] to point_cloud
-            self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with match confidence: {}".format(np.shape(point_cloud), class_name, score, icp_score))
+            self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with match confidence: {}".format(np.shape(real_pcl), class_name, score, icp_score))
 
 
 
