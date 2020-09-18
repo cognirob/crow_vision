@@ -5,6 +5,10 @@ import std_msgs
 from crow_msgs.msg import DetectionMask, DetectionBBox, BBox
 from cv_bridge import CvBridge
 
+from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile
+from rclpy.qos import QoSReliabilityPolicy
+
 import cv2
 import torch
 import numpy as np
@@ -13,6 +17,8 @@ import commentjson as json
 import pkg_resources
 import argparse
 
+
+qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
 class CrowVision(Node):
   """
@@ -80,17 +86,17 @@ class CrowVision(Node):
       # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources.
       if self.config["outputs"]["image_annotated"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"]
-        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, qos_profile=10) #publishes the processed (annotated,detected) image
+        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_img"] = publisher_img
       if self.config["outputs"]["masks"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=10) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
       if self.config["outputs"]["bboxes"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=10) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
 
 
       #TODO others publishers
