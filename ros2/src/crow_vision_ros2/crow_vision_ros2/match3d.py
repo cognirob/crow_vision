@@ -22,32 +22,37 @@ class Match3D(Node):
 
     def __init__(self, node_name="match3d"):
         super().__init__(node_name)
-        #FIXME nefunguje?? pritom v locator.py jo!: self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
-        self.cameras = ["/camera/camera1"]
-        print(self.cameras)
+        #FIXME nefunguje?? pritom v locator.py jo!: 
+        #self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
+        self.cameras = ["/camera1/camera"]
+
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
-        print(self.seg_pcl_topics)
+        self.get_logger().info(str(self.seg_pcl_topics))
+        self.get_logger().info(str(self.mask_topics))
+        assert len(self.mask_topics) == len(self.seg_pcl_topics)
+        assert len(self.mask_topics) > 0
+
         #TODO merge (segmented) pcls before this node
         #TODO create output publisher (what exactly to publish?)
 
-        qos_profile = QoSProfile(
+        qos = QoSProfile(
             depth=10,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
 
         for i, (cam, pclTopic, maskTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics, self.mask_topics)):
             # create approx syncro callbacks
-            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=100)
-            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=100)
+            print("creating subscribers for match")
+            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #FIXME might be broken for multi cams? self.xx = yy in for-loop; also in locator!
+            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos)
             self.get_logger().info("Created synced subscriber for masks: \"{}\" & segmented_pcl \"{}\"".format(maskTopic, pclTopic))
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 200, 0.005)
+            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.1)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.objects = {} # map str:label -> .stl model #TODO load STL
 
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
-        #print(self.getCameraData(camera))
         if not mask_msg.masks:
             print("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
@@ -55,11 +60,11 @@ class Match3D(Node):
         # labels & score from detections masks
         class_names, scores = mask_msg.class_names, mask_msg.scores
         # pointcloud in numpy from pcl_msg
-        point_cloud = np.array(pcl_msg.data).view(np.float32).reshape(-1, 8)[:, :3].T
+        point_cloud = np.array(pcl_msg.data).view(np.float32).reshape(-1, 3)[:, :3].T #FIXME <- taken from locator, cannot reshape 8. find correct number (4? :P)
 
         for i, (class_name, score) in enumerate(zip(class_names, scores)):
             icp_score = 0.0 #TODO ICP match self.objects["class_name"] to point_cloud
-            print("ICP Matching pcl: {} to {} (confidence {}) with confidence: {}".format(np.shape(pcl_msg.data), class_name, score, icp_score))
+            self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with match confidence: {}".format(np.shape(point_cloud), class_name, score, icp_score))
 
 
 

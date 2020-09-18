@@ -80,17 +80,17 @@ class CrowVision(Node):
       # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources.
       if self.config["outputs"]["image_annotated"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"]
-        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, qos_profile=100) #publishes the processed (annotated,detected) image
+        publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, qos_profile=10) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_img"] = publisher_img
       if self.config["outputs"]["masks"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=100) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=10) #publishes the processed (annotated,detected) image
       if self.config["outputs"]["bboxes"]:
         topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=100) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=10) #publishes the processed (annotated,detected) image
 
 
       #TODO others publishers
@@ -159,8 +159,8 @@ class CrowVision(Node):
 
       msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
       # parse time from incoming msg, pass to outgoing msg
-      msg_img.header.stamp.nanosec = msg.header.stamp.nanosec
-      msg_img.header.stamp.sec  = msg.header.stamp.sec
+      msg_img.header.stamp = msg.header.stamp #we always inherit timestamp from the original "time taken", ie stamp from camera topic
+      msg_img.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
     #   self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
       self.ros[topic]["pub_img"].publish(msg_img)
 
@@ -169,10 +169,13 @@ class CrowVision(Node):
       classes = classes.astype(int).tolist()
       scores = scores.astype(float).tolist()
       if "pub_masks" in self.ros[topic]:
+
         msg_mask = DetectionMask()
         msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in masks.astype(np.uint8)]
         # parse time from incoming msg, pass to outgoing msg
         msg_mask.header.stamp = msg.header.stamp
+        for mask in msg_mask.masks:
+            mask.header.stamp = msg.header.stamp
         msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
         msg_mask.classes = classes
         msg_mask.class_names = class_names

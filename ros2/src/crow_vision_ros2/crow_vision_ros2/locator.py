@@ -32,10 +32,12 @@ class Locator(Node):
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras] #input pcl data
         # create output topic and publisher dynamically for each cam
+        qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
         self.pubPCL = {} #output: segmented pcl sent as PointCloud2, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
         for cam in self.cameras:
+            print(cam)
             out_pcl_topic = cam + "/" + "detections/segmented_pointcloud"
-            out_pcl_publisher = self.create_publisher(PointCloud2, out_pcl_topic, qos_profile=100)
+            out_pcl_publisher = self.create_publisher(PointCloud2, out_pcl_topic, qos_profile=qos)
             self.pubPCL[cam] = out_pcl_publisher
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
@@ -43,20 +45,17 @@ class Locator(Node):
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
-        qos_profile = QoSProfile(
-            depth=10,
-            reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE)
-
+        #create listeners (synchronized)
         for i, (cam, pclTopic, maskTopic, camera_instrinsics) in enumerate(zip(self.cameras, self.pcl_topics, self.mask_topics, self.camera_instrinsics)):
             # convert camera data to numpy
             self.camera_instrinsics[i]["camera_matrix"] = np.array(camera_instrinsics["camera_matrix"], dtype=np.float32)
             self.camera_instrinsics[i]["distortion_coefficients"] = np.array(camera_instrinsics["distortion_coefficients"], dtype=np.float32)
 
             # create approx syncro callbacks
-            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=100)
-            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=100)
+            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos)
+            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos)
             self.get_logger().info("LOCATOR: Created Subscriber for masks at topic: {}".format(maskTopic))
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 200, 0.005)
+            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, slop=0.03)
             self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
 
@@ -115,7 +114,7 @@ class Locator(Node):
             seg_pcd = point_cloud[:, where]
 
             mean = np.median(seg_pcd, axis=1)
-            self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
+            #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
             end = time()
@@ -137,6 +136,7 @@ class Locator(Node):
                      row_step=(itemsize*3*seg_pcd.shape[1]),
                      data=seg_pcd.tobytes()
                      )
+            seg_pcl_msg.header.stamp = mask_msg.header.stamp
             assert seg_pcl_msg.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
             #print("Orig PCL:\n header: {}\nheight: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.header, pcl_msg.height, pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
 
