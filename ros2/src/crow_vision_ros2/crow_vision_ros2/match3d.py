@@ -41,11 +41,11 @@ class Match3D(Node):
         for i, (cam, pclTopic, maskTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics, self.mask_topics)):
             # create approx syncro callbacks
             print("creating subscribers for match")
-            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #FIXME might be broken for multi cams? self.xx = yy in for-loop; also in locator!
-            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos)
+            subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos)
+            subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos)
             self.get_logger().info("Created synced subscriber for masks: \"{}\" & segmented_pcl \"{}\"".format(maskTopic, pclTopic))
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, 0.1)
-            self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 20, 0.03)
+            sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.objects = {} # map str:label -> .stl model #TODO load STL
 

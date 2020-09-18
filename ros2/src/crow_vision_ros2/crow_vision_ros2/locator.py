@@ -52,11 +52,10 @@ class Locator(Node):
             self.camera_instrinsics[i]["distortion_coefficients"] = np.array(camera_instrinsics["distortion_coefficients"], dtype=np.float32)
 
             # create approx syncro callbacks
-            self.subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos)
-            self.subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos)
-            self.get_logger().info("LOCATOR: Created Subscriber for masks at topic: {}".format(maskTopic))
-            self.sync = message_filters.ApproximateTimeSynchronizer([self.subPCL, self.subMasks], 20, slop=0.03)
-            self.sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
+            subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #listener for pointcloud data from RealSense camera
+            subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos) #listener for masks from detector node
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 20, slop=0.03) #create and register callback for syncing these 2 message streams, slop=tolerance [sec] 
+            sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
@@ -138,9 +137,6 @@ class Locator(Node):
                      )
             seg_pcl_msg.header.stamp = mask_msg.header.stamp
             assert seg_pcl_msg.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
-            #print("Orig PCL:\n header: {}\nheight: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( pcl_msg.header, pcl_msg.height, pcl_msg.width, pcl_msg.fields, pcl_msg.point_step, pcl_msg.row_step, np.shape(pcl_msg.data)))
-
-            #print("Segmented PCL:\n header: {}\nheight: {}\nwidth: {}\nfields: {}\npoint_step: {}\nrow_step: {}\ndata: {}".format( seg_pcl_msg.header, seg_pcl_msg.height, seg_pcl_msg.width, seg_pcl_msg.fields, seg_pcl_msg.point_step, seg_pcl_msg.row_step, np.shape(seg_pcl_msg.data)))
 
             self.pubPCL[camera].publish(seg_pcl_msg)
 
