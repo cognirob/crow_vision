@@ -118,7 +118,7 @@ class Locator(Node):
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
-                self.get_logger().info("Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
+                #self.get_logger().info("Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
                 continue
 
             # create segmented pcl
