@@ -21,11 +21,12 @@ def generate_launch_description():
         package='crow_vision_ros2',
         node_executable='detector',
         output='screen',
-        # parameters=[{
-        #             "weights": "data/yolact/weights/crow_base_53_120000.pth",
-        #             "config": "none"
-        #             # "config": "data/yolact/weights/config_train.obj"
-        #             }]
+        node_name="detector_coco",
+        parameters=[{
+                    "weights": "data/yolact/weights/yolact_base_54_800000.pth",
+                    "config": "yolact_base_config"
+                    # "config": "data/yolact/weights/config_train.obj"
+                    }]
     )
     launchConfigs.append(detector_node)
 
