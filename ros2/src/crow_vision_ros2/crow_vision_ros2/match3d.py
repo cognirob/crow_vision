@@ -62,10 +62,14 @@ class Match3D(Node):
 
     def __init__(self, node_name="match3d"):
         super().__init__(node_name)
-        #FIXME nefunguje?? pritom v locator.py jo!: 
-        #FIXME self.cameras = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values]
-        self.cameras = ["/camera1/camera"]
-        print(self.cameras)
+        self.cameras = []
+        while(len(self.cameras) == 0):
+            try:
+                self.cameras = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values[0].string_array_value
+            except:
+                print("getting cameras failed. Retrying in 2s")
+                time.sleep(2)
+        #self.cameras = ["/camera1/camera"]
         assert len(self.cameras) > 0
 
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
