@@ -15,6 +15,7 @@ import numpy as np
 
 import pkg_resources
 from time import time
+import copy
 
 import open3d as o3d
 
@@ -57,7 +58,8 @@ class Match3D(Node):
           # http://www.open3d.org/docs/release/tutorial/Basic/mesh.html#Mesh-filtering
           #pcd = mesh.sample_points_poisson_disk(number_of_points=num_points, pcl=orig_pcd)
           #pcd = mesh.sample_points_uniformly(number_of_points=num_points)
-          pcd = orig_pcd.voxel_down_sample(voxel_size=0.05)
+          #pcd = orig_pcd.voxel_down_sample(voxel_size=0.005) # 5mm ?
+          pcd = orig_pcd
 
           self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}\treduced pointcloud: {}".format(cls, mesh, orig_pcd, pcd))
           objects[cls] = pcd
@@ -117,6 +119,60 @@ class Match3D(Node):
             num_points=1000) 
 
 
+    def draw_registration_result(self, source, target, transformation):
+        source_temp = copy.deepcopy(source)
+        target_temp = copy.deepcopy(target)
+        source_temp.paint_uniform_color([1, 0.706, 0])
+        target_temp.paint_uniform_color([0, 0.651, 0.929])
+        source_temp.transform(transformation)
+
+        o3d.visualization.draw_geometries([source_temp, target_temp],
+                                      zoom=0.4559,
+                                      front=[0.6452, -0.3036, -0.7011],
+                                      lookat=[1.9892, 2.0208, 1.8945],
+                                      up=[-0.2779, -0.9482 ,0.1556])
+
+
+    def preprocess_point_cloud(self, pcd, voxel_size):
+        print(":: Downsample with a voxel size %.3f." % voxel_size)
+        pcd_down = pcd.voxel_down_sample(voxel_size)
+
+        radius_normal = voxel_size * 2
+        print(":: Estimate normal with search radius %.3f." % radius_normal)
+        pcd_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
+
+        radius_feature = voxel_size * 5
+        print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
+        pcd_fpfh = o3d.registration.compute_fpfh_feature(pcd_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+        return pcd_down, pcd_fpfh
+
+
+    def prepare_dataset(self, source, target, voxel_size):
+        print(":: Load two point clouds and disturb initial pose.")
+        #source = o3d.io.read_point_cloud("../../TestData/ICP/cloud_bin_0.pcd")
+        #target = o3d.io.read_point_cloud("../../TestData/ICP/cloud_bin_1.pcd")
+        trans_init = np.asarray([[0.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 0.0],
+                             [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+        #source.transform(trans_init)
+        #self.draw_registration_result(source, target, np.identity(4))
+
+        source_down, source_fpfh = self.preprocess_point_cloud(source, voxel_size)
+        target_down, target_fpfh = self.preprocess_point_cloud(target, voxel_size)
+        return source, target, source_down, target_down, source_fpfh, target_fpfh
+
+
+
+    def execute_fast_global_registration(self, source_down, target_down, source_fpfh, target_fpfh, voxel_size):
+        distance_threshold = voxel_size * 0.5
+        print(":: Apply fast global registration with distance threshold %.3f" % distance_threshold)
+        result = o3d.registration.registration_fast_based_on_feature_matching(
+            source_down, target_down, source_fpfh, target_fpfh, o3d.registration.FastGlobalRegistrationOption(
+                maximum_correspondence_distance=distance_threshold))
+        return result
+
+
+
+
 
     def detection_callback(self, msg, camera):
 
@@ -135,11 +191,22 @@ class Match3D(Node):
         real_pcl = o3d.geometry.PointCloud()
         #real_pcl.points = o3d.utility.Vector3dVector(ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg.pcl)) #using ros2_numpy 
         real_pcl.points = o3d.utility.Vector3dVector(pcd)
-        real_pcl = real_pcl.voxel_down_sample(voxel_size=0.05) #TODO should we also downsample the incoming pcl? (slower conversion to o3d, but might do faster ICP)
+        #real_pcl = real_pcl.voxel_down_sample(voxel_size=0.001) #TODO should we also downsample the incoming pcl? (slower conversion to o3d, but might do faster ICP)
         end = time()
         self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
 
 
+
+        # fit global RANSAC
+        start = time()
+        voxel_size = 1 # means 5mm for this dataset
+        source, target, source_down, target_down, source_fpfh, target_fpfh = self.prepare_dataset(model_pcl, real_pcl, voxel_size)
+        result_ransac = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+        end = time()
+        print("RANSAC {}".format(end-start))
+        print(result_ransac)
+        #self.draw_registration_result(source_down, target_down, result_ransac.transformation)
+        
         # fit model to real pcl: ICP
         # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
         print("Apply point-to-point ICP")
