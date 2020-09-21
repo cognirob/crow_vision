@@ -208,43 +208,47 @@ class Match3D(Node):
         if doGlobalApprox:
           start = time()
           voxel_size = 0.5 # means 5mm for this dataset #TODO what is voxel size related to mm IRL?
-          source_down, source_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size)
-          target_down, target_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size)
+          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl, voxel_size)
+          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl,  voxel_size)
           #target_down = self.objects[msg.label]["down"]
           #target_fpfh = self.objects[msg.label]["down_fpfh"]
-          result_ransac = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+          result = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
           end = time()
-          print("RANSAC {}".format(end-start))
-          print(result_ransac)
-          model_pcl.transform(result_ransac.transformation)
-        
 
-        # 1.2/ global RANSAC more precise:
-        doGlobalPrecise = False
-        if doGlobalPrecise:
-          voxel_size = 0.01 # means 5mm for this dataset
-          source_down, source_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size)
-          target_down, target_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size)
-          result_ransac2 = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
-          print(result_ransac2)
-          #self.draw_registration_result(source_down, target_down, result_ransac.transformation)
+          #apply the transform only if: 1) cprrespondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
+          print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
+          applyit = (float(len(result.correspondence_set)) / len(target_down.points)) > 0.25 and \
+                    len(result.correspondence_set) > 50 and result.fitness > 0.01
+          self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
+          if applyit:
+              model_pcl.transform(result.transformation)
+              #TODO assert the transform is in the correct direction, ie the model is moving closer. 
+          else:
+              #unsuccessful registration (why?), skip
+              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+
         
         # 2/ local registration - ICP
         # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
-        doLocal = False
+        doLocal = True
         if doLocal:
-          print("Apply point-to-point ICP")
           start = time()
-          reg_p2p = o3d.registration.registration_icp(
-            source=model_pcl, 
-            target=real_pcl, 
-            max_correspondence_distance=0.01, 
-            #init=result_ransac.transformation, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?)
-            estimation_method=o3d.registration.TransformationEstimationPointToPoint())
+          result = o3d.registration.registration_icp(
+              source=model_pcl, #intentionally not using the downsampled pcl, but originals here.
+              target=real_pcl, 
+              max_correspondence_distance=0.1, 
+              #init=result_ransac.transformation, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?) #TODO2 not needed now as we move the model ourselves?
+              estimation_method=o3d.registration.TransformationEstimationPointToPoint())
           end = time()
-          print(reg_p2p)
-          self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with fit success: {} in {} sec.".format(real_pcl, msg.label, msg.confidence, reg_p2p.fitness, (end-start)))
 
+          #apply the transform only if: 1) correspondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
+          applyit = (float(len(result.correspondence_set)) / len(real_pcl.points)) > 0.1 and len(result.correspondence_set) > 50 and result.fitness > 0.1
+          self.get_logger().info("ICP [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
+          if applyit:
+              model_pcl.transform(result.transformation)
+          else:
+              #unsuccessful registration (why?), skip
+              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
 
 
