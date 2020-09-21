@@ -31,7 +31,8 @@ class Match3D(Node):
     def load_models(self,
                     list_path_stl=["/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/cube_holes.stl"],
                     list_labels=["cube_holes"],
-                    num_points=5000):
+                    num_points=5000,
+                    voxel_size=0.0005):
         """
         Load our original model files (.stl) as pointclouds.
         @arg: list_path_stl : list of string paths to stl files, ie.: ["/home/data/models/chair.stl", "/hammer.stl"]
@@ -44,7 +45,10 @@ class Match3D(Node):
 
         assert len(list_path_stl) == len(list_labels)
         self.get_logger().info("Loading models, please wait...")
+
         for i, (cls, path) in enumerate(zip(list_labels, list_path_stl)):
+          objects[cls] = {}
+
           #1. create Mesh
           mesh = o3d.io.read_triangle_mesh(path) #o3d is slow, but here it's only once in init, so it's OK.
           
@@ -53,16 +57,17 @@ class Match3D(Node):
           orig_pcd.points = mesh.vertices
           orig_pcd.colors = mesh.vertex_colors
           orig_pcd.normals = mesh.vertex_normals
+          orig_pcd.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=1, max_nn=300))
+          objects[cls]["orig"] = orig_pcd
+          #_, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=0.00001)
+          #objects[cls]["orig_fpfh"] = orig_fpfh #features for RANSAC
 
           #2.1 optimize pcd size (filter mesh) to reduce num points, for faster ICP matching
-          # http://www.open3d.org/docs/release/tutorial/Basic/mesh.html#Mesh-filtering
-          #pcd = mesh.sample_points_poisson_disk(number_of_points=num_points, pcl=orig_pcd)
-          #pcd = mesh.sample_points_uniformly(number_of_points=num_points)
-          #pcd = orig_pcd.voxel_down_sample(voxel_size=0.005) # 5mm ?
-          pcd = orig_pcd
+          down, down_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size)
+          #objects[cls]["down"] = down
+          #objects[cls]["down_fpfh"] = down_fpfh #features for RANSAC
 
-          self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}\treduced pointcloud: {}".format(cls, mesh, orig_pcd, pcd))
-          objects[cls] = pcd
+          self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}\treduced pointcloud: {}".format(cls, mesh, orig_pcd, down))
         return objects
 
 
@@ -133,38 +138,26 @@ class Match3D(Node):
                                       up=[-0.2779, -0.9482 ,0.1556])
 
 
-    def preprocess_point_cloud(self, pcd, voxel_size):
-        print(":: Downsample with a voxel size %.3f." % voxel_size)
-        pcd_down = pcd.voxel_down_sample(voxel_size)
+    def preprocess_point_cloud(self, pcd, voxel_size=0.001):
+        #print(":: Downsample with a voxel size %.3f." % voxel_size)
+        pcd_down = copy.deepcopy(pcd)
+        downsampled = pcd.voxel_down_sample(voxel_size)
+        if len(downsampled.points) > 1000:
+          pcd_down = downsampled #actually downsampled data
 
         radius_normal = voxel_size * 2
-        print(":: Estimate normal with search radius %.3f." % radius_normal)
+        #print(":: Estimate normal with search radius %.3f." % radius_normal)
         pcd_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
 
         radius_feature = voxel_size * 5
-        print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
+        #print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
         pcd_fpfh = o3d.registration.compute_fpfh_feature(pcd_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
         return pcd_down, pcd_fpfh
 
 
-    def prepare_dataset(self, source, target, voxel_size):
-        print(":: Load two point clouds and disturb initial pose.")
-        #source = o3d.io.read_point_cloud("../../TestData/ICP/cloud_bin_0.pcd")
-        #target = o3d.io.read_point_cloud("../../TestData/ICP/cloud_bin_1.pcd")
-        trans_init = np.asarray([[0.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 0.0],
-                             [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
-        #source.transform(trans_init)
-        #self.draw_registration_result(source, target, np.identity(4))
-
-        source_down, source_fpfh = self.preprocess_point_cloud(source, voxel_size)
-        target_down, target_fpfh = self.preprocess_point_cloud(target, voxel_size)
-        return source, target, source_down, target_down, source_fpfh, target_fpfh
-
-
-
     def execute_fast_global_registration(self, source_down, target_down, source_fpfh, target_fpfh, voxel_size):
         distance_threshold = voxel_size * 0.5
-        print(":: Apply fast global registration with distance threshold %.3f" % distance_threshold)
+        #print(":: Apply fast global registration with distance threshold %.3f" % distance_threshold)
         result = o3d.registration.registration_fast_based_on_feature_matching(
             source_down, target_down, source_fpfh, target_fpfh, o3d.registration.FastGlobalRegistrationOption(
                 maximum_correspondence_distance=distance_threshold))
@@ -179,7 +172,7 @@ class Match3D(Node):
         # model (as a pointcloud) to be matched to a real-world position
         model_pcl = None
         try:
-            model_pcl = self.objects[msg.label]
+            model_pcl = self.objects[msg.label]["orig"]
         except:
             self.get_logger().info("Unknown model for detected label {}. Skipping.".format(msg.label))
             return
@@ -196,32 +189,61 @@ class Match3D(Node):
         self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
 
 
+        # 0/ compute (approx) initial transform; just moves the clouds "nearby"
+        transform_initial = np.identity(4) #initial affine transform, moves clouds "close together" (by mean xyz of the pcls)
+        fromm = np.asarray(model_pcl.points)
+        to    = np.asarray(real_pcl.points)
+        fromm_xyz = np.mean(fromm, axis=0, keepdims=True)
+        to_xyz = np.mean(to, axis=0, keepdims=True)
+        move = (to_xyz - fromm_xyz)[0]
+        transform_initial[0:3,3] = move #write the "move"=translation (x,y,z) to the translation part of the affine matrix
+        #print("BEFORE: Mean proto: {} \tMean pcl: {}".format(np.mean(fromm, axis=0, keepdims=True), np.mean(to, axis=0, keepdims=True)))
+        model_pcl.transform(transform_initial) #move the model approx where the real pcl is.
+        #print("AFTER: Mean proto: {} \tMean pcl: {}".format(np.mean(fromm, axis=0, keepdims=True), np.mean(to, axis=0, keepdims=True)))
+        assert np.abs(np.mean(fromm, axis=0, keepdims=True) - np.mean(to, axis=0, keepdims=True)).sum() < 0.0001, "Initial transform should move cloud centers together!"
 
-        # fit global RANSAC
-        start = time()
-        voxel_size = 1 # means 5mm for this dataset
-        source, target, source_down, target_down, source_fpfh, target_fpfh = self.prepare_dataset(model_pcl, real_pcl, voxel_size)
-        result_ransac = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
-        end = time()
-        print("RANSAC {}".format(end-start))
-        print(result_ransac)
-        #self.draw_registration_result(source_down, target_down, result_ransac.transformation)
+
+        # 1/ (optional) fit global RANSAC
+        doGlobalApprox = True
+        if doGlobalApprox:
+          start = time()
+          voxel_size = 0.5 # means 5mm for this dataset #TODO what is voxel size related to mm IRL?
+          source_down, source_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size)
+          target_down, target_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size)
+          #target_down = self.objects[msg.label]["down"]
+          #target_fpfh = self.objects[msg.label]["down_fpfh"]
+          result_ransac = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+          end = time()
+          print("RANSAC {}".format(end-start))
+          print(result_ransac)
+          model_pcl.transform(result_ransac.transformation)
         
-        # fit model to real pcl: ICP
+
+        # 1.2/ global RANSAC more precise:
+        doGlobalPrecise = False
+        if doGlobalPrecise:
+          voxel_size = 0.01 # means 5mm for this dataset
+          source_down, source_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size)
+          target_down, target_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size)
+          result_ransac2 = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+          print(result_ransac2)
+          #self.draw_registration_result(source_down, target_down, result_ransac.transformation)
+        
+        # 2/ local registration - ICP
         # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
-        print("Apply point-to-point ICP")
-        start = time()
-        reg_p2p = o3d.registration.registration_icp(
+        doLocal = False
+        if doLocal:
+          print("Apply point-to-point ICP")
+          start = time()
+          reg_p2p = o3d.registration.registration_icp(
             source=model_pcl, 
             target=real_pcl, 
-            max_correspondence_distance=0.1, 
-            #init=trans_init, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?)
+            max_correspondence_distance=0.01, 
+            #init=result_ransac.transformation, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?)
             estimation_method=o3d.registration.TransformationEstimationPointToPoint())
-        end = time()
-        print(reg_p2p)
-        print("Transformation is:")
-        print(reg_p2p.transformation)
-        self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with fit success: {} in {} sec.".format(real_pcl, msg.label, msg.confidence, reg_p2p.fitness, (end-start)))
+          end = time()
+          print(reg_p2p)
+          self.get_logger().info("ICP Matching pcl {}  to \"{}\" (mask confidence {}) with fit success: {} in {} sec.".format(real_pcl, msg.label, msg.confidence, reg_p2p.fitness, (end-start)))
 
 
 
