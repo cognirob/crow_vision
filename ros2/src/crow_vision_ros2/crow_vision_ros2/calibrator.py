@@ -55,6 +55,10 @@ class Calibrator(Node):
 
         # Get cameras
         self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
+        while len(self.cameras) == 0:
+            self.get_logger().warn("Failed to detect any cameras! Retrying in 2sec.")
+            sleep(2)
+
         topic_list = [(self.get_publisher_names_and_types_by_node(node_name, namespace), namespace) for node_name, namespace in self.cameras]
         self.cam_info_topics = [(topic_name, namespace) for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])]
         self.color_image_topics = {namespace: topic_name for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/Image" in topic_type[0])}
@@ -72,20 +76,9 @@ class Calibrator(Node):
             self.create_subscription(CameraInfo, topic, lambda msg, cam=camera_ns: self.camera_info_cb(msg, cam), 1)
             self.get_logger().info(f"Connected to '{topic}' camera info topic for camera '{camera_ns}'. Waiting for camera info to start the image subscriber.")
 
+            # TODO: get camera color optical frame from /tf
             optical_frame = f"{camera_ns[1:]}_color_optical_frame"
             self.optical_frames[camera_ns] = optical_frame
-
-            tf_msg = TransformStamped()
-            tf_msg.header.stamp = self.get_clock().now().to_msg()
-            tf_msg.header.frame_id = optical_frame
-            tf_msg.child_frame_id = f"{camera_ns[1:]}_link"
-            tf_msg.transform.translation = make_vector3([-0.00030501, 0.015123, 0.0])
-            tf_msg.transform.rotation = make_quaternion([-0.5, 0.5, -0.5, 0.5])
-            # tf_msg.transform.translation = make_vector3([-0.29318, -0.22518, 2.1675])
-            # tf_msg.transform.rotation = make_quaternion([-0.49032, 0.35335, 0.47915, 0.63651])
-            # print(tf_msg)
-
-            self.tf_static_broadcaster.sendTransform(tf_msg)
 
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))

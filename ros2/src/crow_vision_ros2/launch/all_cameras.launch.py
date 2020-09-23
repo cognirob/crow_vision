@@ -28,33 +28,64 @@ from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 import pyrealsense2 as rs
 import rclpy
+import re
 
 
 def generate_launch_description():
+    frames = ["accel_frame_id",
+              "accel_optical_frame_id",
+              "aligned_depth_to_color_frame_id",
+              "aligned_depth_to_fisheye1_frame_id",
+              "aligned_depth_to_fisheye_frame_id",
+              "aligned_depth_to_infra1_frame_id",
+              "aligned_depth_to_infra_frame_id",
+              "base_frame_id",
+              "color_frame_id",
+              "color_optical_frame_id",
+              "depth_frame_id",
+              "depth_optical_frame_id",
+              "fisheye1_frame_id",
+              "fisheye1_optical_frame_id",
+              "fisheye2_frame_id",
+              "fisheye2_optical_frame_id",
+              "fisheye_frame_id",
+              "fisheye_optical_frame_id",
+              "gyro_frame_id",
+              "gyro_optical_frame_id",
+              "imu_optical_frame_id",
+              "infra1_frame_id",
+              "infra1_optical_frame_id",
+              "infra2_frame_id",
+              "infra2_optical_frame_id",
+              "infra_frame_id",
+              "infra_optical_frame_id",
+              "odom_frame_id",
+              "pose_frame_id",
+              "pose_optical_frame_id"
+              ]
+    frame_regex = re.compile(r"(\w+_frame)_id")
+
     camera_configs = []
-    for i, device in enumerate(rs.context().devices):
+    for cam_id, device in enumerate(rs.context().devices):
         if device.get_info(rs.camera_info.name).lower() != 'platform camera':
+            camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
+            camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
+
             launchParams = {'align_depth': True,
                             'enable_pointcloud': True,
                             'dense_pointcloud': True,
+                            'serial_no': str(device.get_info(rs.camera_info.serial_number)),
                             }
 
-            launchParams['serial_no'] = LaunchConfiguration('serial_no', default=device.get_info(rs.camera_info.serial_number))
-            launchParams['base_frame_id'] = LaunchConfiguration('base_frame_id', default=f'camera{i + 1}_link')
-            # launchParams['depth_optical_frame_id'] = LaunchConfiguration('depth_optical_frame_id', default=f'camera{i + 1}_depth_optical_frame')
-            # launchParams['camera_infra1_optical_frame'] = LaunchConfiguration('camera_infra1_optical_frame', default=f'camera{i + 1}_infra1_optical_frame')
-            # launchParams['camera_infra2_optical_frame'] = LaunchConfiguration('camera_infra2_optical_frame', default=f'camera{i + 1}_infra2_optical_frame')
-            # launchParams['camera_color_optical_frame'] = LaunchConfiguration('camera_color_optical_frame', default=f'camera{i + 1}_color_optical_frame')
-            # launchParams['camera_accel_optical_frame'] = LaunchConfiguration('camera_accel_optical_frame', default=f'camera{i + 1}_accel_optical_frame')
-            # launchParams['camera_gyro_optical_frame'] = LaunchConfiguration('camera_gyro_optical_frame', default=f'camera{i + 1}_gyro_optical_frame')
-
+            launchParams = {**launchParams, **camera_frames_dict}
 
             camera_node = Node(
-                package='realsense_node',
-                node_executable='realsense_node',
-                node_namespace=f"/camera{i + 1}",
+                package='realsense2_node',
+                node_executable='realsense2_node',
+                node_namespace=f"camera{cam_id + 1}",
+                parameters=[launchParams],
                 output='screen',
-                parameters=[launchParams]
+                emulate_tty=True
             )
             camera_configs.append(camera_node)
 
@@ -63,7 +94,7 @@ def generate_launch_description():
         node_executable='calibrator',
         output='screen',
         parameters=[{
-                    "halt_calibration": False
+                    "halt_calibration": True
                     }]
     )
     camera_configs.append(calibrator_node)
