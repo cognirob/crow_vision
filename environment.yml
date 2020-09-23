@@ -7,9 +7,9 @@ dependencies:
   #ROS2
   - python~=3.6.7 #python version must match internal python ver used in ROS, Eloquent has 3.6; also 3.6.0 is buggy.
   - conda-build
-    #- conda-forge::wstool #for updating and installing .rosinstall dependencies
-    #  - conda-forge::rosdep #tool for downloading ros dependencies
-    #  - conda-forge::colcon-ros # ROS2 pkg build system 
+  - conda-forge::wstool #for updating and installing .rosinstall dependencies
+  - conda-forge::rosdep #tool for downloading ros dependencies
+  - conda-forge::colcon-ros # ROS2 pkg build system 
   - pip
   # YOLACT
   - pytorch::pytorch>=1.0.1
@@ -23,6 +23,7 @@ dependencies:
   - curl # to download COCO dataset
   - unzip # to download COCO dataset
   - conda-forge::bash # to download COCO dataset
+  - eigen #for realsense-ros repo
   - pip:
     - opencv-contrib-python #we must use the contrib version for aruco etc
     - pillow <7.0 # bug PILLOW_VERSION in torchvision, must be < 7.0 until torchvision is upgraded
