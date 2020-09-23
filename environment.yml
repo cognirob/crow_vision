@@ -8,7 +8,7 @@ channels:
   - conda-forge
 dependencies:
   #ROS2
-  - python==3.6.7 #python version must match internal python ver used in ROS, Eloquent has 3.6; also 3.6.0 is buggy.
+  - python~=3.6.7 #python version must match internal python ver used in ROS, Eloquent has 3.6; also 3.6.0 is buggy.
   - conda-build
   - pip
   # YOLACT
@@ -23,6 +23,7 @@ dependencies:
   - unzip # to download COCO dataset
   - conda-forge::bash # to download COCO dataset
   - pip:
+    - numpy
     - opencv-contrib-python #we must use the contrib version for aruco etc
     - pillow <7.0 # bug PILLOW_VERSION in torchvision, must be < 7.0 until torchvision is upgraded
     - pycocotools
