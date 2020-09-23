@@ -105,11 +105,13 @@ class Match3D(Node):
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
         self.pubMatched = {} #dict for publishers mapped by cam key
+        self.pubMatchedDebug = {} #ditto, only publishes PointCloud2 for rviz. Optional, debug only.
         for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
             self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
             self.create_subscription(SegmentedPointcloud, pclTopic, lambda pcl_msg, cam=cam: self.detection_callback(pcl_msg, cam), qos_profile=qos)
             #create output publisher - publish pointcloud of the model (complete 3D, unlike the segmented pcl from camera) transformed to real-world position
             self.pubMatched[cam] = self.create_publisher(SegmentedPointcloud, cam+"/detections/matched_pointcloud", qos)
+            self.pubMatchedDebug[cam] = self.create_publisher(PointCloud2, cam+"/detections/matched_pointcloud_debug", qos)
 
 
         # map str:label -> o3d.PointCloud model
@@ -317,6 +319,7 @@ class Match3D(Node):
 
             self.pubMatched[camera].publish(matched_pcl_msg)
             self.get_logger().info("Publishing matched {} with confidence {}.".format(msg.label, result.fitness))
+            self.pubMatchedDebug[camera].publish(model) #debug, can be removed
 
 
 
