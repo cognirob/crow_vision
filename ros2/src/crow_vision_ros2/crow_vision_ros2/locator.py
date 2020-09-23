@@ -32,10 +32,10 @@ from ctypes import * # convert float to uint32
 
 class Locator(Node):
 
-    def __init__(self, node_name="locator", min_points_pcl=500, depth_range=(0.1, 1.0)):
+    def __init__(self, node_name="locator", min_points_pcl=500, depth_range=(100, 1000)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud. 
-        @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in meters], default 10cm .. 1m. Points in cloud
+        @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in mm], default 10cm .. 1m. Points in cloud
             outside this range are dropped. Sometimes camera fails to measure depth and inputs 0.0m as depth, this is to filter out those values.
         """
         super().__init__(node_name)
@@ -97,7 +97,8 @@ class Locator(Node):
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace[:2, :] / imspace[2, :] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         imspace[np.isnan(imspace)] = -1 #marking as -1 results in deletion (ommision) of these points in 3D, as it's impossible to match to -1
-        imspace[imspace > self.depth_max or imspace < self.depth_min] = -1 # drop points with depth outside of range
+        imspace[imspace > self.depth_max] = -1 # drop points with depth outside of range
+        imspace[imspace < self.depth_min] = -1 # drop points with depth outside of range
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
         end = time()
