@@ -32,15 +32,21 @@ from ctypes import * # convert float to uint32
 
 class Locator(Node):
 
-    def __init__(self, node_name="locator", min_points_pcl=500):
+    def __init__(self, node_name="locator", min_points_pcl=500, depth_range=(0.1, 1.0)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud. 
+        @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in meters], default 10cm .. 1m. Points in cloud
+            outside this range are dropped. Sometimes camera fails to measure depth and inputs 0.0m as depth, this is to filter out those values.
         """
         super().__init__(node_name)
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_nodes", "camera_intrinsics", "camera_frames"]).values]
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras] #input masks from 2D rgb
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras] #input pcl data
+
+        self.depth_min, self.depth_max = depth_range
+        assert self.depth_min < self.depth_max and self.depth_min > 0.0
+        
         # create output topic and publisher dynamically for each cam
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = {} #output: segmented pcl sent as PointCloud2, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
@@ -90,7 +96,8 @@ class Locator(Node):
         camera_matrix = cameraData["camera_matrix"]
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace[:2, :] / imspace[2, :] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
-        imspace[np.isnan(imspace)] = -1
+        imspace[np.isnan(imspace)] = -1 #marking as -1 results in deletion (ommision) of these points in 3D, as it's impossible to match to -1
+        imspace[imspace > self.depth_max or imspace < self.depth_min] = -1 # drop points with depth outside of range
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
         end = time()
@@ -124,7 +131,7 @@ class Locator(Node):
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
-                #self.get_logger().info("Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
+                self.get_logger().info("Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
                 continue
 
             # create segmented pcl
