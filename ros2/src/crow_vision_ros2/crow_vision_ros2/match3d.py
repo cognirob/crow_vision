@@ -30,8 +30,7 @@ class Match3D(Node):
     
     def load_models(self,
                     list_path_stl=["/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/cube_holes.stl"],
-                    list_labels=["cube_holes"],
-                    voxel_size=0.001):
+                    list_labels=["cube_holes"]):
         """
         Load our original model files (.stl) as pointclouds.
         @arg: list_path_stl : list of string paths to stl files, ie.: ["/home/data/models/chair.stl", "/hammer.stl"]
@@ -43,7 +42,8 @@ class Match3D(Node):
         objects = {} #map class -> loaded pcl
 
         assert len(list_path_stl) == len(list_labels)
-        self.get_logger().info("Loading models, please wait...")
+        self.get_logger().info("Loading models, please wait... (Precisions: orig: {}, down: {}, fine: {} [mm]".format(
+            self.voxel_size*1000, self.approx_precision*1000, self.fine_precision*1000))
 
         for i, (cls, path) in enumerate(zip(list_labels, list_path_stl)):
           objects[cls] = {}
@@ -56,23 +56,43 @@ class Match3D(Node):
           orig_pcd.points = mesh.vertices
           orig_pcd.colors = mesh.vertex_colors
           orig_pcd.normals = mesh.vertex_normals
-          orig_pcd.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=1, max_nn=300))
+
+          orig_pcd, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=self.voxel_size, label="proto"+cls)
           objects[cls]["orig"] = orig_pcd
-          #_, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=0.00001)
-          #objects[cls]["orig_fpfh"] = orig_fpfh #features for RANSAC
+          objects[cls]["orig_fpfh"] = orig_fpfh #features for RANSAC
 
           #2.1 optimize pcd size (filter mesh) to reduce num points, for faster ICP matching
-          down, down_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size)
-          #objects[cls]["down"] = down
-          #objects[cls]["down_fpfh"] = down_fpfh #features for RANSAC
+          down, down_fpfh = self.preprocess_point_cloud(orig_pcd, self.approx_precision, label="proto"+cls)
+          objects[cls]["down"] = down
+          objects[cls]["down_fpfh"] = down_fpfh #features for RANSAC
 
-          self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}\treduced pointcloud: {}".format(cls, mesh, orig_pcd, down))
+          fine, fine_fpfh = self.preprocess_point_cloud(orig_pcd, self.fine_precision, label="proto"+cls)
+          objects[cls]["fine"] = fine
+          objects[cls]["fine_fpfh"] = fine_fpfh #features for ICP
+
+          self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}\tReduced pointcloud: {}\tFine cloud: {}".format(cls, mesh, orig_pcd, down, fine))
         return objects
 
 
 
-    def __init__(self, node_name="match3d"):
+    def __init__(self, node_name="match3d", voxel_size=0.001, approx_precision=0.050, fine_precision=0.005):
+        """
+        @arg voxel_size: size [in m] of voxels used for sampling from our ground-truth models. Default 0.001 = 1mm in real world precision. 
+            Defines overall precision-possibilities of this module. 
+        @arg approx_precision: precision in voxel_size (= in m) for global registration method (RANSAC). This is used to get a rough estimate of the object's
+            position. Default 0.050 is 5cm. Use 0.0 to disable this method.
+        @arg fine_precision: same as approx_precision but for local registration method (ICP). Default 0.005 = 5mm, set to 0.0 to disable.
+        """
         super().__init__(node_name)
+        self.approx_precision = approx_precision
+        self.voxel_size = voxel_size
+        assert voxel_size > 0
+        if approx_precision > 0:
+            assert voxel_size < approx_precision
+        if fine_precision > 0:
+            assert voxel_size < fine_precision
+        self.fine_precision = fine_precision
+
         self.cameras = []
         while(len(self.cameras) == 0):
             try:
@@ -121,8 +141,8 @@ class Match3D(Node):
             ], 
             list_labels=["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer", 
                 "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench", "peg_simple"
-                ], 
-            voxel_size=0.001) #resolution in 1mm 
+            ] 
+            )
 
 
     def draw_registration_result(self, source, target, transformation):
@@ -139,20 +159,30 @@ class Match3D(Node):
                                       up=[-0.2779, -0.9482 ,0.1556])
 
 
-    def preprocess_point_cloud(self, pcd, voxel_size=0.001):
+    def preprocess_point_cloud(self, pcd, voxel_size, min_support = 30, label="n/a"): #TODO make finer grained STLs so support can be much higher! (~1000)
+        """
+        @arg pcd: o3d.PointCloud data
+        @arg voxel_size: size of voxel meant for downsampling (->precision)
+        @arg min_support: min threshold on number of points after the downsampling 
+        """
         #print(":: Downsample with a voxel size %.3f." % voxel_size)
+        assert voxel_size >= self.voxel_size
+
         pcd_down = copy.deepcopy(pcd)
         downsampled = pcd.voxel_down_sample(voxel_size)
-        if len(downsampled.points) > 1000:
+        if len(downsampled.points) > min_support:
           pcd_down = downsampled #actually downsampled data
+        else:
+            self.get_logger().warn("Did not manage to downsample '{}' -  {} to voxel_size {} with support {}, only has {} support points.".format(
+                label, pcd, voxel_size, min_support, len(downsampled.points) ))
 
-        radius_normal = voxel_size * 2
+        radius_normal = voxel_size * 2 #TODO should we tune these *X numbers?
         #print(":: Estimate normal with search radius %.3f." % radius_normal)
         pcd_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
 
         radius_feature = voxel_size * 5
         #print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
-        pcd_fpfh = o3d.registration.compute_fpfh_feature(pcd_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+        pcd_fpfh = o3d.registration.compute_fpfh_feature(pcd_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=30))
         return pcd_down, pcd_fpfh
 
 
@@ -185,7 +215,6 @@ class Match3D(Node):
         real_pcl = o3d.geometry.PointCloud()
         #real_pcl.points = o3d.utility.Vector3dVector(ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg.pcl)) #using ros2_numpy 
         real_pcl.points = o3d.utility.Vector3dVector(pcd)
-        #real_pcl = real_pcl.voxel_down_sample(voxel_size=0.001) #TODO should we also downsample the incoming pcl? (slower conversion to o3d, but might do faster ICP)
         end = time()
         #self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
 
@@ -205,24 +234,25 @@ class Match3D(Node):
 
 
         # 1/ (optional) fit global RANSAC
-        doGlobalApprox = True
         result = None
         matched = False
 
-        if doGlobalApprox:
+        if self.approx_precision > 0:
           start = time()
-          voxel_size = 0.050 # means 50mm for this dataset #TODO use init param to set rough & fine precision
-          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl, voxel_size)
-          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl,  voxel_size)
-          #target_down = self.objects[msg.label]["down"]
-          #target_fpfh = self.objects[msg.label]["down_fpfh"]
-          result = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+          # compute pcl & features for incoming segmented pcl (this is the target position)
+          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, self.approx_precision, label="real-approx-"+msg.label)
+          # a) re-compute pcl & features for the model (which moved in step 0)
+          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl,  self.approx_precision, label="proto-approx-"+msg.label)
+          # b) use cached downsampled model & features #TODO can we do that? or model_fpfh depends on absolute coords, which changed in step 0/ default transform?
+          #source_down = self.objects[msg.label]["down"]
+          #source_fpfh = self.objects[msg.label]["down_fpfh"]
+          result = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, self.approx_precision)
           end = time()
 
           #apply the transform only if: 1) cprrespondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
           #print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
           applyit = (float(len(result.correspondence_set)) / len(target_down.points)) > 0.25 and \
-                    len(result.correspondence_set) > 50 and result.fitness > 0.01
+                    len(result.correspondence_set) > 10 and result.fitness > 0.01
           self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
           if applyit:
               model_pcl.transform(result.transformation)
@@ -235,19 +265,29 @@ class Match3D(Node):
         
         # 2/ local registration - ICP
         # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
-        doLocal = True
-        if doLocal:
+        if self.fine_precision > 0:
           start = time()
+          # compute pcl & features for incoming segmented pcl (this is the target position)
+          target_fine, target_fpfh = self.preprocess_point_cloud(real_pcl, self.fine_precision, label="real-fine-"+msg.label)
+          # a) re-compute pcl & features for the model (which moved in step 0)
+          source_fine, source_fpfh = self.preprocess_point_cloud(model_pcl,  self.fine_precision, label="proto-fine-"+msg.label)
+          # b) use cached downsampled model & features #TODO can we do that? or model_fpfh depends on absolute coords, which changed in step 0/ default transform?
+          #source_fine = self.objects[msg.label]["fine"]
+          #source_fpfh = self.objects[msg.label]["fine_fpfh"]
+          #TODO c) or use the unchanged originals here in the final step? - real_pcl, model_pcl 
+          # source_fine = model_pcl
+          # target_fine = real_pcl
+
           result = o3d.registration.registration_icp(
-              source=model_pcl, #intentionally not using the downsampled pcl, but originals here.
-              target=real_pcl, 
+              source= source_fine,
+              target= target_fine, 
               max_correspondence_distance=0.1, #TODO what units is this?
               #init=result_ransac.transformation, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?) #TODO2 not needed now as we move the model ourselves?
               estimation_method=o3d.registration.TransformationEstimationPointToPoint())
           end = time()
 
           #apply the transform only if: 1) correspondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
-          applyit = (float(len(result.correspondence_set)) / len(real_pcl.points)) > 0.1 and len(result.correspondence_set) > 50 and result.fitness > 0.1
+          applyit = (float(len(result.correspondence_set)) / len(target_fine.points)) > 0.1 and len(result.correspondence_set) > 50 and result.fitness > 0.1
           self.get_logger().info("ICP [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
           if applyit:
               matched = True
@@ -257,7 +297,7 @@ class Match3D(Node):
               pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
         # 3/ publish the matched complete model (as PointCloud2 moved to the true 3D world position)
-        if matched or True:
+        if matched:
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             model_pcd = np.asarray(model_pcl.points).reshape(3, -1).astype(np.float32)
             model = PointCloud2(
