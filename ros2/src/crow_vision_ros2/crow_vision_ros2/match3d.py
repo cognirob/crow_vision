@@ -31,13 +31,12 @@ class Match3D(Node):
     def load_models(self,
                     list_path_stl=["/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/cube_holes.stl"],
                     list_labels=["cube_holes"],
-                    num_points=5000,
-                    voxel_size=0.0005):
+                    voxel_size=0.001):
         """
         Load our original model files (.stl) as pointclouds.
         @arg: list_path_stl : list of string paths to stl files, ie.: ["/home/data/models/chair.stl", "/hammer.stl"]
         @arg: list_labels: corresponding list of object labels: ["chair", "hammer"]
-        @arg: num_points: how many points in resulting pcl (balance ICP speed vs precision)
+        @arg voxel_size: corresponding size of voxel in real world (in mm), default 1voxel=1mm
 
         @return dict matching "label" -> o3d.PointCloud
         """
@@ -81,7 +80,6 @@ class Match3D(Node):
             except:
                 print("getting cameras failed. Retrying in 2s")
                 time.sleep(2)
-        #self.cameras = ["/camera1/camera"]
         assert len(self.cameras) > 0
 
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
@@ -121,7 +119,7 @@ class Match3D(Node):
             list_labels=["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer", 
                 "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench", "peg_simple"
                 ], 
-            num_points=1000) 
+            voxel_size=0.001) #resolution in 1mm 
 
 
     def draw_registration_result(self, source, target, transformation):
@@ -207,7 +205,7 @@ class Match3D(Node):
         doGlobalApprox = True
         if doGlobalApprox:
           start = time()
-          voxel_size = 0.5 # means 5mm for this dataset #TODO what is voxel size related to mm IRL?
+          voxel_size = 0.050 # means 50mm for this dataset 
           source_down, source_fpfh = self.preprocess_point_cloud(model_pcl, voxel_size)
           target_down, target_fpfh = self.preprocess_point_cloud(real_pcl,  voxel_size)
           #target_down = self.objects[msg.label]["down"]
@@ -216,7 +214,7 @@ class Match3D(Node):
           end = time()
 
           #apply the transform only if: 1) cprrespondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
-          print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
+          #print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
           applyit = (float(len(result.correspondence_set)) / len(target_down.points)) > 0.25 and \
                     len(result.correspondence_set) > 50 and result.fitness > 0.01
           self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
@@ -225,7 +223,7 @@ class Match3D(Node):
               #TODO assert the transform is in the correct direction, ie the model is moving closer. 
           else:
               #unsuccessful registration (why?), skip
-              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+              pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
         
         # 2/ local registration - ICP
@@ -248,7 +246,7 @@ class Match3D(Node):
               model_pcl.transform(result.transformation)
           else:
               #unsuccessful registration (why?), skip
-              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+              pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
 
 
