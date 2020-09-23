@@ -146,7 +146,7 @@ class Locator(Node):
                      height=1,
                      width=seg_pcd.shape[1],
                      fields=fields,
-                     point_step=(itemsize*3), #3=RGB
+                     point_step=(itemsize*3), #3=xyz
                      row_step=(itemsize*3*seg_pcd.shape[1]),
                      data=seg_pcd.tobytes()
                      )

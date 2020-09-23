@@ -78,22 +78,25 @@ class Match3D(Node):
             try:
                 self.cameras = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values[0].string_array_value
             except:
-                print("getting cameras failed. Retrying in 2s")
+                self.get_logger().error("getting cameras failed. Retrying in 2s")
                 time.sleep(2)
         assert len(self.cameras) > 0
 
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
 
         #TODO merge (segmented) pcls before this node
-        #TODO create output publisher (what exactly to publish?)
 
         qos = QoSProfile(
             depth=10,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
+        self.pubMatched = {} #dict for publishers mapped by cam key
         for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
             self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
             self.create_subscription(SegmentedPointcloud, pclTopic, lambda pcl_msg, cam=cam: self.detection_callback(pcl_msg, cam), qos_profile=qos)
+            #create output publisher - publish pointcloud of the model (complete 3D, unlike the segmented pcl from camera) transformed to real-world position
+            self.pubMatched[cam] = self.create_publisher(SegmentedPointcloud, cam+"/detections/matched_pointcloud", qos)
+
 
         # map str:label -> o3d.PointCloud model
         MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
@@ -172,7 +175,7 @@ class Match3D(Node):
         try:
             model_pcl = self.objects[msg.label]["orig"]
         except:
-            self.get_logger().info("Unknown model for detected label {}. Skipping.".format(msg.label))
+            self.get_logger().error("Unknown model for detected label {}. Skipping.".format(msg.label))
             return
 
         
@@ -184,7 +187,7 @@ class Match3D(Node):
         real_pcl.points = o3d.utility.Vector3dVector(pcd)
         #real_pcl = real_pcl.voxel_down_sample(voxel_size=0.001) #TODO should we also downsample the incoming pcl? (slower conversion to o3d, but might do faster ICP)
         end = time()
-        self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
+        #self.get_logger().info("Convert to o3d: {}".format(end-start)) # ~0.003s
 
 
         # 0/ compute (approx) initial transform; just moves the clouds "nearby"
@@ -203,9 +206,12 @@ class Match3D(Node):
 
         # 1/ (optional) fit global RANSAC
         doGlobalApprox = True
+        result = None
+        matched = False
+
         if doGlobalApprox:
           start = time()
-          voxel_size = 0.050 # means 50mm for this dataset 
+          voxel_size = 0.050 # means 50mm for this dataset #TODO use init param to set rough & fine precision
           source_down, source_fpfh = self.preprocess_point_cloud(model_pcl, voxel_size)
           target_down, target_fpfh = self.preprocess_point_cloud(real_pcl,  voxel_size)
           #target_down = self.objects[msg.label]["down"]
@@ -220,6 +226,7 @@ class Match3D(Node):
           self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
           if applyit:
               model_pcl.transform(result.transformation)
+              matched = True
               #TODO assert the transform is in the correct direction, ie the model is moving closer. 
           else:
               #unsuccessful registration (why?), skip
@@ -234,7 +241,7 @@ class Match3D(Node):
           result = o3d.registration.registration_icp(
               source=model_pcl, #intentionally not using the downsampled pcl, but originals here.
               target=real_pcl, 
-              max_correspondence_distance=0.1, 
+              max_correspondence_distance=0.1, #TODO what units is this?
               #init=result_ransac.transformation, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?) #TODO2 not needed now as we move the model ourselves?
               estimation_method=o3d.registration.TransformationEstimationPointToPoint())
           end = time()
@@ -243,10 +250,37 @@ class Match3D(Node):
           applyit = (float(len(result.correspondence_set)) / len(real_pcl.points)) > 0.1 and len(result.correspondence_set) > 50 and result.fitness > 0.1
           self.get_logger().info("ICP [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
           if applyit:
+              matched = True
               model_pcl.transform(result.transformation)
           else:
               #unsuccessful registration (why?), skip
               pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+
+        # 3/ publish the matched complete model (as PointCloud2 moved to the true 3D world position)
+        if matched or True:
+            #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
+            model_pcd = np.asarray(model_pcl.points).reshape(3, -1).astype(np.float32)
+            model = PointCloud2(
+                header=msg.pcl.header,
+                height=1,
+                width=model_pcd.shape[1],
+                fields=msg.pcl.fields,
+                point_step=msg.pcl.point_step, #3=xyz
+                row_step=(msg.pcl.point_step*model_pcd.shape[1]),
+                data=model_pcd.tobytes()
+            )
+            model.header.stamp = msg.header.stamp
+            assert model.header.stamp == msg.header.stamp, "timestamps for segmented_pointcloud & new matched_pointcloud must be synchronized!"
+
+            matched_pcl_msg = SegmentedPointcloud()
+            matched_pcl_msg.header = model.header
+            matched_pcl_msg.pcl = model
+            matched_pcl_msg.label = msg.label
+            matched_pcl_confidence = float(result.fitness)
+
+            self.pubMatched[camera].publish(matched_pcl_msg)
+            self.get_logger().info("Publishing matched {} with confidence {}.".format(msg.label, result.fitness))
+
 
 
 
