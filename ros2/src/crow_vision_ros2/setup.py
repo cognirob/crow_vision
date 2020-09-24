@@ -28,6 +28,7 @@ setup(
             'detector = crow_vision_ros2.detector:main',
             'calibrator = crow_vision_ros2.calibrator:main',
             'locator = crow_vision_ros2.locator:main',
+            'matcher = crow_vision_ros2.match3d:main',
             'merger = crow_vision_ros2.merger:main'
         ],
     },

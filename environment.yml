@@ -1,3 +1,6 @@
+## env for runnning all our ROS2 (ROS1) nodes. 
+# You need to add the conda paths to python path before building, do so by: 
+# export PYTHONPATH=/home/imitrob/anaconda3/envs/ros2/lib/python3.6/site-packages/:$PYTHONPATH
 name: ros2
 channels:
   - pytorch
@@ -18,13 +21,13 @@ dependencies:
   - cudatoolkit
   - cudnn
   - pytorch::cuda100
-  - matplotlib
   - git # to download COCO dataset
   - curl # to download COCO dataset
   - unzip # to download COCO dataset
   - conda-forge::bash # to download COCO dataset
   - eigen #for realsense-ros repo
   - pip:
+    - numpy
     - opencv-contrib-python #we must use the contrib version for aruco etc
     - pillow <7.0 # bug PILLOW_VERSION in torchvision, must be < 7.0 until torchvision is upgraded
     - pycocotools
@@ -38,3 +41,5 @@ dependencies:
     - filterpy #ROS filter
     - transforms3d #ROS calibrator
     - open3d==0.10.0 #locator 
+    - empy # realsense_msgs fail with 'em', we need empy instead! 
+    - matplotlib==2.1.1 #must match apt version installed by ROS2
