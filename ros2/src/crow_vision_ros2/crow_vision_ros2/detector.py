@@ -67,14 +67,10 @@ class CrowVision(Node):
 
     ## handle multiple inputs (cameras).
     # store the ROS Listeners,Publishers in a dict{}, keys by topic.
-    self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes", "camera_frames"]).values]
+    self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
     while len(self.cameras) == 0:
         self.get_logger().warn("Waiting for any cameras!")
         time.sleep(2)
-    for i, cam in enumerate(self.cameras):
-        cam = cam[0:-7] #FIXME cameras contain '/camera1/camera' while the RS actually publishes only on `/camera1`
-        self.get_logger().info(cam)
-        self.cameras[i] = cam
 
     self.ros = {}
     for cam in self.cameras:

@@ -115,8 +115,8 @@ class Match3D(Node):
 
 
         # map str:label -> o3d.PointCloud model
-        MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
-        #MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
+        #MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
+        MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
         self.get_logger().info(MODEL_PATH)
         #self.objects = self.load_models()
         self.objects = self.load_models(list_path_stl=[
