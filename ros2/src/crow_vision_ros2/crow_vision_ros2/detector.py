@@ -1,7 +1,10 @@
 import rclpy #add to package.xml deps
 from rclpy.node import Node
+from ros2param.api import call_get_parameters
+
 import sensor_msgs
 import std_msgs
+
 from crow_msgs.msg import DetectionMask, DetectionBBox, BBox
 from cv_bridge import CvBridge
 
@@ -16,6 +19,7 @@ import numpy as np
 import commentjson as json
 import pkg_resources
 import argparse
+import time
 
 
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -27,7 +31,7 @@ class CrowVision(Node):
   Run as
   `ros2 run crow_vision_ros2 detector [path_to_weights [config to use [input topic name]]]`
 
-  This node listens on network for topic "/crow/camX/image",
+  This node listens on network for topic "/camera1/color/image_raw",
   obtains raw RGB image, processes it in neural net, and publishes results in form of (for given camera):
   - "/detections/image" - processed image with visualized masks, bboxes and labels
   - "/detections/masks"
@@ -63,14 +67,19 @@ class CrowVision(Node):
 
     ## handle multiple inputs (cameras).
     # store the ROS Listeners,Publishers in a dict{}, keys by topic.
-    self.ros = {}
-    assert len(self.config["inputs"]) >= 1
-    for inp in self.config["inputs"]:
-      prefix = inp["camera"]
+    self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes", "camera_frames"]).values]
+    while len(self.cameras) == 0:
+        self.get_logger().warn("Waiting for any cameras!")
+        time.sleep(2)
+    for i, cam in enumerate(self.cameras):
+        cam = cam[0:-7] #FIXME cameras contain '/camera1/camera' while the RS actually publishes only on `/camera1`
+        self.get_logger().info(cam)
+        self.cameras[i] = cam
 
+    self.ros = {}
+    for cam in self.cameras:
+      camera_topic=cam+"/color/image_raw"
       # create INput listener with raw images
-      topic = inp["topic"]
-      camera_topic = prefix + "/" + topic
       listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
                                           topic=camera_topic,
                                           # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
@@ -78,23 +87,22 @@ class CrowVision(Node):
                                           qos_profile=1) #the listener QoS has to be =1, "keep last only".
       self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
       self.ros[camera_topic] = {} # camera_topic is used as an ID for this input, all I/O listeners,publishers will be based under that id.
-      self.ros[camera_topic]["listener"] = listener
 
 
       # there are multiple publishers (for each input/camera topic).
       # the results are separated into different (optional) subtopics the clients can subscribe to (eg 'labels', 'masks')
       # If an output topic is empty (""), we skip publishing on that stream, it is disabled. Use to save computation resources.
       if self.config["outputs"]["image_annotated"]:
-        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"]
+        topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["image_annotated"]
         publisher_img = self.create_publisher(sensor_msgs.msg.Image, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_img"] = publisher_img
       if self.config["outputs"]["masks"]:
-        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
+        topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
       if self.config["outputs"]["bboxes"]:
-        topic = prefix + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
+        topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
         self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
 
@@ -174,6 +182,10 @@ class CrowVision(Node):
       classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds)
       classes = classes.astype(int).tolist()
       scores = scores.astype(float).tolist()
+      if len(classes) == 0: 
+          self.get_logger().info("No objects detected, skipping.")
+          return
+
       if "pub_masks" in self.ros[topic]:
 
         msg_mask = DetectionMask()
