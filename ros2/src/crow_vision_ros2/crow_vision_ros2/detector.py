@@ -176,6 +176,10 @@ class CrowVision(Node):
       classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds)
       classes = classes.astype(int).tolist()
       scores = scores.astype(float).tolist()
+      if len(classes) == 0: 
+          self.get_logger().info("No objects detected, skipping.")
+          return
+
       if "pub_masks" in self.ros[topic]:
         msg_mask = DetectionMask()
         msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in masks.astype(np.uint8)]
