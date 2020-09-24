@@ -90,7 +90,7 @@ class Match3D(Node):
         self.cameras = []
         while(len(self.cameras) == 0):
             try:
-                self.cameras = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values[0].string_array_value
+                self.cameras = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces"]).values[0].string_array_value
             except:
                 self.get_logger().error("getting cameras failed. Retrying in 2s")
                 time.sleep(2)
