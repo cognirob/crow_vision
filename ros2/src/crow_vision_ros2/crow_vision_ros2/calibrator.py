@@ -43,8 +43,10 @@ class Calibrator(Node):
         self.declare_parameter("image_topics", value=[], descriptor=imageTopicsParamDesc)
         infoTopicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera_info topics for the available cameras')
         self.declare_parameter("info_topics", value=[], descriptor=infoTopicsParamDesc)
-        cameraNodesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available camera nodes (or camera node namespaces for topics)')
+        cameraNodesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available camera nodes (e.g. "/camera<X>/camera")')
         self.declare_parameter("camera_nodes", value=[], descriptor=cameraNodesParamDesc)
+        cameraNamespacesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of namespaces (e.g. "/camera<X>") of available cameras')
+        self.declare_parameter("camera_namespaces", value=[], descriptor=cameraNamespacesParamDesc)
         cameraMatricesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera intrinsic parameters for available cameras')
         self.declare_parameter("camera_intrinsics", value=[], descriptor=cameraMatricesParamDesc)
         cameraFramesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera coordinate frames for available cameras')
@@ -103,6 +105,8 @@ class Calibrator(Node):
         paramCameraNodes = self.get_parameter("camera_nodes").get_parameter_value().string_array_value
         cname, ns = next(filter(lambda item: camera_ns in item, self.cameras))
         paramCameraNodes.append(ns + "/" + cname)
+        paramCameraNamespaces = self.get_parameter("camera_namespaces").get_parameter_value().string_array_value
+        paramCameraNamespaces.append(ns)
         # Camera intrinsics parameter
         paramCameraIntrinsics = self.get_parameter("camera_intrinsics").get_parameter_value().string_array_value
         paramCameraIntrinsics.append(json.dumps({"camera_matrix": self.intrinsics[self.optical_frames[camera_ns]].astype(np.float32).tolist(), "distortion_coefficients": self.distCoeffs[self.optical_frames[camera_ns]].astype(np.float32).tolist()}))
@@ -126,6 +130,11 @@ class Calibrator(Node):
                 "camera_nodes",
                 rclpy.Parameter.Type.STRING_ARRAY,
                 paramCameraNodes
+            ),
+            rclpy.parameter.Parameter(
+                "camera_namespaces",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramCameraNamespaces
             ),
             rclpy.parameter.Parameter(
                 "camera_intrinsics",
