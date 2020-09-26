@@ -1,0 +1,45 @@
+filters: 'pointcloud,temporal,spatial'
+clip_distance: 3.0
+color_width: 848
+color_height: 480
+color_fps: 30.0
+depth_width: 848
+depth_height: 480
+depth_fps: 30.0
+enable_pointcloud: True
+dense_pointcloud: True
+device_type: 'd435'
+rgb_camera:
+    auto_exposure_priority: True
+    backlight_compensation: True
+    enable_auto_exposure: True
+    enable_auto_white_balance: True
+    frames_queue_size: 16
+    power_line_frequency: 1
+    saturation: 71
+    sharpness: 74
+stereo_module:
+    emitter_always_on: False
+    emitter_enabled: 2
+    emitter_on_off: False
+    enable_auto_exposure: True
+    error_polling_enabled: True
+    frames_queue_size: 16
+    inter_cam_sync_mode: 0
+    laser_power: 150.0
+    visual_preset: 3
+temporal:
+    filter_smooth_alpha: 0.3
+    filter_smooth_delta: 30
+    frames_queue_size: 16
+    holes_fill: 3
+spatial:
+    filter_magnitude: 2
+    filter_smooth_alpha: 0.5
+    filter_smooth_delta: 30
+    holes_fill: 1
+    frames_queue_size: 16
+pointcloud:
+    frames_queue_size: 16
+    filter_magnitude: 2
+allow_no_texture_points: False

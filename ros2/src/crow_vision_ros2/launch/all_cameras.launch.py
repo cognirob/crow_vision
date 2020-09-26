@@ -29,6 +29,7 @@ from launch_ros.descriptions import ComposableNode
 import pyrealsense2 as rs
 import rclpy
 import re
+import yaml
 
 
 def generate_launch_description():
@@ -71,19 +72,29 @@ def generate_launch_description():
             camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
             camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
 
+            config_file = os.path.join(
+                get_package_share_directory('crow_vision_ros2'),
+                'config',
+                'rs_native.yaml'
+            )
+            with open(config_file, "r") as f:
+                config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
             launchParams = {'align_depth': True,
-                            'enable_pointcloud': True,
-                            'dense_pointcloud': True,
+                            'initial_reset': True,
+                            'enable_infra1': False,
+                            'enable_infra2': False,
                             'serial_no': str(device.get_info(rs.camera_info.serial_number)),
                             }
 
-            launchParams = {**launchParams, **camera_frames_dict}
+            launchParams = {**launchParams, **camera_frames_dict, **config_dict}
 
             camera_node = Node(
                 package='realsense2_node',
                 node_executable='realsense2_node',
                 node_namespace=f"camera{cam_id + 1}",
                 parameters=[launchParams],
+                # parameters=[launchParams, config],
                 output='screen',
                 emulate_tty=True
             )
