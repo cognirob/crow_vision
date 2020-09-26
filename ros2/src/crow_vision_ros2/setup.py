@@ -1,4 +1,7 @@
 from setuptools import setup
+from glob import glob
+import os
+
 
 package_name = 'crow_vision_ros2'
 
@@ -9,12 +12,8 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name, ['launch/all_cameras.launch.py']),
-        ('share/' + package_name, ['launch/cameras_detection.launch.py']),
-        ('share/' + package_name, ['launch/dual_detection_cameras.launch.py']),
-        ('share/' + package_name, ['launch/full_crow_object.launch.py']),
-        ('share/' + package_name, ['launch/full_coco.launch.py']),
-        ('share/' + package_name, ['launch/full_dual.launch.py']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml'))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
