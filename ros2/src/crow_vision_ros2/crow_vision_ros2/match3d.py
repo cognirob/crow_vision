@@ -90,7 +90,7 @@ class Match3D(Node):
         self.cameras = []
         while(len(self.cameras) == 0):
             try:
-                self.cameras = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_nodes"]).values[0].string_array_value
+                self.cameras = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces"]).values[0].string_array_value
             except:
                 self.get_logger().error("getting cameras failed. Retrying in 2s")
                 time.sleep(2)
@@ -115,8 +115,8 @@ class Match3D(Node):
 
 
         # map str:label -> o3d.PointCloud model
-        MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
-        #MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
+        #MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
+        MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
         self.get_logger().info(MODEL_PATH)
         #self.objects = self.load_models()
         self.objects = self.load_models(list_path_stl=[

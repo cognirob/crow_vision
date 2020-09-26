@@ -29,7 +29,7 @@ class Merger(Node):
 
     def __init__(self, node_name="merger"):
         super().__init__(node_name)
-        self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_nodes", "camera_intrinsics", "camera_frames"]).values]
+        self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/" + "detections/masks" for cam in self.cameras]
         self.pcl_topics = [cam + "/" + "pointcloud" for cam in self.cameras]
