@@ -71,10 +71,11 @@ class CrowVision(Node):
     while len(self.cameras) == 0:
         self.get_logger().warn("Waiting for any cameras!")
         time.sleep(2)
+        self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
 
     self.ros = {}
     for cam in self.cameras:
-      camera_topic=cam+"/color/image_raw"
+      camera_topic=cam+"/aligned_depth_to_color/image_raw"
       # create INput listener with raw images
       listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
                                           topic=camera_topic,
