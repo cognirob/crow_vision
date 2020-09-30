@@ -25,7 +25,7 @@ from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy
 
 import pkg_resources
 #import open3d as o3d #we don't use o3d, as it's too slow
-import time 
+import time
 from ctypes import * # convert float to uint32
 from time import sleep
 
@@ -81,8 +81,6 @@ class Locator(Node):
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
-        sleep(10)
-
 
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
@@ -166,7 +164,7 @@ class Locator(Node):
                      fields=fields,
                      point_step=(itemsize*3), #3=xyz
                      row_step=(itemsize*3*seg_pcd.shape[1]),
-                     data=seg_pcd.tobytes()
+                     data=seg_pcd.T.tobytes()
                      )
             segmented_pcl.header.stamp = mask_msg.header.stamp
             assert segmented_pcl.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
