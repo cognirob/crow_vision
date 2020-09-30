@@ -90,7 +90,7 @@ class Calibrator(Node):
                 optical_frame = f"{camera_ns[1:]}_color_optical_frame"
                 self.optical_frames[camera_ns] = optical_frame
         else:  # the novel way: periodically check if cameras are online and add cameras one by one
-            sleep(5)
+            sleep(2)
             self.timer = self.create_timer(2, self.timer_cb)
 
     def timer_cb(self):
@@ -99,12 +99,17 @@ class Calibrator(Node):
         missing_cameras = [c for c in online_cameras if c not in self.cameras]
 
         for node_name, namespace in missing_cameras:
+            try:
+                topic_list = self.get_publisher_names_and_types_by_node(node_name, namespace)
+                camera_info_topic = next(topic_name for topic_name, topic_type in topic_list if "/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])
+                color_image_topic = next(topic_name for topic_name, topic_type in topic_list if "/color/" in topic_name and "sensor_msgs/msg/Image" in topic_type[0])
+            except Exception as e:
+                self.get_logger().debug(f"Failed to add camera {namespace}/{node_name}. The camera topics are probably not up, yet.")
+                continue
 
             self.cameras.append((node_name, namespace))
-            topic_list = self.get_publisher_names_and_types_by_node(node_name, namespace)
-            camera_info_topic = next(topic_name for topic_name, topic_type in topic_list if "/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])
             self.cam_info_topics.append((camera_info_topic, namespace))
-            self.color_image_topics[namespace] = next(topic_name for topic_name, topic_type in topic_list if "/color/" in topic_name and "sensor_msgs/msg/Image" in topic_type[0])
+            self.color_image_topics[namespace] = color_image_topic
 
             self.get_logger().info(f"Found camera {namespace}/{node_name}.")
 
