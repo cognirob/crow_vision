@@ -93,7 +93,7 @@ class Locator(Node):
         masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
-        point_cloud, point_rgb = ftl_pcl2numpy(pcl_msg)
+        point_cloud, point_rgb, rgb_raw = ftl_pcl2numpy(pcl_msg)
         point_cloud = point_cloud.T
         ## get pointcloud data from ROS2 msg to open3d format
         # pcd = convertCloudFromRosTo.astype(np.float32)
@@ -145,6 +145,7 @@ class Locator(Node):
 
             # create segmented pcl
             seg_pcd = point_cloud[:, where]
+            seg_color = rgb_raw[where]
 
             mean = np.median(seg_pcd, axis=1)
             #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
@@ -155,16 +156,17 @@ class Locator(Node):
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             itemsize = np.dtype(np.float32).itemsize
-            fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate('xyz')]
+            fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate(list('xyz') + ['rgb'])]
+            fields[-1].offset = 16
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             segmented_pcl = PointCloud2(
                      header=pcl_msg.header,
                      height=1,
                      width=seg_pcd.shape[1],
                      fields=fields,
-                     point_step=(itemsize*3), #3=xyz
-                     row_step=(itemsize*3*seg_pcd.shape[1]),
-                     data=seg_pcd.T.tobytes()
+                     point_step=(itemsize * 5),  #=xyz + padding + rgb
+                     row_step=(itemsize * 5 * seg_pcd.shape[1]),
+                     data=np.concatenate((seg_pcd.T, np.zeros((seg_pcd.shape[1], 1), dtype=np.float32), seg_color[:, np.newaxis]), axis=1).tobytes()
                      )
             segmented_pcl.header.stamp = mask_msg.header.stamp
             assert segmented_pcl.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
