@@ -17,22 +17,18 @@
 import os
 import launch
 from ament_index_python.packages import get_package_share_directory
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch import LaunchDescription, LaunchContext
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration
-from launch.actions import IncludeLaunchDescription
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import ThisLaunchFileDir
-from launch_ros.actions import ComposableNodeContainer
-from launch_ros.descriptions import ComposableNode
 import pyrealsense2 as rs
 import rclpy
 import re
 import yaml
 
 
-def generate_launch_description():
+def launch_cameras(launchContext):
+
     frames = ["accel_frame_id",
               "accel_optical_frame_id",
               "aligned_depth_to_color_frame_id",
@@ -68,7 +64,6 @@ def generate_launch_description():
 
     camera_configs = []
     devices = list(rs.context().query_devices())
-    print(f"Found devices: {devices}")
 
     camera_namespaces = []
     for cam_id, device in enumerate(devices):
@@ -78,21 +73,21 @@ def generate_launch_description():
         camera_namespace = f"camera{cam_id + 1}"
         camera_namespaces.append("/" + camera_namespace)
         device_serial = str(device.get_info(rs.camera_info.serial_number))
-        print(f"Launching device with serial number {device_serial} in namespace /{camera_namespace}.")
+        camera_configs.append(LogInfo(msg=f"Launching device with serial number {device_serial} in namespace /{camera_namespace}."))
 
         camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
         camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
 
+
         config_file = os.path.join(
             get_package_share_directory('crow_vision_ros2'),
             'config',
-            'rs_native.yaml'
+            launch.substitutions.LaunchConfiguration('camera_config').perform(launchContext)
         )
         with open(config_file, "r") as f:
             config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
         launchParams = {'align_depth': True,
-                        'initial_reset': True,
                         'enable_infra1': False,
                         'enable_infra2': False,
                         'serial_no': device_serial,
@@ -105,7 +100,6 @@ def generate_launch_description():
             node_executable='realsense2_node',
             node_namespace=camera_namespace,
             parameters=[launchParams],
-            # parameters=[launchParams, config],
             output='screen',
             emulate_tty=True
         )
@@ -124,4 +118,16 @@ def generate_launch_description():
         ],
     )
     camera_configs.append(calibrator_node)
-    return launch.LaunchDescription(camera_configs)
+    return [
+        LogInfo(msg=f"Found devices: {devices}"),
+    ] + camera_configs
+
+
+def generate_launch_description():
+
+    return LaunchDescription([
+        DeclareLaunchArgument("camera_config", default_value="rs_native.yaml"),
+        LogInfo(msg=["Configuration file used for cameras: ", LaunchConfiguration('camera_config')]),
+        # ,
+        OpaqueFunction(function=launch_cameras)
+    ])

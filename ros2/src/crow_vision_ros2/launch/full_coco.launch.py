@@ -1,8 +1,8 @@
 from launch import LaunchDescription
 import launch_ros.actions
-from launch.actions import LogInfo, IncludeLaunchDescription
+from launch.actions import LogInfo, IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import ThisLaunchFileDir, ThisLaunchFile
+from launch.substitutions import ThisLaunchFileDir, ThisLaunchFile, LaunchConfiguration
 import os
 import rclpy
 from ros2topic import api
@@ -12,7 +12,7 @@ def generate_launch_description():
 
     all_cam_launcher = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([ThisLaunchFileDir(), os.path.sep, "all_cameras.launch.py"]),
-        # launch_arguments={'node_name': 'bar'}.items()
+        launch_arguments={'camera_config': LaunchConfiguration('camera_config')}.items()
     )
     launchConfigs.append(LogInfo(msg="Launching all available cameras"))
     launchConfigs.append(all_cam_launcher)
@@ -36,11 +36,6 @@ def generate_launch_description():
     )
     launchConfigs.append(locator_node)
 
-    launchDescription = LaunchDescription(launchConfigs)
-
-    return launchDescription
-
-# rclpy.init()
-# executor = rclpy.get_global_executor()
-
-# print("> " + str(executor.get_nodes()))
+    return LaunchDescription([
+        DeclareLaunchArgument("camera_config", default_value="rs_native.yaml")
+    ] + launchConfigs)
