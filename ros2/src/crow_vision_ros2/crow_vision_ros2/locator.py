@@ -25,7 +25,7 @@ from crow_vision_ros2.utils import make_vector3
 
 import pkg_resources
 #import open3d as o3d #we don't use o3d, as it's too slow
-from time import time
+import time 
 from ctypes import * # convert float to uint32
 
 
@@ -40,6 +40,11 @@ class Locator(Node):
         """
         super().__init__(node_name)
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
+        while len(self.cameras) == 0: #wait for cams to come online
+            self.get_logger().warn("No cams detected, waiting 2s.")
+            time.sleep(2)
+            self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
+
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.mask_topics = [cam + "/detections/masks" for cam in self.cameras] #input masks from 2D rgb (from our detector.py)
         self.pcl_topics = [cam + "/depth/color/points" for cam in self.cameras] #input pcl data (from RS camera)
@@ -94,7 +99,7 @@ class Locator(Node):
 
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
-        start = time()
+        start = time.time()
         camera_matrix = cameraData["camera_matrix"]
         imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = imspace[:2, :] / imspace[2, :] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
@@ -103,7 +108,7 @@ class Locator(Node):
         imspace[imspace < self.depth_min] = -1 # drop points with depth outside of range
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
-        end = time()
+        end = time.time()
         #print("Transform: ", end - start)
 
         # IDX_RGB_IN_FIELD = 3
@@ -130,7 +135,7 @@ class Locator(Node):
 
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # 2. segment PCL & compute median
-            start = time()
+            start = time.time()
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
@@ -144,7 +149,7 @@ class Locator(Node):
             #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
             assert len(mean) == 3, 'incorrect mean dim'
             self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
-            end = time()
+            end = time.time()
             #print("Filter: ", end - start)
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
