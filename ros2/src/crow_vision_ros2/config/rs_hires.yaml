@@ -3,8 +3,8 @@ clip_distance: 3.0
 color_width: 1920
 color_height: 1080
 color_fps: 30.0
-depth_width: 848
-depth_height: 480
+depth_width: 1280
+depth_height: 720
 depth_fps: 30.0
 enable_pointcloud: True
 dense_pointcloud: True

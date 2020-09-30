@@ -9,6 +9,7 @@ depth_fps: 30.0
 enable_pointcloud: True
 dense_pointcloud: True
 device_type: 'd435'
+initial_reset: False
 rgb_camera:
     auto_exposure_priority: True
     backlight_compensation: True
