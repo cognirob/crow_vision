@@ -75,7 +75,7 @@ class CrowVision(Node):
 
     self.ros = {}
     for cam in self.cameras:
-      camera_topic=cam+"/aligned_depth_to_color/image_raw"
+      camera_topic=cam+"/color/image_raw"
       # create INput listener with raw images
       listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
                                           topic=camera_topic,
