@@ -1,3 +1,4 @@
+from sys import argv
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterType
@@ -15,6 +16,8 @@ from crow_vision_ros2.filters import CameraPoser
 from time import sleep
 import transforms3d as tf3
 import json
+import argparse
+import sys
 
 
 class Calibrator(Node):
@@ -52,35 +55,66 @@ class Calibrator(Node):
         cameraFramesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera coordinate frames for available cameras')
         self.declare_parameter("camera_frames", value=[], descriptor=cameraFramesParamDesc)
 
-        self.get_logger().info(f"Sleeping to allow the cameras to come online.")
-        # sleep(0)
+        # parse args
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--camera_namespaces", nargs="*")
+        args = parser.parse_known_args(sys.argv[1:])[0]
 
-        # Get cameras
-        self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
-        while len(self.cameras) == 0:
-            self.get_logger().warn("Failed to detect any cameras! Retrying in 2sec.")
-            sleep(2)
-
-        topic_list = [(self.get_publisher_names_and_types_by_node(node_name, namespace), namespace) for node_name, namespace in self.cameras]
-        self.cam_info_topics = [(topic_name, namespace) for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])]
-        self.color_image_topics = {namespace: topic_name for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/Image" in topic_type[0])}
-
-        self.get_logger().info(f"Found {len(self.color_image_topics)} cameras.")
-
+        # setup vars
         self.optical_frames = dict()
         self.intrinsics = dict()
         self.distCoeffs = dict()
-
         self.camMarkers = {}
+        self.cameras = []
+        self.cam_info_topics = []
+        self.color_image_topics = {}
 
-        for topic, camera_ns in self.cam_info_topics:
-            # camera = next(ns + "/" + cam for cam, ns in self.cameras if ns in topic)
-            self.create_subscription(CameraInfo, topic, lambda msg, cam=camera_ns: self.camera_info_cb(msg, cam), 1)
-            self.get_logger().info(f"Connected to '{topic}' camera info topic for camera '{camera_ns}'. Waiting for camera info to start the image subscriber.")
+        # Get cameras
+        self.camera_namespaces = args.camera_namespaces
+        if len(self.camera_namespaces) == 0:  # the all way: wait a little and try to detect all cameras
+            self.get_logger().info(f"Sleeping to allow the cameras to come online.")
+            sleep(15)
+            self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
+            topic_list = [(self.get_publisher_names_and_types_by_node(node_name, namespace), namespace) for node_name, namespace in self.cameras]
+            self.cam_info_topics = [(topic_name, namespace) for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])]
+            self.color_image_topics = {namespace: topic_name for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/Image" in topic_type[0])}
+
+            self.get_logger().info(f"Found {len(self.color_image_topics)} cameras.")
+
+            for topic, camera_ns in self.cam_info_topics:
+                # camera = next(ns + "/" + cam for cam, ns in self.cameras if ns in topic)
+                self.create_subscription(CameraInfo, topic, lambda msg, cam=camera_ns: self.camera_info_cb(msg, cam), 1)
+                self.get_logger().info(f"Connected to '{topic}' camera info topic for camera '{camera_ns}'. Waiting for camera info to start the image subscriber.")
+
+                # TODO: get camera color optical frame from /tf
+                optical_frame = f"{camera_ns[1:]}_color_optical_frame"
+                self.optical_frames[camera_ns] = optical_frame
+        else:  # the novel way: periodically check if cameras are online and add cameras one by one
+            sleep(5)
+            self.timer = self.create_timer(2, self.timer_cb)
+
+    def timer_cb(self):
+        online_cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
+
+        missing_cameras = [c for c in online_cameras if c not in self.cameras]
+
+        for node_name, namespace in missing_cameras:
+
+            self.cameras.append((node_name, namespace))
+            topic_list = self.get_publisher_names_and_types_by_node(node_name, namespace)
+            camera_info_topic = next(topic_name for topic_name, topic_type in topic_list if "/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])
+            self.cam_info_topics.append((camera_info_topic, namespace))
+            self.color_image_topics[namespace] = next(topic_name for topic_name, topic_type in topic_list if "/color/" in topic_name and "sensor_msgs/msg/Image" in topic_type[0])
+
+            self.get_logger().info(f"Found camera {namespace}/{node_name}.")
+
+            self.create_subscription(CameraInfo, camera_info_topic, lambda msg, cam=namespace: self.camera_info_cb(msg, cam), 1)
+            self.get_logger().info(f"Connected to '{camera_info_topic}' camera info topic for camera '{namespace}'. Waiting for camera info to start the image subscriber.")
 
             # TODO: get camera color optical frame from /tf
-            optical_frame = f"{camera_ns[1:]}_color_optical_frame"
-            self.optical_frames[camera_ns] = optical_frame
+            optical_frame = f"{namespace[1:]}_color_optical_frame"
+            self.optical_frames[namespace] = optical_frame
+
 
     def camera_info_cb(self, msg, camera_ns):
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))

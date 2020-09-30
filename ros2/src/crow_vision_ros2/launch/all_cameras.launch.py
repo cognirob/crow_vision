@@ -67,46 +67,61 @@ def generate_launch_description():
     frame_regex = re.compile(r"(\w+_frame)_id")
 
     camera_configs = []
-    for cam_id, device in enumerate(rs.context().devices):
-        if device.get_info(rs.camera_info.name).lower() != 'platform camera':
-            camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
-            camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
+    devices = list(rs.context().query_devices())
+    print(f"Found devices: {devices}")
 
-            config_file = os.path.join(
-                get_package_share_directory('crow_vision_ros2'),
-                'config',
-                'rs_native.yaml'
-            )
-            with open(config_file, "r") as f:
-                config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+    camera_namespaces = []
+    for cam_id, device in enumerate(devices):
+        if device.get_info(rs.camera_info.name).lower() == 'platform camera':
+            continue
 
-            launchParams = {'align_depth': True,
-                            'initial_reset': True,
-                            'enable_infra1': False,
-                            'enable_infra2': False,
-                            'serial_no': str(device.get_info(rs.camera_info.serial_number)),
-                            }
+        camera_namespace = f"camera{cam_id + 1}"
+        camera_namespaces.append("/" + camera_namespace)
+        device_serial = str(device.get_info(rs.camera_info.serial_number))
+        print(f"Launching device with serial number {device_serial} in namespace /{camera_namespace}.")
 
-            launchParams = {**launchParams, **camera_frames_dict, **config_dict}
+        camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
+        camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
 
-            camera_node = Node(
-                package='realsense2_node',
-                node_executable='realsense2_node',
-                node_namespace=f"camera{cam_id + 1}",
-                parameters=[launchParams],
-                # parameters=[launchParams, config],
-                output='screen',
-                emulate_tty=True
-            )
-            camera_configs.append(camera_node)
+        config_file = os.path.join(
+            get_package_share_directory('crow_vision_ros2'),
+            'config',
+            'rs_native.yaml'
+        )
+        with open(config_file, "r") as f:
+            config_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+        launchParams = {'align_depth': True,
+                        'initial_reset': True,
+                        'enable_infra1': False,
+                        'enable_infra2': False,
+                        'serial_no': device_serial,
+                        }
+
+        launchParams = {**launchParams, **camera_frames_dict, **config_dict}
+
+        camera_node = Node(
+            package='realsense2_node',
+            node_executable='realsense2_node',
+            node_namespace=camera_namespace,
+            parameters=[launchParams],
+            # parameters=[launchParams, config],
+            output='screen',
+            emulate_tty=True
+        )
+        camera_configs.append(camera_node)
 
     calibrator_node = Node(
         package='crow_vision_ros2',
         node_executable='calibrator',
         output='screen',
+        emulate_tty=True,
         parameters=[{
                     "halt_calibration": True
-                    }]
+                    }],
+        arguments=[
+            "--camera_namespaces", ' '.join(camera_namespaces),
+        ],
     )
     camera_configs.append(calibrator_node)
     return launch.LaunchDescription(camera_configs)
