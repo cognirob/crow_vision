@@ -18,6 +18,7 @@ from time import time
 import copy
 
 import open3d as o3d
+from crow_vision_ros2.utils import ftl_pcl2numpy
 
 
 class Match3D(Node):
@@ -205,7 +206,8 @@ class Match3D(Node):
         
         # pointcloud from msg PointCloud2 -> numpy -> o3d.PointCloud
         start = time()
-        pcd = np.array(msg.pcl.data).view(np.float32).reshape(-1, 3) # 3 as we have x,y,z only in the pcl
+        #pcd = np.array(msg.pcl.data).view(np.float32).reshape(-1, 3) # 3 as we have x,y,z only in the pcl
+        pcd, point_rgb, rgb_raw = ftl_pcl2numpy(msg.pcl)
         real_pcl = o3d.geometry.PointCloud()
         #real_pcl.points = o3d.utility.Vector3dVector(ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg.pcl)) #using ros2_numpy 
         real_pcl.points = o3d.utility.Vector3dVector(pcd)

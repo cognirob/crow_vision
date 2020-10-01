@@ -2,6 +2,9 @@ import numpy as np
 
 
 def ftl_pcl2numpy(pcl_msg, uses_stupid_bgr_format=True):
+    """
+    convert ROS2 PointCloud2 pcl_msg to numpy ndarray
+    """
     # warning: this assumes that the machine and PCL have the same endianness!
     step = int(pcl_msg.point_step / 4)  # point offset in dwords
     rgb_offset = int(next((f.offset for f in pcl_msg.fields if f.name == "rgb")) / 4)  # rgb offset in dwords
