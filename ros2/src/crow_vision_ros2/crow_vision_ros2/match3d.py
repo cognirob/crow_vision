@@ -18,7 +18,7 @@ from time import time
 import copy
 
 import open3d as o3d
-from crow_vision_ros2.utils import ftl_pcl2numpy
+from crow_vision_ros2.utils import ftl_pcl2numpy, ftl_numpy2pcl
 
 
 class Match3D(Node):
@@ -303,15 +303,7 @@ class Match3D(Node):
         if matched:
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             model_pcd = np.asarray(model_pcl.points).reshape(3, -1).astype(np.float32)
-            model = PointCloud2(
-                header=msg.pcl.header,
-                height=1,
-                width=model_pcd.shape[1],
-                fields=msg.pcl.fields,
-                point_step=msg.pcl.point_step, #3=xyz
-                row_step=(msg.pcl.point_step*model_pcd.shape[1]),
-                data=model_pcd.tobytes()
-            )
+            model = ftl_numpy2pcl(model_pcd, msg.pcl.header, None)
             model.header.stamp = msg.header.stamp
             assert model.header.stamp == msg.header.stamp, "timestamps for segmented_pointcloud & new matched_pointcloud must be synchronized!"
 

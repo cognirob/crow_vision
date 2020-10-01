@@ -6,7 +6,7 @@ import message_filters
 
 #Pointcloud
 from crow_msgs.msg import DetectionMask, SegmentedPointcloud
-from sensor_msgs.msg import PointCloud2, PointField
+from sensor_msgs.msg import PointCloud2
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -21,7 +21,9 @@ import cv_bridge
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import TransformStamped
-from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy
+
+#PointCloud2
+from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 
 import pkg_resources
 #import open3d as o3d #we don't use o3d, as it's too slow
@@ -150,24 +152,12 @@ class Locator(Node):
             mean = np.median(seg_pcd, axis=1)
             #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
             assert len(mean) == 3, 'incorrect mean dim'
-            self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean)
+            self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean) #TODO compute and send TF position from matcher, not here
             end = time.time()
             #print("Filter: ", end - start)
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
-            itemsize = np.dtype(np.float32).itemsize
-            fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate(list('xyz') + ['rgb'])]
-            fields[-1].offset = 16
-            #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
-            segmented_pcl = PointCloud2(
-                     header=pcl_msg.header,
-                     height=1,
-                     width=seg_pcd.shape[1],
-                     fields=fields,
-                     point_step=(itemsize * 5),  #=xyz + padding + rgb
-                     row_step=(itemsize * 5 * seg_pcd.shape[1]),
-                     data=np.concatenate((seg_pcd.T, np.zeros((seg_pcd.shape[1], 1), dtype=np.float32), seg_color[:, np.newaxis]), axis=1).tobytes()
-                     )
+            segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
             segmented_pcl.header.stamp = mask_msg.header.stamp
             assert segmented_pcl.header.stamp == mask_msg.header.stamp, "timestamps for mask and segmented_pointcloud must be synchronized!"
 
