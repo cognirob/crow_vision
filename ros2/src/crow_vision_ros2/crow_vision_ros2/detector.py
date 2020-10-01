@@ -97,14 +97,13 @@ class CrowVision(Node):
       if self.config["outputs"]["masks"]:
         topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=qos) #publishes the processed (annotated,detected) masks
       if self.config["outputs"]["bboxes"]:
         topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
         self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=qos) #publishes the processed (annotated,detected) image
+        self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=qos) #publishes the processed (annotated,detected) bboxes
 
 
-      #TODO others publishers
     self.noMessagesYet = True
     self.cvb_ = CvBridge()
 
