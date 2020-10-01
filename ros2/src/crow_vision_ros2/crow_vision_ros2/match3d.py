@@ -67,7 +67,7 @@ class Match3D(Node):
 
 
 
-    def __init__(self, node_name="match3d", voxel_size=0.001, approx_precision=0.050, fine_precision=0.005, min_support=200): #TODO make a) finer STLs (for some objects), b) merge pcl to get bigger clouds, so support can be much higher (~1000 ideally)
+    def __init__(self, node_name="match3d", voxel_size=0.001, approx_precision=0.005, fine_precision=0.001, min_support=200): #TODO make a) finer STLs (for some objects), b) merge pcl to get bigger clouds, so support can be much higher (~1000 ideally)
         """
         @arg voxel_size: size [in m] of voxels used for sampling from our ground-truth models. Default 0.001 = 1mm in real world precision. 
             Defines overall precision-possibilities of this module. 
@@ -84,7 +84,7 @@ class Match3D(Node):
         if approx_precision > 0:
             assert voxel_size < approx_precision
         if fine_precision > 0:
-            assert voxel_size < fine_precision
+            assert voxel_size <= fine_precision
         self.fine_precision = fine_precision
         self.min_support = min_support
 
@@ -179,6 +179,7 @@ class Match3D(Node):
         radius_feature = voxel_size * 5
         #print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
         pcd_fpfh = o3d.registration.compute_fpfh_feature(pcd_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=30))
+        self.get_logger().info("Downsampled {} voxel {} from {} to {}".format(label, voxel_size, pcd, pcd_down))
         return pcd_down, pcd_fpfh
 
 
@@ -242,9 +243,10 @@ class Match3D(Node):
         if self.approx_precision > 0:
           start = time()
           # compute pcl & features for incoming segmented pcl (this is the target position)
-          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.voxel_size, min_support=self.min_support, label="real-approx-"+msg.label)
+          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.approx_precision, min_support=self.min_support, label="real-approx-"+msg.label)
           # a) re-compute pcl & features for the model (which moved in step 0)
-          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size=self.voxel_size, min_support=self.min_support, label="proto-approx-"+msg.label)
+          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size=self.approx_precision, min_support=self.min_support, label="proto-approx-"+msg.label)
+          
           # b) use cached downsampled model & features #TODO can we do that? or model_fpfh depends on absolute coords, which changed in step 0/ default transform?
           #source_down = self.objects[msg.label]["down"]
           #source_fpfh = self.objects[msg.label]["down_fpfh"]
