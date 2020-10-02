@@ -56,6 +56,9 @@ class Match3D(Node):
 
           #1. create Mesh
           mesh = o3d.io.read_triangle_mesh(path) #o3d is slow, but here it's only once in init, so it's OK.
+
+          #2. we must scale objects to m from mm!
+          mesh.scale(scale=self.obj_scale[cls], center=mesh.get_center())
           
           #2. o3d.PointCloud from mesh
           orig_pcd = o3d.geometry.PointCloud()
@@ -63,16 +66,18 @@ class Match3D(Node):
           orig_pcd.colors = mesh.vertex_colors
           orig_pcd.normals = mesh.vertex_normals
 
-          orig_pcd, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=self.voxel_size, min_support=self.min_support, label="proto_"+cls)
+          #4. color the objects #TODO
+
+          orig_pcd, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=self.voxel_size, min_support=1, label="proto_"+cls) #TODO fingure the min_support and down_sampling
           objects[cls]["orig"] = orig_pcd
           objects[cls]["orig_fpfh"] = orig_fpfh #features for RANSAC
 
-          self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}".format(cls, mesh, orig_pcd))
+          self.get_logger().info("Loading '{}' : mesh: {}\tPointCloud: {}\t BBox: {} [m]".format(cls, mesh, orig_pcd, orig_pcd.get_axis_aligned_bounding_box().get_extent()))
         return objects
 
 
 
-    def __init__(self, node_name="match3d", voxel_size=0.001, approx_precision=0.005, fine_precision=0.001, min_support=200): #TODO make a) finer STLs (for some objects), b) merge pcl to get bigger clouds, so support can be much higher (~1000 ideally)
+    def __init__(self, node_name="match3d", voxel_size=0.001, approx_precision=0.005, fine_precision=0.001, min_support=1): #TODO make a) finer STLs (for some objects), b) merge pcl to get bigger clouds, so support can be much higher (~1000 ideally)
         """
         @arg voxel_size: size [in m] of voxels used for sampling from our ground-truth models. Default 0.001 = 1mm in real world precision. 
             Defines overall precision-possibilities of this module. 
@@ -124,8 +129,23 @@ class Match3D(Node):
         # map str:label -> o3d.PointCloud model
         #MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
         MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
-        self.get_logger().info(MODEL_PATH)
         #self.objects = self.load_models()
+        self.all_models = ["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer",
+                "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench"
+                #, "peg_simple"
+                ]
+        self.get_logger().info("Recognizing models: {} from path {}.".format(self.all_models, MODEL_PATH))
+
+        # set scale for objects (as STLs are modeled in mm, but o3d uses m)
+        # most objects have scale 0.001, but some were in inches, so have slightly different.
+        # See 'crow_simulation/envs/objects/crow/urdf/..' for exact scales.
+        # hammer = 0.008, pliers = 0.02, all others = 0.001
+        self.obj_scale = {}
+        for o in self.all_models:
+            self.obj_scale[o] = 0.001 #from mm to m.
+        self.obj_scale["hammer"] = 0.008
+        self.obj_scale["pliers"] = 0.02
+
         self.objects = self.load_models(list_path_stl=[
             MODEL_PATH+"car_roof.stl", 
             MODEL_PATH+"pliers.stl", 
@@ -142,11 +162,10 @@ class Match3D(Node):
             MODEL_PATH+"wrench.stl", 
        #     MODEL_PATH+"peg_simple.stl" #has too few points (36), making our min_support useless
             ], 
-            list_labels=["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer", 
-                "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench"
-                #, "peg_simple"
-            ] 
+            list_labels=self.all_models
             )
+
+
 
 
     def draw_registration_result(self, source, target, transformation):
