@@ -7,6 +7,7 @@ import message_filters
 #Pointcloud
 from crow_msgs.msg import DetectionMask, SegmentedPointcloud
 from sensor_msgs.msg import PointCloud2
+from crow_vision_ros2.utils import ftl_pcl2numpy, ftl_numpy2pcl
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -17,19 +18,10 @@ import numpy as np
 import cv2
 import cv_bridge
 
-#TF
-import tf2_py as tf
-import tf2_ros
-from geometry_msgs.msg import TransformStamped
-
-#PointCloud2
-from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
-
 import pkg_resources
 #import open3d as o3d #we don't use o3d, as it's too slow
 import time
 from ctypes import * # convert float to uint32
-from time import sleep
 
 
 
@@ -67,7 +59,6 @@ class Locator(Node):
             self.pubPCLdebug[cam] = self.create_publisher(PointCloud2, out_pcl_topic+"_debug", qos_profile=qos)
 
         self.cvb = cv_bridge.CvBridge()
-        self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
         #create listeners (synchronized)
@@ -148,11 +139,7 @@ class Locator(Node):
             # create segmented pcl
             seg_pcd = point_cloud[:, where]
             seg_color = rgb_raw[where]
-
-            mean = np.median(seg_pcd, axis=1)
-            #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(i, class_name, mean, score))
-            assert len(mean) == 3, 'incorrect mean dim'
-            self.sendPosition(cameraData["optical_frame"], class_name + f"_{i}", mask_msg.header.stamp, mean) #TODO compute and send TF position from matcher, not here
+            
             end = time.time()
             #print("Filter: ", end - start)
 
@@ -177,18 +164,7 @@ class Locator(Node):
         b = projected_points.T.copy()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
         result = np.intersect1d(a.view(self.mask_dtype), b.view(self.mask_dtype), return_indices=True)
-
         return result[2]
-
-
-    def sendPosition(self, camera_frame, object_frame, time, xyz):
-        tf_msg = TransformStamped()
-        tf_msg.header.stamp = time
-        tf_msg.header.frame_id = camera_frame
-        tf_msg.child_frame_id = object_frame
-        tf_msg.transform.translation = make_vector3(xyz)
-
-        self.tf_broadcaster.sendTransform(tf_msg)
 
 
     def getCameraData(self, camera):
