@@ -236,7 +236,6 @@ class Match3D(Node):
                 - np.median(np.asarray(real_pcl.points), axis=0, keepdims=True))[0] #to,target
         #FIXME assert (diff_centers < 0.1).all(), "Initial transform should move '{}' cloud centers together! {}".format(msg.label, diff_centers)
 
-
         # 1/ (optional) fit global RANSAC
         result = None
         matched = False
@@ -301,7 +300,7 @@ class Match3D(Node):
               pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
         # 3/ publish the matched complete model (as PointCloud2 moved to the true 3D world position)
-        if matched:
+        if matched or True:
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             model_pcd = np.asarray(model_pcl.points).reshape(3, -1).astype(np.float32)
             model = ftl_numpy2pcl(model_pcd, msg.pcl.header, None)
