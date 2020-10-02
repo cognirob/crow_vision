@@ -63,7 +63,7 @@ class Match3D(Node):
           orig_pcd.colors = mesh.vertex_colors
           orig_pcd.normals = mesh.vertex_normals
 
-          orig_pcd, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=self.voxel_size, min_support=self.min_support, label="proto"+cls)
+          orig_pcd, orig_fpfh = self.preprocess_point_cloud(orig_pcd, voxel_size=self.voxel_size, min_support=self.min_support, label="proto_"+cls)
           objects[cls]["orig"] = orig_pcd
           objects[cls]["orig_fpfh"] = orig_fpfh #features for RANSAC
 
@@ -185,7 +185,7 @@ class Match3D(Node):
         radius_feature = voxel_size * 5
         #print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
         pcd_fpfh = o3d.registration.compute_fpfh_feature(pcd_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=30))
-        self.get_logger().info("Downsampled {} voxel {} from {} to {}".format(label, voxel_size, pcd, pcd_down))
+        #self.get_logger().info("Downsampled {} voxel {} from {} to {}".format(label, voxel_size, pcd, pcd_down))
         return pcd_down, pcd_fpfh
 
 
