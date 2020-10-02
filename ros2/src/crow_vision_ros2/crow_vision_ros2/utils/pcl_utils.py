@@ -3,7 +3,6 @@ import numpy as np
 from sensor_msgs.msg import PointCloud2, PointField
 
 
-
 def ftl_pcl2numpy(pcl_msg, uses_stupid_bgr_format=True):
     """
     convert ROS2 PointCloud2 pcl_msg to numpy ndarray
@@ -21,7 +20,7 @@ def ftl_pcl2numpy(pcl_msg, uses_stupid_bgr_format=True):
 
 
 
-def ftl_numpy2pcl(xyz, orig_header=None, rgb=None):
+def ftl_numpy2pcl(xyz, orig_header, rgb=None):
     """
     inverse method to ftl_pcl2numpy. 
     Converts np array to ROS2 PointCloud2. 

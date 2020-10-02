@@ -165,6 +165,9 @@ class Match3D(Node):
             list_labels=self.all_models
             )
 
+        #Debug: publish loaded objects
+        self.pubModels = self.create_publisher(PointCloud2, "/models", qos)
+        self.runOnce_ = True
 
 
 
@@ -228,6 +231,18 @@ class Match3D(Node):
         except:
             self.get_logger().error("Unknown model for detected label {}. Skipping.".format(msg.label))
             return
+
+
+        # only run once: debug - publish all models
+        if self.runOnce_:
+            self.runOnce_ = False
+            for model in self.all_models:
+                pcd = self.objects[model]["orig"]
+                pcd = np.asarray(pcd.points).reshape(3, -1).astype(np.float32)
+                pcl = ftl_numpy2pcl(pcd, msg.header)
+                self.pubModels.publish(pcl)
+                self.get_logger().info("Publishing model pcl for {} on topic '/models' ".format(model))
+
 
         
         # pointcloud from msg PointCloud2 -> numpy -> o3d.PointCloud
