@@ -228,17 +228,13 @@ class Match3D(Node):
 
 
         # 0/ compute (approx) initial transform; just moves the clouds "nearby"
-        transform_initial = np.identity(4) #initial affine transform, moves clouds "close together" (by mean xyz of the pcls)
-        fromm = np.asarray(model_pcl.points)
         to    = np.asarray(real_pcl.points)
-        fromm_xyz = np.median(fromm, axis=0, keepdims=True)
         to_xyz = np.median(to, axis=0, keepdims=True)
-        move = (to_xyz - fromm_xyz)[0]
-        transform_initial[0:3,3] = move #write the "move"=translation (x,y,z) to the translation part of the affine matrix
-        #print("BEFORE: Mean proto: {} \tMean pcl: {}".format(np.median(fromm, axis=0, keepdims=True), np.median(to, axis=0, keepdims=True)))
-        model_pcl.transform(transform_initial) #move the model approx where the real pcl is.
-        #print("AFTER: Mean proto: {} \tMean pcl: {}".format(np.median(fromm, axis=0, keepdims=True), np.median(to, axis=0, keepdims=True)))
-        assert np.abs(np.median(fromm, axis=0, keepdims=True) - np.median(to, axis=0, keepdims=True)).sum() < 0.0001, "Initial transform should move cloud centers together!"
+        model_pcl.translate(to_xyz.reshape(3,1).astype(np.float64), relative=False) #move the model approx where the real pcl is.
+        diff_centers = np.abs(
+                np.median(np.asarray(model_pcl.points), axis=0, keepdims=True) #from
+                - np.median(np.asarray(real_pcl.points), axis=0, keepdims=True))[0] #to,target
+        #FIXME assert (diff_centers < 0.1).all(), "Initial transform should move '{}' cloud centers together! {}".format(msg.label, diff_centers)
 
 
         # 1/ (optional) fit global RANSAC
