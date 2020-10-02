@@ -213,11 +213,10 @@ class Match3D(Node):
         
         # pointcloud from msg PointCloud2 -> numpy -> o3d.PointCloud
         start = time.time()
-        #pcd = np.array(msg.pcl.data).view(np.float32).reshape(-1, 3) # 3 as we have x,y,z only in the pcl
         pcd, point_rgb, rgb_raw = ftl_pcl2numpy(msg.pcl)
         real_pcl = o3d.geometry.PointCloud()
-        #real_pcl.points = o3d.utility.Vector3dVector(ros_numpy.point_cloud2.pointcloud2_to_xyz_array(msg.pcl)) #using ros2_numpy 
         real_pcl.points = o3d.utility.Vector3dVector(pcd)
+        real_pcl.colors = o3d.utility.Vector3dVector(point_rgb) #TODO colored-ICP as enhancement: http://www.open3d.org/docs/release/tutorial/Advanced/colored_pointcloud_registration.html
         # downsample to self.voxel_size resolution
         real_pcl, _ = self.preprocess_point_cloud(real_pcl, voxel_size=self.voxel_size, min_support=0, label="incoming-"+msg.label)
         end = time.time()
