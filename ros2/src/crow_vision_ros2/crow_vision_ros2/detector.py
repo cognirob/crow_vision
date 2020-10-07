@@ -185,7 +185,9 @@ class CrowVision(Node):
       if "pub_masks" in self.ros[topic]:
 
         msg_mask = DetectionMask()
-        msg_mask.masks = [self.cvb_.cv2_to_imgmsg(mask, encoding="mono8") for mask in masks.astype(np.uint8)]
+        m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
+        #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)
         # parse time from incoming msg, pass to outgoing msg
         msg_mask.header.stamp = msg.header.stamp
         for mask in msg_mask.masks:
