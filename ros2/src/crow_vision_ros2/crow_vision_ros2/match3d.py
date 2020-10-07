@@ -268,7 +268,7 @@ class Match3D(Node):
         diff_centers = np.abs(
                 np.median(np.asarray(model_pcl.points), axis=0, keepdims=True) #from
                 - np.median(np.asarray(real_pcl.points), axis=0, keepdims=True))[0] #to,target
-        #FIXME assert (diff_centers < 0.1).all(), "Initial transform should move '{}' cloud centers together! {}".format(msg.label, diff_centers)
+        assert (diff_centers < 0.01).all(), "Initial transform should move '{}' cloud centers together! {}".format(msg.label, diff_centers)
 
         # 1/ (optional) fit global RANSAC
         result = None
@@ -277,27 +277,28 @@ class Match3D(Node):
         if self.approx_precision > 0:
           start = time.time()
           # compute pcl & features for incoming segmented pcl (this is the target position)
-          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.approx_precision, min_support=self.min_support, label="real-approx-"+msg.label)
+          target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.fine_precision, min_support=self.min_support, label="real-approx-"+msg.label)
           # a) re-compute pcl & features for the model (which moved in step 0)
-          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size=self.approx_precision, min_support=self.min_support, label="proto-approx-"+msg.label)
+          source_down, source_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size=self.fine_precision, min_support=self.min_support, label="proto-approx-"+msg.label)
           
           # b) use cached downsampled model & features #TODO can we do that? or model_fpfh depends on absolute coords, which changed in step 0/ default transform?
           #source_down = self.objects[msg.label]["down"]
           #source_fpfh = self.objects[msg.label]["down_fpfh"]
-          result = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, self.approx_precision*10)
+          result = self.execute_fast_global_registration(source_down, target_down, source_fpfh, target_fpfh, self.approx_precision*1.5)
           end = time.time()
 
           #apply the transform only if: 1) cprrespondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
           #print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
-          applyit = (float(len(result.correspondence_set)) / len(target_down.points)) > 0.25 and len(result.correspondence_set) > self.min_support and result.fitness > 0.01
-          self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
+          applyit = len(result.correspondence_set) > self.min_support and result.fitness > 0.5
           if applyit:
               model_pcl.transform(result.transformation)
               matched = True
               #TODO assert the transform is in the correct direction, ie the model is moving closer. 
           else:
               #unsuccessful registration (why?), skip
+              self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
               pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+          return
 
         
         # 2/ local registration - ICP
