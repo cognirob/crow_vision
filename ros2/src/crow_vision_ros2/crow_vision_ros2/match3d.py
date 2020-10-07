@@ -225,7 +225,8 @@ class Match3D(Node):
     def detection_callback(self, msg, camera):
 
         # model (as a pointcloud) to be matched to a real-world position
-        model_pcl = None
+        model_pcl = None #this is the model which we try to move to the actual location
+        real_pcl = None #this is (part of) the real cloud, our target location
         try:
             model_pcl = self.objects[msg.label]["orig"]
         except:
@@ -238,7 +239,7 @@ class Match3D(Node):
             self.runOnce_ = False
             for model in self.all_models:
                 pcd = self.objects[model]["orig"]
-                pcd = np.asarray(pcd.points).reshape(3, -1).astype(np.float32)
+                pcd = np.asarray(pcd.points).astype(np.float32).T
                 pcl = ftl_numpy2pcl(pcd, msg.header)
                 self.pubModels.publish(pcl)
                 self.get_logger().info("Publishing model pcl for {} on topic '/models' ".format(model))
@@ -247,10 +248,13 @@ class Match3D(Node):
         
         # pointcloud from msg PointCloud2 -> numpy -> o3d.PointCloud
         start = time.time()
-        pcd, point_rgb, rgb_raw = ftl_pcl2numpy(msg.pcl)
-        real_pcl = o3d.geometry.PointCloud()
-        real_pcl.points = o3d.utility.Vector3dVector(pcd)
-        real_pcl.colors = o3d.utility.Vector3dVector(point_rgb) #TODO colored-ICP as enhancement: http://www.open3d.org/docs/release/tutorial/Advanced/colored_pointcloud_registration.html
+        if True: #this block is to hide pcd, ... members from other code, only real_pcl is used further.
+            pcd, point_rgb, rgb_raw = ftl_pcl2numpy(msg.pcl)
+            real_pcl = o3d.geometry.PointCloud()
+            real_pcl.points = o3d.utility.Vector3dVector(pcd)
+            real_pcl.colors = o3d.utility.Vector3dVector(point_rgb) #TODO colored-ICP as enhancement: http://www.open3d.org/docs/release/tutorial/Advanced/colored_pointcloud_registration.html
+        assert isinstance(real_pcl, o3d.geometry.PointCloud) and isinstance(model_pcl, o3d.geometry.PointCloud)
+
         # downsample to self.voxel_size resolution
         real_pcl, _ = self.preprocess_point_cloud(real_pcl, voxel_size=self.voxel_size, min_support=0, label="incoming-"+msg.label)
         end = time.time()
@@ -262,9 +266,10 @@ class Match3D(Node):
 
 
         # 0/ compute (approx) initial transform; just moves the clouds "nearby"
-        to    = np.asarray(real_pcl.points)
-        to_xyz = np.median(to, axis=0, keepdims=True)
-        model_pcl.translate(to_xyz.reshape(3,1).astype(np.float64), relative=False) #move the model approx where the real pcl is.
+        to    = np.asarray(real_pcl.points).astype(np.float64)
+        assert to.shape[1] == 3
+        to_xyz = np.median(to, axis=0, keepdims=True)[0]
+        model_pcl.translate(to_xyz, relative=False) #move the model approx where the real pcl is.
         diff_centers = np.abs(
                 np.median(np.asarray(model_pcl.points), axis=0, keepdims=True) #from
                 - np.median(np.asarray(real_pcl.points), axis=0, keepdims=True))[0] #to,target
@@ -272,9 +277,9 @@ class Match3D(Node):
 
         # 1/ (optional) fit global RANSAC
         result = None
-        matched = False
+        matched = True
 
-        if self.approx_precision > 0:
+        if self.approx_precision > 0 and False:
           start = time.time()
           # compute pcl & features for incoming segmented pcl (this is the target position)
           target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.fine_precision, min_support=self.min_support, label="real-approx-"+msg.label)
@@ -289,7 +294,7 @@ class Match3D(Node):
 
           #apply the transform only if: 1) cprrespondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
           #print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
-          applyit = len(result.correspondence_set) > self.min_support and result.fitness > 0.1
+          applyit = len(result.correspondence_set) > self.min_support and result.fitness > 0.05
           if applyit:
               model_pcl.transform(result.transformation)
               matched = True
@@ -302,7 +307,7 @@ class Match3D(Node):
         
         # 2/ local registration - ICP
         # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
-        if self.fine_precision > 0:
+        if self.fine_precision > 0 and False:
           start = time.time()
           # compute pcl & features for incoming segmented pcl (this is the target position)
           target_fine, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.voxel_size, min_support=self.min_support, label="real-fine-"+msg.label) #TODO if we wanted to alter min_support based on object's label (-> "size"). As hammer "is bigger" than "nut"
@@ -331,12 +336,12 @@ class Match3D(Node):
           else:
               #unsuccessful registration (why?), skip
               self.get_logger().info("ICP [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
-              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+              pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
         # 3/ publish the matched complete model (as PointCloud2 moved to the true 3D world position)
         if matched:
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
-            model_pcd = np.asarray(model_pcl.points).reshape(3, -1).astype(np.float32)
+            model_pcd = np.asarray(model_pcl.points).astype(np.float32).T
             model = ftl_numpy2pcl(model_pcd, msg.pcl.header, None)
             model.header.stamp = msg.header.stamp
             assert model.header.stamp == msg.header.stamp, "timestamps for segmented_pointcloud & new matched_pointcloud must be synchronized!"
@@ -345,17 +350,18 @@ class Match3D(Node):
             matched_pcl_msg.header = model.header
             matched_pcl_msg.pcl = model
             matched_pcl_msg.label = msg.label
-            matched_pcl_confidence = float(result.fitness)
+            fitt = float(result.fitness) if result is not None else -0.000080085 #debug if result is None if Ransac & ICP is off
+            matched_pcl_confidence = fitt
 
             self.pubMatched[camera].publish(matched_pcl_msg)
-            self.get_logger().info("{}:\tmatched with confidence {}.".format(msg.label, result.fitness))
+            self.get_logger().info("{}:\tmatched with confidence {}.".format(msg.label, fitt))
             self.pubMatchedDebug[camera].publish(model) #debug, can be removed
 
-        # 4/ publish TF of centroids
-        mean = np.median(pcd.astype(np.float32), axis=0) #TODO when it works, publish center of matched pcl, not the segmented part only
-        #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(msg.label, mean, msg.score))
-        assert len(mean) == 3, 'incorrect mean dim'+str(mean.shape)
-        self.sendPosition(self.camera_frames[self.cameras.index(camera)], msg.label, msg.header.stamp, mean)
+            # 4/ publish TF of centroids
+            mean = np.median(pcd.astype(np.float32), axis=0) #TODO when it works, publish center of matched pcl, not the segmented part only
+            #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(msg.label, mean, msg.score))
+            assert len(mean) == 3, 'incorrect mean dim'+str(mean.shape)
+            self.sendPosition(self.camera_frames[self.cameras.index(camera)], msg.label, msg.header.stamp, mean)
 
 
     def sendPosition(self, camera_frame, object_frame, time, xyz):
