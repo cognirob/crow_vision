@@ -289,7 +289,7 @@ class Match3D(Node):
 
           #apply the transform only if: 1) cprrespondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
           #print("diff {}\tlen orig: {}\tlen match: {}".format(float(len(result.correspondence_set) / len(target_down.points)), len(target_down.points), len(result.correspondence_set)))
-          applyit = len(result.correspondence_set) > self.min_support and result.fitness > 0.5
+          applyit = len(result.correspondence_set) > self.min_support and result.fitness > 0.1
           if applyit:
               model_pcl.transform(result.transformation)
               matched = True
@@ -297,8 +297,7 @@ class Match3D(Node):
           else:
               #unsuccessful registration (why?), skip
               self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
-              pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
-          return
+              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
         
         # 2/ local registration - ICP
@@ -325,17 +324,17 @@ class Match3D(Node):
           end = time.time()
 
           #apply the transform only if: 1) correspondence_set is atleast 50% of the segmented pcl (real_pcl) & fitness > 0.1
-          applyit = (float(len(result.correspondence_set)) / len(target_fine.points)) > 0.1 and len(result.correspondence_set) > self.min_support and result.fitness > 0.1
-          self.get_logger().info("ICP [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
+          applyit = len(result.correspondence_set) > self.min_support and result.fitness > 0.1
           if applyit:
               matched = True
               model_pcl.transform(result.transformation)
           else:
               #unsuccessful registration (why?), skip
-              pass #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
+              self.get_logger().info("ICP [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
+              return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
         # 3/ publish the matched complete model (as PointCloud2 moved to the true 3D world position)
-        if matched or True:
+        if matched:
             #fill PointCloud2 correctly according to https://gist.github.com/pgorczak/5c717baa44479fa064eb8d33ea4587e0#file-dragon_pointcloud-py-L32
             model_pcd = np.asarray(model_pcl.points).reshape(3, -1).astype(np.float32)
             model = ftl_numpy2pcl(model_pcd, msg.pcl.header, None)
@@ -349,7 +348,7 @@ class Match3D(Node):
             matched_pcl_confidence = float(result.fitness)
 
             self.pubMatched[camera].publish(matched_pcl_msg)
-            self.get_logger().info("Publishing matched {} with confidence {}.".format(msg.label, result.fitness))
+            self.get_logger().info("{}:\tmatched with confidence {}.".format(msg.label, result.fitness))
             self.pubMatchedDebug[camera].publish(model) #debug, can be removed
 
         # 4/ publish TF of centroids
