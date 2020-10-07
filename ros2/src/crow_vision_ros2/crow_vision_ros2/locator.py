@@ -27,7 +27,7 @@ from ctypes import * # convert float to uint32
 
 class Locator(Node):
 
-    def __init__(self, node_name="locator", min_points_pcl=500, depth_range=(100, 1000)):
+    def __init__(self, node_name="locator", min_points_pcl=100, depth_range=(100, 1500)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud.
         @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in mm], default 10cm .. 1m. Points in cloud

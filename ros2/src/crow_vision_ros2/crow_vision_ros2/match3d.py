@@ -352,7 +352,7 @@ class Match3D(Node):
             self.pubMatchedDebug[camera].publish(model) #debug, can be removed
 
         # 4/ publish TF of centroids
-        mean = np.median(pcd.reshape(3,-1).astype(np.float32), axis=1) #TODO when it works, publish center of matched pcl, not the segmented part only
+        mean = np.median(pcd.astype(np.float32), axis=0) #TODO when it works, publish center of matched pcl, not the segmented part only
         #self.get_logger().info("Object {}: {} Centroid: {} accuracy: {}".format(msg.label, mean, msg.score))
         assert len(mean) == 3, 'incorrect mean dim'+str(mean.shape)
         self.sendPosition(self.camera_frames[self.cameras.index(camera)], msg.label, msg.header.stamp, mean)
