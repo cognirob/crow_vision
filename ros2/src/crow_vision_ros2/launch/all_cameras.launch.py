@@ -96,8 +96,8 @@ def launch_cameras(launchContext):
         launchParams = {**launchParams, **camera_frames_dict, **config_dict}
 
         camera_node = Node(
-            package='realsense2_node',
-            node_executable='realsense2_node',
+            package='realsense2_camera',
+            node_executable='realsense2_camera_node',
             node_namespace=camera_namespace,
             parameters=[launchParams],
             output='screen',
