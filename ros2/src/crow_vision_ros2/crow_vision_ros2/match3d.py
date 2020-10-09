@@ -28,12 +28,12 @@ import copy
 
 class Match3D(Node):
     """
-    Match our objects (from .STL) to the segmented point-cloud ("<cam>/detections/segmented_pointcloud") 
-    based on segmentation from 2D RGB masks (mask_msg) from YOLACT. 
-    
+    Match our objects (from .STL) to the segmented point-cloud ("<cam>/detections/segmented_pointcloud")
+    based on segmentation from 2D RGB masks (mask_msg) from YOLACT.
+
     Publish the complete matched object as SegmentedPointcloud.
     """
-    
+
     def load_models(self,
                     list_path_stl=["/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/cube_holes.stl"],
                     list_labels=["cube_holes"]):
@@ -59,7 +59,7 @@ class Match3D(Node):
 
           #2. we must scale objects to m from mm!
           mesh.scale(scale=self.obj_scale[cls], center=mesh.get_center())
-          
+
           #2. o3d.PointCloud from mesh
           orig_pcd = o3d.geometry.PointCloud()
           orig_pcd.points = mesh.vertices
@@ -79,8 +79,8 @@ class Match3D(Node):
 
     def __init__(self, node_name="match3d", voxel_size=0.001, approx_precision=0.005, fine_precision=0.001, min_support=1): #TODO make a) finer STLs (for some objects), b) merge pcl to get bigger clouds, so support can be much higher (~1000 ideally)
         """
-        @arg voxel_size: size [in m] of voxels used for sampling from our ground-truth models. Default 0.001 = 1mm in real world precision. 
-            Defines overall precision-possibilities of this module. 
+        @arg voxel_size: size [in m] of voxels used for sampling from our ground-truth models. Default 0.001 = 1mm in real world precision.
+            Defines overall precision-possibilities of this module.
         @arg approx_precision: precision in voxel_size (= in m) for global registration method (RANSAC). This is used to get a rough estimate of the object's
             position. Default 0.050 is 5cm. Use 0.0 to disable this method.
         @arg fine_precision: same as approx_precision but for local registration method (ICP). Default 0.005 = 5mm, set to 0.0 to disable.
@@ -128,7 +128,7 @@ class Match3D(Node):
 
         # map str:label -> o3d.PointCloud model
         #MODEL_PATH=str(pkg_resources.resource_filename("crow_simulation", 'envs/objects/crow/stl/'))
-        MODEL_PATH="/home/imitrob/crow_simulation/crow_simulation/envs/objects/crow/stl/"
+        MODEL_PATH = pkg_resources.resource_filename("crow_simulation", "envs/objects/crow/stl/")
         #self.objects = self.load_models()
         self.all_models = ["car_roof", "pliers", "cube_holes", "screw_round", "ex_bucket", "screwdriver", "hammer",
                 "sphere_holes", "wafer", "nut", "wheel", "peg_screw", "wrench"
@@ -147,21 +147,21 @@ class Match3D(Node):
         self.obj_scale["pliers"] = 0.02
 
         self.objects = self.load_models(list_path_stl=[
-            MODEL_PATH+"car_roof.stl", 
-            MODEL_PATH+"pliers.stl", 
-            MODEL_PATH+"cube_holes.stl", 
-            MODEL_PATH+"screw_round.stl", 
-            MODEL_PATH+"ex_bucket.stl", 
-            MODEL_PATH+"screwdriver.stl", 
-            MODEL_PATH+"hammer.stl", 
-            MODEL_PATH+"sphere_holes.stl", 
-            MODEL_PATH+"wafer.stl", 
-            MODEL_PATH+"nut.stl", 
-            MODEL_PATH+"wheel.stl", 
-            MODEL_PATH+"peg_screw.stl", 
-            MODEL_PATH+"wrench.stl", 
+            MODEL_PATH+"car_roof.stl",
+            MODEL_PATH+"pliers.stl",
+            MODEL_PATH+"cube_holes.stl",
+            MODEL_PATH+"screw_round.stl",
+            MODEL_PATH+"ex_bucket.stl",
+            MODEL_PATH+"screwdriver.stl",
+            MODEL_PATH+"hammer.stl",
+            MODEL_PATH+"sphere_holes.stl",
+            MODEL_PATH+"wafer.stl",
+            MODEL_PATH+"nut.stl",
+            MODEL_PATH+"wheel.stl",
+            MODEL_PATH+"peg_screw.stl",
+            MODEL_PATH+"wrench.stl",
        #     MODEL_PATH+"peg_simple.stl" #has too few points (36), making our min_support useless
-            ], 
+            ],
             list_labels=self.all_models
             )
 
@@ -185,7 +185,7 @@ class Match3D(Node):
                                       up=[-0.2779, -0.9482 ,0.1556])
 
 
-    def preprocess_point_cloud(self, pcd, voxel_size, min_support, label="n/a"): 
+    def preprocess_point_cloud(self, pcd, voxel_size, min_support, label="n/a"):
         """
         @arg pcd: o3d.PointCloud data
         @arg voxel_size: size of voxel meant for downsampling (->precision)
@@ -245,7 +245,7 @@ class Match3D(Node):
                 self.get_logger().info("Publishing model pcl for {} on topic '/models' ".format(model))
 
 
-        
+
         # pointcloud from msg PointCloud2 -> numpy -> o3d.PointCloud
         start = time.time()
         if True: #this block is to hide pcd, ... members from other code, only real_pcl is used further.
@@ -285,7 +285,7 @@ class Match3D(Node):
           target_down, target_fpfh = self.preprocess_point_cloud(real_pcl, voxel_size=self.fine_precision, min_support=self.min_support, label="real-approx-"+msg.label)
           # a) re-compute pcl & features for the model (which moved in step 0)
           source_down, source_fpfh = self.preprocess_point_cloud(model_pcl,voxel_size=self.fine_precision, min_support=self.min_support, label="proto-approx-"+msg.label)
-          
+
           # b) use cached downsampled model & features #TODO can we do that? or model_fpfh depends on absolute coords, which changed in step 0/ default transform?
           #source_down = self.objects[msg.label]["down"]
           #source_fpfh = self.objects[msg.label]["down_fpfh"]
@@ -298,13 +298,13 @@ class Match3D(Node):
           if applyit:
               model_pcl.transform(result.transformation)
               matched = True
-              #TODO assert the transform is in the correct direction, ie the model is moving closer. 
+              #TODO assert the transform is in the correct direction, ie the model is moving closer.
           else:
               #unsuccessful registration (why?), skip
               self.get_logger().info("RANSAC [{}]: {}\t in {}sec - {}".format(msg.label, result, (end-start),  "APPLIED" if applyit else "SKIPPED"))
               return #TODO probably should not happen, we should retry global reg. with a larger lookup tolerance?
 
-        
+
         # 2/ local registration - ICP
         # http://www.open3d.org/docs/release/tutorial/Basic/icp_registration.html#Point-to-point-ICP
         if self.fine_precision > 0 and False:
@@ -316,13 +316,13 @@ class Match3D(Node):
           # b) use cached downsampled model & features #TODO can we do that? or model_fpfh depends on absolute coords, which changed in step 0/ default transform?
           #source_fine = self.objects[msg.label]["fine"]
           #source_fpfh = self.objects[msg.label]["fine_fpfh"]
-          #TODO c) or use the unchanged originals here in the final step? - real_pcl, model_pcl 
+          #TODO c) or use the unchanged originals here in the final step? - real_pcl, model_pcl
           # source_fine = model_pcl
           # target_fine = real_pcl
 
           result = o3d.registration.registration_icp(
               source= source_fine,
-              target= target_fine, 
+              target= target_fine,
               max_correspondence_distance=self.fine_precision, #match tolerance in mm
               #init=result_ransac.transformation, #TODO bundle the TF from locator to SegmentedPointcloud and a) transform model_pcl to the real_pcl's close location; or b) provide the init as 4x4 float64 initial transform estimation (better?) #TODO2 not needed now as we move the model ourselves?
               estimation_method=o3d.registration.TransformationEstimationPointToPoint())
