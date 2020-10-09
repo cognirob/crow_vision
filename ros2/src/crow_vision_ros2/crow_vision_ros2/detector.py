@@ -154,7 +154,6 @@ class CrowVision(Node):
     preds, frame = self.cnn.process_batch(img_raw)
     if preds[0]["detection"] is None:
         return  # do not publish if nothing was detected
-
     #the input callback triggers the publishers here.
     if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
       img_labeled = self.cnn.label_image(img_raw, preds, frame)
@@ -175,10 +174,10 @@ class CrowVision(Node):
       self.ros[topic]["pub_img"].publish(msg_img)
 
     if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
-      classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds)
+      classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds, frame)
       classes = classes.astype(int).tolist()
       scores = scores.astype(float).tolist()
-      if len(classes) == 0: 
+      if len(classes) == 0:
           self.get_logger().info("No objects detected, skipping.")
           return
 
