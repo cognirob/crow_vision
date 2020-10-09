@@ -9,7 +9,8 @@
 
   <buildtool_depend>ament_python</buildtool_depend>
 
-  <depend>realsense_ros</depend>
+  <depend>realsense2_camera</depend>
+  <depend>realsense2_camera_msgs</depend>
   <depend>crow_msgs</depend>
 
   <exec_depend>rclpy</exec_depend>

@@ -9,6 +9,9 @@
 
   <buildtool_depend>ament_python</buildtool_depend>
 
+  <depend>realsense2_camera</depend>
+  <depend>realsense2_camera_msgs</depend>
+
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
