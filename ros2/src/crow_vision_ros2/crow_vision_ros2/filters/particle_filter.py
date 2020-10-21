@@ -130,10 +130,10 @@ class ParticleFilter():
     TIMER_CLASS = Timer
     DELETION_TIME_LIMIT = 10  # 10 seconds
     MAX_SHIFT_ITERS = 30
-    STATIC_NOISE = 0.05  # 5 cm
+    STATIC_NOISE = 0.1  # 5 cm
     GLOBAL_DISTANCE_LIMIT = 0.3  # limit for a model to be considered "close" to new observation
     TREE_DISTANCE_UPPER_BOUND = 0.01  # TODO: should be probably 1mm?
-    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-2  # TODO: search for optimal value
+    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-1  # TODO: search for optimal value
     PARTICLES_PCL_COUNT = 500  # how many particles to generate from measured PCLs
     PARTICLES_UNIFORM_COUNT = 100  # how many uniformly distributed particles to generate
     PARTICLES_UNIFORM_DISTANCE = 0.5  # size of circle or cube around the object in which the uniformly random ptcs should be generated
@@ -196,6 +196,8 @@ class ParticleFilter():
     def getEstimates(self):
         """Return a tuple of "xyz" position and class name (with uuid)
         """
+        if self.n_models == 0:
+            return []
         return [(xyz.numpy(), name + "_" + id[:id.find("-")]) for xyz, name, id in zip(self.model_states, self.model_class_names, self.model_uuid)]
 
     def add_measurement(self, z):

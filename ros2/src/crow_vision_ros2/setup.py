@@ -28,7 +28,8 @@ setup(
             'calibrator = crow_vision_ros2.calibrator:main',
             'locator = crow_vision_ros2.locator:main',
             'matcher = crow_vision_ros2.match3d:main',
-            'merger = crow_vision_ros2.merger:main'
+            'merger = crow_vision_ros2.merger:main',
+            'filter = crow_vision_ros2.filter_node:main'
         ],
     },
 )
