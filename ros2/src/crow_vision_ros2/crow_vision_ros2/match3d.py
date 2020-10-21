@@ -273,7 +273,8 @@ class Match3D(Node):
         diff_centers = np.abs(
                 np.median(np.asarray(model_pcl.points), axis=0, keepdims=True) #from
                 - np.median(np.asarray(real_pcl.points), axis=0, keepdims=True))[0] #to,target
-        assert (diff_centers < 0.01).all(), "Initial transform should move '{}' cloud centers together! {}".format(msg.label, diff_centers)
+        if (diff_centers > 0.01).any():
+            self.get_logger().warn("Initial transform should move '{}' cloud centers together! {}".format(msg.label, diff_centers))
 
         # 1/ (optional) fit global RANSAC
         result = None
