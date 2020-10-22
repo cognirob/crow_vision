@@ -20,6 +20,7 @@ import commentjson as json
 import pkg_resources
 import argparse
 import time
+import copy
 
 
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -156,7 +157,7 @@ class CrowVision(Node):
         return  # do not publish if nothing was detected
     #the input callback triggers the publishers here.
     if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
-      img_labeled = self.cnn.label_image(img_raw, preds, frame)
+      img_labeled = self.cnn.label_image(img_raw, copy.deepcopy(preds), copy.deepcopy(frame))
       img_labeled = cv2.cvtColor(img_labeled, cv2.COLOR_BGR2RGB)
 
       if img_labeled.ndim == 3:
