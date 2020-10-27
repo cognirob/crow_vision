@@ -129,17 +129,17 @@ class ParticleFilter():
     PARTICLES_PER_MODEL = 1000
     TIMER_CLASS = Timer
     DELETION_TIME_LIMIT = 10  # 10 seconds
-    MAX_SHIFT_ITERS = 30
-    STATIC_NOISE = 0.1  # 5 cm
-    GLOBAL_DISTANCE_LIMIT = 0.3  # limit for a model to be considered "close" to new observation
+    MAX_SHIFT_ITERS = 20
+    STATIC_NOISE = 0.01  # 5 cm
+    GLOBAL_DISTANCE_LIMIT = 0.2  # limit for a model to be considered "close" to new observation
     TREE_DISTANCE_UPPER_BOUND = 0.01  # TODO: should be probably 1mm?
-    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-1  # TODO: search for optimal value
-    PARTICLES_PCL_COUNT = 500  # how many particles to generate from measured PCLs
-    PARTICLES_UNIFORM_COUNT = 100  # how many uniformly distributed particles to generate
-    PARTICLES_UNIFORM_DISTANCE = 0.5  # size of circle or cube around the object in which the uniformly random ptcs should be generated
+    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-2  # TODO: search for optimal value
+    PARTICLES_PCL_COUNT = 200  # how many particles to generate from measured PCLs
+    PARTICLES_UNIFORM_COUNT = 200  # how many uniformly distributed particles to generate
+    PARTICLES_UNIFORM_DISTANCE = 0.7  # size of circle or cube around the object in which the uniformly random ptcs should be generated
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
-    ACCELERATION_LIMIT = 0.5  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
-    SPEED_LIMIT = 2  # 1m/s is assumed as max speed (higher values are clipped)
+    ACCELERATION_LIMIT = 0.05  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
+    SPEED_LIMIT = 0.5  # 1m/s is assumed as max speed (higher values are clipped)
 
     def __init__(self):
         self.timer = self.TIMER_CLASS()
@@ -175,7 +175,7 @@ class ParticleFilter():
         time_now = self.timer.lastTime
 
         # remove stale models
-        toBeDeleted = np.where((self.model_last_update - time_now) > self.DELETION_TIME_LIMIT)[0].tolist()
+        toBeDeleted = np.where((time_now - self.model_last_update) > self.DELETION_TIME_LIMIT)[0].tolist()
         if len(toBeDeleted) > 0:
             for tbd in toBeDeleted:
                 self._delete_model(tbd)
@@ -227,7 +227,7 @@ class ParticleFilter():
         shift_magnitudes = torch.norm(model_shifts, dim=1)
 
         not_moved_idx = shift_magnitudes < self.MODEL_SHIFT_NOISE_LIMIT
-        previously_stationary = self.model_params[:, 0, :].sum(dim=1) == 0
+        previously_stationary = self.model_params[:, 0, :].sum(dim=1) < self.MODEL_SHIFT_NOISE_LIMIT * 3
         velocity = model_shifts.div(time_delta)
         acceleration = model_shifts.sub(self._update_velocities.squeeze(1)).div(time_delta**2)
 
@@ -434,10 +434,10 @@ class ParticleFilter():
         self.particle_weights = self.particle_weights[mask, ...]
         self.model_params = self.model_params[mask, ...]
         self.model_states = self.model_states[mask, ...]
-        self.model_classes = self.model_classes[mask, ...]
-        self.model_class_history = self.model_class_history[mask, ...]
-        self.model_last_update = self.model_last_update[mask, ...]
-        self.model_uuid = self.model_uuid[mask, ...]
+        self.model_classes = self.model_classes[mask.tolist()]
+        self.model_class_history = self.model_class_history[mask.tolist(), ...]
+        self.model_last_update = self.model_last_update[mask.tolist(), ...]
+        self.model_uuid = self.model_uuid[mask.tolist(), ...]
         self.model_class_names = np.array(self.model_class_names)[torch.where(mask)[0].tolist()].tolist()
         self._update_velocities = self._update_velocities[mask, ...]
 
