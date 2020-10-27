@@ -1,4 +1,4 @@
-filters: 'pointcloud,temporal,spatial'
+filters: 'pointcloud,temporal'
 clip_distance: 3.0
 color_width: 848
 color_height: 480
