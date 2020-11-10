@@ -226,9 +226,9 @@ class ActionCollector(Node):
         if self.is_recording:
             if self.AUTO_STOP and all([self.imageBuffer[cam].full for cam in self.cameras]):
                 self.is_recording = False
-                cv2.putText(image_stack, "stopped", (20, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(image_stack, "stopped", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             else:
-                cv2.putText(image_stack, "recording", (20, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(image_stack, "recording", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
         # show window
         cv2.imshow(self.cv_win_name, image_stack)
@@ -315,9 +315,9 @@ class ActionCollector(Node):
         return {
             "camera": camera,
             "image_topic": self.image_topics[idx],
-            "camera_matrix": self.camera_instrinsics[idx]["camera_matrix"],
+            "camera_matrix": self.camera_instrinsics[idx]["camera_matrix"].tolist(),
             # "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
-            "distortion_coefficients": self.camera_instrinsics[idx]["distortion_coefficients"],
+            "distortion_coefficients": self.camera_instrinsics[idx]["distortion_coefficients"].tolist(),
             "optical_frame": self.camera_frames[idx],
         }
 
