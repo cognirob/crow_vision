@@ -128,11 +128,12 @@ class TorchRollingNDBuffer(RollingNDBuffer):
 
 class ActionCollector(Node):
     cv_win_name = "Cameras"
-    bufferLength = 180
+    BUFFER_LEGNTH = 180
     INCLUDE_PCL = False
     IMAGE_HEIGHT = 424
     IMAGE_WIDTH = 240
     AUTO_STOP = True
+    GUI_UPDATE_INTERVAL = 0.05
 
     def __init__(self, node_name="action_collector"):
         super().__init__(node_name)
@@ -177,17 +178,23 @@ class ActionCollector(Node):
             sync.registerCallback(lambda img_msg, depth_msg, pcl_msg=None, cam=cam: self.message_cb(img_msg, depth_msg, pcl_msg, cam))
             self.get_logger().info(f"Connected to {cam}")
 
-            self.imageBuffer[cam] = TorchRollingNDBuffer(self.bufferLength, (480, 848, 3), torch.uint8)
-            self.depthBuffer[cam] = TorchRollingNDBuffer(self.bufferLength, (480, 848), torch.int32)
+            # Color image buffer
+            self.imageBuffer[cam] = TorchRollingNDBuffer(self.BUFFER_LEGNTH, (480, 848, 3), torch.uint8)
+            # Depth image buffer (has to be int32, PyTorch doesn't understand uint16)
+            self.depthBuffer[cam] = TorchRollingNDBuffer(self.BUFFER_LEGNTH, (480, 848), torch.int32)
 
+        # create named window for GUI
         cv2.namedWindow(self.cv_win_name)
+
+        # setup some vars
         self.is_recording = False
         self.last_recording_saved = True
-        self.create_timer(0.05, self.gui_cb)
-
-        # OpenCV window initialization
+        self.create_timer(self.GUI_UPDATE_INTERVAL, self.gui_cb)
 
     def message_cb(self, img_msg, depth_msg, pcl_msg, camera):
+        """
+        ROS message callback. Received synchronized messages from all recorded topics (from one camera)
+        """
         image = self.cvb.imgmsg_to_cv2(img_msg, "rgb8")
         depth = self.cvb.imgmsg_to_cv2(depth_msg, "passthrough")
         if pcl_msg is not None:
@@ -199,16 +206,23 @@ class ActionCollector(Node):
         # self.get_logger().info("\t".join([str(image.shape), str(depth.shape), str(pcl.shape)]))
 
     def gui_cb(self):
+        """
+        GUI callback. It is called once every "self.GUI_UPDATE_INTERVAL" seconds.
+        """
+        # get images from all buffers
         images = [cv2.resize(self.imageBuffer[cam].top.numpy(), (self.IMAGE_HEIGHT, self.IMAGE_WIDTH), cv2.INTER_NEAREST) for cam in self.cameras if not self.imageBuffer[cam].empty]
 
-        if len(images) == 0:
+        if len(images) == 0:  # if no images were received yet, return
             return
 
-        image_row = np.hstack(images)
-        image_stack = np.vstack((
-            image_row,
-            np.zeros((30, image_row.shape[1], 3), dtype=np.uint8)
-        ))
+        image_stack = np.hstack(images)  # stack images to a single row
+        # # Optionally, append an info bar at the bottom
+        # image_stack = np.vstack((
+        #     image_stack,
+        #     np.zeros((30, image_stack.shape[1], 3), dtype=np.uint8)
+        # ))
+
+        # Put "recording" text onto image, if recording
         if self.is_recording:
             if self.AUTO_STOP and all([self.imageBuffer[cam].full for cam in self.cameras]):
                 self.is_recording = False
@@ -216,9 +230,11 @@ class ActionCollector(Node):
             else:
                 cv2.putText(image_stack, "recording", (20, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
+        # show window
         cv2.imshow(self.cv_win_name, image_stack)
         key = cv2.waitKey(10) & 0xFF
 
+        # *** Keyboard input handling ***
         if key == ord("q"):  # QUIT
             self.get_logger().info("Quitting.")
             cv2.destroyAllWindows()
@@ -249,17 +265,23 @@ class ActionCollector(Node):
             print(key)
 
     def clear_buffers(self):
+        """
+        Resets all image buffers
+        """
         for cam in self.cameras:
             self.imageBuffer[cam].clear()
             self.depthBuffer[cam].clear()
 
     def save_data(self):
+        """
+        Save data for every camera
+        """
         self.get_logger().info(f"Saving data to folder {self.rec_session}.")
-        # save data
+        # Create folder for this recording session
         os.mkdir(self.rec_session)
         os.chdir(self.rec_session)
 
-        for cam in self.cameras:
+        for cam in self.cameras:  # for every camera
             # make & change to camera folder
             os.mkdir(cam[1:])
             os.chdir(cam[1:])
@@ -276,9 +298,10 @@ class ActionCollector(Node):
                 cv2.imwrite(f"image_{i}.png", cv2.cvtColor(image.numpy(), cv2.COLOR_BGR2RGB))
 
             os.chdir("..")
+
+            # save depth data
             os.mkdir("depth")
             os.chdir("depth")
-
             depth_data = self.depthBuffer[cam].get_data()
             for i, depth in enumerate(depth_data):
                 cv2.imwrite(f"depth_{i}.png", depth.numpy().astype(np.int16))
