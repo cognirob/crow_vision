@@ -130,6 +130,9 @@ class ActionCollector(Node):
     cv_win_name = "Cameras"
     bufferLength = 180
     INCLUDE_PCL = False
+    IMAGE_HEIGHT = 424
+    IMAGE_WIDTH = 240
+    AUTO_STOP = True
 
     def __init__(self, node_name="action_collector"):
         super().__init__(node_name)
@@ -179,6 +182,7 @@ class ActionCollector(Node):
 
         cv2.namedWindow(self.cv_win_name)
         self.is_recording = False
+        self.last_recording_saved = True
         self.create_timer(0.05, self.gui_cb)
 
         # OpenCV window initialization
@@ -189,66 +193,99 @@ class ActionCollector(Node):
         if pcl_msg is not None:
             pcl, pcl_colors, _ = ftl_pcl2numpy(pcl_msg)
 
-        self.imageBuffer[camera].push(image)
-        self.depthBuffer[camera].push(depth.astype(np.int32))
+        if not(self.AUTO_STOP and self.is_recording and self.imageBuffer[camera].full):
+            self.imageBuffer[camera].push(image)
+            self.depthBuffer[camera].push(depth.astype(np.int32))
         # self.get_logger().info("\t".join([str(image.shape), str(depth.shape), str(pcl.shape)]))
 
     def gui_cb(self):
-        images = [self.imageBuffer[cam].top.numpy() for cam in self.cameras if not self.imageBuffer[cam].empty]
+        images = [cv2.resize(self.imageBuffer[cam].top.numpy(), (self.IMAGE_HEIGHT, self.IMAGE_WIDTH), cv2.INTER_NEAREST) for cam in self.cameras if not self.imageBuffer[cam].empty]
 
         if len(images) == 0:
             return
 
-        cv2.imshow(self.cv_win_name, np.hstack(images))
+        image_row = np.hstack(images)
+        image_stack = np.vstack((
+            image_row,
+            np.zeros((30, image_row.shape[1], 3), dtype=np.uint8)
+        ))
+        if self.is_recording:
+            if self.AUTO_STOP and all([self.imageBuffer[cam].full for cam in self.cameras]):
+                self.is_recording = False
+                cv2.putText(image_stack, "stopped", (20, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            else:
+                cv2.putText(image_stack, "recording", (20, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        cv2.imshow(self.cv_win_name, image_stack)
         key = cv2.waitKey(10) & 0xFF
-        if key == ord("q"):
+
+        if key == ord("q"):  # QUIT
             self.get_logger().info("Quitting.")
             cv2.destroyAllWindows()
-            # self.destroy_node()
             rclpy.try_shutdown()
             return
-        elif key == ord(" "):
+        elif key == ord("s"):  # SAVE DATA
+            self.save_data()
+        elif key == 8:  # DELETE RECORDING BUFFER
+            if not self.is_recording:
+                self.clear_buffers()
+                self.last_recording_saved = True
+                self.get_logger().info("Cleared buffers.")
+        elif key == ord(" "):  # START/STOP RECORDING
             if self.is_recording:  # was recording -> stop and save data
                 self.is_recording = False
-                self.get_logger().info(f"Saving data to folder {self.rec_session}.")
-                # save data
-                os.mkdir(self.rec_session)
-                os.chdir(self.rec_session)
-
-                for cam in self.cameras:
-                    # make & change to camera folder
-                    os.mkdir(cam[1:])
-                    os.chdir(cam[1:])
-
-                    # save camera info
-                    with open("camera_info.yaml", "w+") as f:
-                        yaml.dump(self.getCameraData(cam), f)
-
-                    # save images
-                    image_data = self.imageBuffer[cam].get_data()
-                    os.mkdir("images")
-                    os.chdir("images")
-                    for i, image in enumerate(image_data):
-                        cv2.imwrite(f"image_{i}.png", cv2.cvtColor(image.numpy(), cv2.COLOR_BGR2RGB))
-
-                    os.chdir("..")
-                    os.mkdir("depth")
-                    os.chdir("depth")
-
-                    depth_data = self.depthBuffer[cam].get_data()
-                    for i, depth in enumerate(depth_data):
-                        cv2.imwrite(f"depth_{i}.png", depth.numpy().astype(np.int16))
-                    os.chdir("../..")
-
-                os.chdir("..")
+                self.last_recording_saved = False
             else:  # wasn't recording -> start recording
-                self.get_logger().info("Started recording.")
-                self.is_recording = True
-                dt = datetime.now()
-                self.rec_session = dt.strftime("%Y-%m-%d_%H_%M_%S")
-                for cam in self.cameras:
-                    self.imageBuffer[cam].clear()
-                    self.depthBuffer[cam].clear()
+                if self.last_recording_saved:
+                    self.get_logger().info("Started recording.")
+                    self.is_recording = True
+                    self.last_recording_saved = False
+                    dt = datetime.now()
+                    self.rec_session = dt.strftime("%Y-%m-%d_%H_%M_%S")
+                    self.clear_buffers()
+                else:
+                    self.get_logger().warn("Last recording not save! Save it or delete it (backspace) before starting recording.")
+        elif key != 255:
+            print(key)
+
+    def clear_buffers(self):
+        for cam in self.cameras:
+            self.imageBuffer[cam].clear()
+            self.depthBuffer[cam].clear()
+
+    def save_data(self):
+        self.get_logger().info(f"Saving data to folder {self.rec_session}.")
+        # save data
+        os.mkdir(self.rec_session)
+        os.chdir(self.rec_session)
+
+        for cam in self.cameras:
+            # make & change to camera folder
+            os.mkdir(cam[1:])
+            os.chdir(cam[1:])
+
+            # save camera info
+            with open("camera_info.yaml", "w+") as f:
+                yaml.dump(self.getCameraData(cam), f)
+
+            # save images
+            image_data = self.imageBuffer[cam].get_data()
+            os.mkdir("images")
+            os.chdir("images")
+            for i, image in enumerate(image_data):
+                cv2.imwrite(f"image_{i}.png", cv2.cvtColor(image.numpy(), cv2.COLOR_BGR2RGB))
+
+            os.chdir("..")
+            os.mkdir("depth")
+            os.chdir("depth")
+
+            depth_data = self.depthBuffer[cam].get_data()
+            for i, depth in enumerate(depth_data):
+                cv2.imwrite(f"depth_{i}.png", depth.numpy().astype(np.int16))
+            os.chdir("../..")
+
+        os.chdir("..")
+        self.last_recording_saved = True
 
     def getCameraData(self, camera):
         idx = self.cameras.index(camera)
