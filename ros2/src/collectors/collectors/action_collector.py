@@ -19,13 +19,14 @@ import cv_bridge
 
 import pkg_resources
 import time
-from numba import jit
+#from numba import jit
 import torch
-from torchvision.utils import save_image
-from datetime import datetime
+#from torchvision.utils import save_image
+#from datetime import datetime
 import os
 import yaml
 
+#from tkinter import *
 
 class RollingNDBuffer():
 
@@ -125,13 +126,12 @@ class TorchRollingNDBuffer(RollingNDBuffer):
     def _insert_item(self, item):
         self._buffer[self._input_index, ...] = torch.tensor(item)
 
-
 class ActionCollector(Node):
     cv_win_name = "Cameras"
     BUFFER_LEGNTH = 180
     INCLUDE_PCL = False
-    IMAGE_HEIGHT = 424
-    IMAGE_WIDTH = 240
+    IMAGE_HEIGHT = 384
+    IMAGE_WIDTH = 256
     AUTO_STOP = True
     GUI_UPDATE_INTERVAL = 0.05
 
@@ -139,6 +139,7 @@ class ActionCollector(Node):
         super().__init__(node_name)
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(
             node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
+        
         while len(self.cameras) == 0:  # wait for cams to come online
             self.get_logger().warn("No cams detected, waiting 2s.")
             time.sleep(2)
@@ -187,6 +188,9 @@ class ActionCollector(Node):
         cv2.namedWindow(self.cv_win_name)
 
         # setup some vars
+        self.dircounter = 0
+        self.actionclass = 1
+        self.actionlabel = 'hammering'
         self.is_recording = False
         self.last_recording_saved = True
         self.create_timer(self.GUI_UPDATE_INTERVAL, self.gui_cb)
@@ -231,6 +235,10 @@ class ActionCollector(Node):
                 cv2.putText(image_stack, "recording", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
         # show window
+        cv2.putText(image_stack, "dir:"+ "%06d" % self.dircounter, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(image_stack, "class:"+str(self.actionlabel), (20, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        #if self.is_recording = False:
+        #cv2.putText(image_stack, "stopped", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         cv2.imshow(self.cv_win_name, image_stack)
         key = cv2.waitKey(10) & 0xFF
 
@@ -242,6 +250,37 @@ class ActionCollector(Node):
             return
         elif key == ord("s"):  # SAVE DATA
             self.save_data()
+        
+        elif key == ord("1"):  # action class
+            self.actionclass = 1
+            self.actionlabel = 'hammering'
+        
+        elif key == ord("2"):  # action class
+            self.actionclass = 2
+            self.actionlabel = 'inserting'
+    
+        elif key == ord("3"):  # action class
+            self.actionclass = 3
+            self.actionlabel = 'screwing'
+
+        elif key == ord("4"):  # action class
+            self.actionclass = 4
+            self.actionlabel = 'pulling'
+        
+        elif key == ord("5"):  # action class
+            self.actionclass = 5
+            self.actionlabel = 'taking_out'
+        
+        elif key == ord("6"):  # action class
+            self.actionclass = 6
+            self.actionlabel = 'holding'
+
+        elif key == ord("."):  # dir name change
+            self.dircounter += 1
+        
+        elif key == ord(","):  # dir name change
+            self.dircounter -= 1
+
         elif key == 8:  # DELETE RECORDING BUFFER
             if not self.is_recording:
                 self.clear_buffers()
@@ -250,14 +289,16 @@ class ActionCollector(Node):
         elif key == ord(" "):  # START/STOP RECORDING
             if self.is_recording:  # was recording -> stop and save data
                 self.is_recording = False
-                self.last_recording_saved = False
+                self.save_data()
+                self.last_recording_saved = True
             else:  # wasn't recording -> start recording
                 if self.last_recording_saved:
                     self.get_logger().info("Started recording.")
                     self.is_recording = True
                     self.last_recording_saved = False
-                    dt = datetime.now()
-                    self.rec_session = dt.strftime("%Y-%m-%d_%H_%M_%S")
+                    #dt = datetime.now()
+                    #self.rec_session = dt.strftime("%Y-%m-%d_%H_%M_%S")
+                    #self.rec_session = "%06d" % self.dircounter
                     self.clear_buffers()
                 else:
                     self.get_logger().warn("Last recording not save! Save it or delete it (backspace) before starting recording.")
@@ -276,36 +317,51 @@ class ActionCollector(Node):
         """
         Save data for every camera
         """
-        self.get_logger().info(f"Saving data to folder {self.rec_session}.")
         # Create folder for this recording session
-        os.mkdir(self.rec_session)
-        os.chdir(self.rec_session)
-
+        os.makedirs('./dataset', exist_ok=True)
+        os.chdir('./dataset')
+        
+        txtfile = open("dataset.txt","a")
         for cam in self.cameras:  # for every camera
             # make & change to camera folder
-            os.mkdir(cam[1:])
-            os.chdir(cam[1:])
+            self.rec_session = "%06d" % self.dircounter
+            self.get_logger().info(f"Saving data to folder {self.rec_session}.")
+            #os.mkdir(cam[1:])
+            #os.chdir(cam[1:])
 
-            # save camera info
+            # save dataset info
             with open("camera_info.yaml", "w+") as f:
                 yaml.dump(self.getCameraData(cam), f)
 
+
+            #cv2.imwrite(os.path.join(episode_folder, "{:06d}.jpg".format(st)),
+            #            image, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+
             # save images
             image_data = self.imageBuffer[cam].get_data()
-            os.mkdir("images")
-            os.chdir("images")
+            os.makedirs('rgb', exist_ok=True)
+            os.chdir("rgb")
+            os.makedirs(self.rec_session, exist_ok=True)
+            os.chdir(self.rec_session)
             for i, image in enumerate(image_data):
-                cv2.imwrite(f"image_{i}.png", cv2.cvtColor(image.numpy(), cv2.COLOR_BGR2RGB))
+                imname = "%06d" % i + ".jpg"
+                cv2.imwrite(imname, cv2.cvtColor(image.numpy(), cv2.COLOR_BGR2RGB))
 
-            os.chdir("..")
+            os.chdir("../..")
 
             # save depth data
-            os.mkdir("depth")
+            os.makedirs('depth', exist_ok=True)
             os.chdir("depth")
+            os.makedirs(self.rec_session,exist_ok=True)
+            os.chdir(self.rec_session)
             depth_data = self.depthBuffer[cam].get_data()
             for i, depth in enumerate(depth_data):
-                cv2.imwrite(f"depth_{i}.png", depth.numpy().astype(np.int16))
+                imname = "%06d" % i + ".jpg"
+                cv2.imwrite(imname, depth.numpy().astype(np.int16))
+            
             os.chdir("../..")
+            txtfile.write(self.rec_session + ' ' + str(i) + ' ' + str(self.actionclass) + '\n')
+            self.dircounter +=1
 
         os.chdir("..")
         self.last_recording_saved = True

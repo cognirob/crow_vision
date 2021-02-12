@@ -8,6 +8,7 @@ __pycache__/
 build/
 log/
 install/
+dataset/
 **_ws/
 ros2/src/ros2_intel_realsense/**
 ros2/src/crow_vision_yolact/**
