@@ -232,7 +232,7 @@ class ActionCollector(Node):
                 self.is_recording = False
                 cv2.putText(image_stack, "stopped", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             else:
-                cv2.putText(image_stack, "recording", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(image_stack, "recording", (20, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # show window
         cv2.putText(image_stack, "dir:"+ "%06d" % self.dircounter, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
@@ -252,28 +252,36 @@ class ActionCollector(Node):
             self.save_data()
         
         elif key == ord("1"):  # action class
-            self.actionclass = 1
+            self.actionclass = 175
             self.actionlabel = 'hammering'
         
         elif key == ord("2"):  # action class
-            self.actionclass = 2
+            self.actionclass = 176
             self.actionlabel = 'inserting'
     
         elif key == ord("3"):  # action class
-            self.actionclass = 3
+            self.actionclass = 177
             self.actionlabel = 'screwing'
 
         elif key == ord("4"):  # action class
-            self.actionclass = 4
+            self.actionclass = 178
             self.actionlabel = 'pulling'
         
         elif key == ord("5"):  # action class
-            self.actionclass = 5
+            self.actionclass = 179
             self.actionlabel = 'taking_out'
         
         elif key == ord("6"):  # action class
-            self.actionclass = 6
+            self.actionclass = 180
             self.actionlabel = 'holding'
+        
+        elif key == ord("7"):  # action class
+            self.actionclass = 181
+            self.actionlabel = 'wrenching'
+        
+        elif key == ord("8"):  # action class
+            self.actionclass = 182
+            self.actionlabel = 'handscrewing'
 
         elif key == ord("."):  # dir name change
             self.dircounter += 1
