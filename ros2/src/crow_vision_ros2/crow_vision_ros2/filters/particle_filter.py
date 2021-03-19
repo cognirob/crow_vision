@@ -160,6 +160,7 @@ class ParticleFilter():
         self.model_class_names = None  # ndarray Qx1
         self.model_last_update = None  # ndarray Qx1
         self.model_uuid = None  # ndarray of str Q,
+        self.model_pcl_dimensions = None  # ndarray Qx3
         self.n_models = 0
         self.observations = []
         self.__uniform_noise_generator = torch.distributions.uniform.Uniform(-self.PARTICLES_UNIFORM_DISTANCE, self.PARTICLES_UNIFORM_DISTANCE)
@@ -207,7 +208,7 @@ class ParticleFilter():
         if self.n_models == 0:
             return []
         #return [(xyz.numpy(), name + "_" + id[:id.find("-")]) for xyz, name, id in zip(self.model_states, self.model_class_names, self.model_uuid)]
-        return [(xyz.numpy(), name) for xyz, name in zip(self.model_states, self.model_class_names)]
+        return [(xyz.numpy(), name, pcl_dim) for xyz, name, pcl_dim in zip(self.model_states, self.model_class_names, self.model_pcl_dimensions)]
 
     def add_measurement(self, z):
         self.observations.append(z)
@@ -281,6 +282,8 @@ class ParticleFilter():
                 continue
             # compute PCL center
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
+            # compute PCL dimension
+            pcl_dimension = (np.max(pcl, axis=0) - np.min(pcl, axis=0)).reshape(1, 3)
             # compute distances
             distances2models = torch.norm(self.model_states.sub(tensor(pcl_center, dtype=torch.float32)), dim=1)
             mclose = distances2models < self.GLOBAL_DISTANCE_LIMIT  # TODO: th based on model sigma
@@ -304,11 +307,11 @@ class ParticleFilter():
                 # calculate model with highest probability
                 if np.any(close_models) and np.max(close_models) > self.CLOSE_MODEL_PROBABILITY_THRESHOLD:
                     closest_model = np.argmax(close_models)
-                    self._append_pcl_to_model(closest_model, pcl, label, pcl_center)
+                    self._append_pcl_to_model(closest_model, pcl, label, pcl_center, pcl_dimension)
                 else:
-                    self._add_model(pcl, label, pcl_center)
+                    self._add_model(pcl, label, pcl_center, pcl_dimension)
             else:  # no model is close, add new model
-                self._add_model(pcl, label, pcl_center)
+                self._add_model(pcl, label, pcl_center, pcl_dimension)
 
         # go through aggregated PCLs for each model
         for idx, mpcls in enumerate(self._model_pcls):
@@ -316,10 +319,12 @@ class ParticleFilter():
                 continue
             pcls = np.empty((0, 3), dtype=np.float)
             pcl_centers = np.empty((0, 3), dtype=np.float)
+            pcl_dimensions = np.empty((0, 3), dtype=np.float)
             labels = []
-            for pcl, pcl_center, label in mpcls:
+            for pcl, pcl_center, pcl_dimension, label in mpcls:
                 pcls = np.vstack((pcls, pcl))
                 pcl_centers = np.vstack((pcl_centers, pcl_center))
+                pcl_dimensions = np.vstack((pcl_dimensions, pcl_dimension))
                 labels.append(label)
             # aggregate labels from PCLs
             self.model_class_history[idx, :] = np.roll(self.model_class_history[idx, :], -1, axis=0)  # shift old data out
@@ -377,17 +382,21 @@ class ParticleFilter():
     def _generate_uniform_noise(self, mean):
         return self.__uniform_noise_generator.sample(self.__uniform_noise_size).add_(mean)
 
-    def _append_pcl_to_model(self, model_idx, pcl, est_class, pcl_center=None):
+    def _append_pcl_to_model(self, model_idx, pcl, est_class, pcl_center=None, pcl_dimension=None):
         if pcl_center is None:
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
+        if pcl_dimension is None:
+            pcl_dimension = (np.max(pcl, axis=0) - np.min(pcl, axis=0)).reshape(1, 3)
         if self._model_pcls[model_idx] is None:
-            self._model_pcls[model_idx] = [(pcl, pcl_center, est_class)]
+            self._model_pcls[model_idx] = [(pcl, pcl_center, pcl_dimension, est_class)]
         else:
-            self._model_pcls[model_idx].append((pcl, pcl_center, est_class))
+            self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class))
 
-    def _add_model(self, pcl, class_est, pcl_center=None):
+    def _add_model(self, pcl, class_est, pcl_center=None, pcl_dimension=None):
         if pcl_center is None:
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
+        if pcl_dimension is None:
+            pcl_dimension = (np.max(pcl, axis=0) - np.min(pcl, axis=0)).reshape(1, 3)
 
         n_pcl = pcl.shape[0]
 
@@ -418,6 +427,7 @@ class ParticleFilter():
             self.model_last_update = np.r_[last_update]
             self.model_uuid = np.array([id])
             self.model_class_names = class_name
+            self.model_pcl_dimensions = pcl_dimension
             self._update_velocities = update_velocity
         else:
             self.model_particles = torch.cat((self.model_particles, m_particles))
@@ -429,11 +439,12 @@ class ParticleFilter():
             self.model_last_update = np.r_[self.model_last_update, last_update]
             self.model_uuid = np.hstack((self.model_uuid, id))
             self.model_class_names += class_name
+            self.model_pcl_dimensions = np.r_[self.model_pcl_dimensions, pcl_dimension]
             self._update_velocities = torch.cat((self._update_velocities, update_velocity))
 
         self._model_pcls = np.hstack((self._model_pcls, None))
         self._model_trees = np.hstack((self._model_trees, None))
-        self._append_pcl_to_model(self.n_models, pcl, class_est, pcl_center)
+        self._append_pcl_to_model(self.n_models, pcl, class_est, pcl_center, pcl_dimension)
         self.n_models += 1
 
     def _delete_model(self, model_number):
@@ -448,6 +459,7 @@ class ParticleFilter():
         self.model_last_update = self.model_last_update[mask.tolist(), ...]
         self.model_uuid = self.model_uuid[mask.tolist(), ...]
         self.model_class_names = np.array(self.model_class_names)[torch.where(mask)[0].tolist()].tolist()
+        self.model_pcl_dimensions = self.model_pcl_dimensions[mask.tolist(), ...]
         self._update_velocities = self._update_velocities[mask, ...]
 
         self.n_models -= 1
