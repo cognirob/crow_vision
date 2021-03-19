@@ -30,6 +30,7 @@ class ParticleFilterNode(Node):
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
+        # Get existing cameras from and topics from the calibrator
         self.cameras = []
         while(len(self.cameras) == 0):
             try:
@@ -38,10 +39,10 @@ class ParticleFilterNode(Node):
                 self.get_logger().error("getting cameras failed. Retrying in 2s")
                 time.sleep(2)
         assert len(self.cameras) > 0
-
+        # create necessary topics to get detected PCLs
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
 
-        self.particle_filter = ParticleFilter()
+        self.particle_filter = ParticleFilter()  # the main component
 
         qos = QoSProfile(
             depth=10,
@@ -54,14 +55,15 @@ class ParticleFilterNode(Node):
             self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
             # self.cache.registerCallback(self.cache_cb)
 
-        self.lastFilterUpdate = self.get_clock().now()
-        self.lastMeasurement = self.get_clock().now()
+        self.lastFilterUpdate = self.get_clock().now()  # when was the filter last update (called pf.update())
+        self.lastMeasurement = self.get_clock().now()  # timestamp of the last measurement (last segmented PCL message processed)
         self.updateWindowDuration = rclpy.time.Duration(seconds=0.05)
         self.timeSlipWindow = rclpy.time.Duration(seconds=1.5)
         self.measurementTolerance = rclpy.time.Duration(seconds=0.00001)
         self.lastUpdateMeasurementDDiff = rclpy.time.Duration(seconds=2)
+        # Publisher for the output of the filter
         self.filtered_publisher = self.create_publisher(PoseArray, "filtered_poses", qos)
-        self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update)
+        self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update)  # this callback is called periodically to handle everyhing
 
     def add_and_process(self, messages):
         if type(messages) is not list:
@@ -111,9 +113,11 @@ class ParticleFilterNode(Node):
             self.filtered_publisher.publish(pose_array_msg)
 
     def filter_update(self):
-        latest_time = self.cache.getLastestTime()
-        if latest_time is not None:
-
+        """Main function, periodically called by rclpy.Timer
+        """
+        latest_time = self.cache.getLastestTime()  # get the time of the last message received
+        if latest_time is not None:  # None -> there are no messages
+            # Find timestamp of the oldest message that wasn't processed, yet
             oldest_time = self.cache.getOldestTime()
             # orig_oldest = oldest_time.seconds_nanoseconds
             # if oldest_time <= (self.lastFilterUpdate - self.timeSlipWindow):
@@ -124,7 +128,7 @@ class ParticleFilterNode(Node):
                 oldest_time = self.lastMeasurement
                 # oldest_time += self.measurementTolerance
 
-            anyupdate = False
+            anyupdate = False  # helper var to see if there was some update
             while oldest_time <= latest_time:
                 next_time = oldest_time + self.updateWindowDuration
                 messages = self.cache.getInterval(oldest_time, next_time)
