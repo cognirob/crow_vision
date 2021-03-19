@@ -1,15 +1,18 @@
+align_depth: True
 filters: 'pointcloud,temporal'
 clip_distance: 3.0
 color_width: 848
 color_height: 480
-color_fps: 30.0
+color_fps: 5.0
 depth_width: 848
 depth_height: 480
-depth_fps: 30.0
+depth_fps: 15.0
 enable_pointcloud: True
 dense_pointcloud: True
-device_type: 'd435'
-initial_reset: True
+enable_fisheye: False
+enable_sync: True
+# device_type: 'd435'
+# initial_reset: True
 rgb_camera:
     auto_exposure_priority: True
     backlight_compensation: True
@@ -28,7 +31,7 @@ stereo_module:
     frames_queue_size: 16
     inter_cam_sync_mode: 0
     laser_power: 150.0
-    visual_preset: 3
+    visual_preset: 4  # 3=hi-acc; 4=hi-dens
 temporal:
     filter_smooth_alpha: 0.3
     filter_smooth_delta: 30

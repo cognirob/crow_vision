@@ -1,13 +1,13 @@
 clip_distance: 3.0
 color_width: 848
 color_height: 480
-color_fps: 60.0
+color_fps: 5.0
 depth_width: 848
 depth_height: 480
-depth_fps: 60.0
+depth_fps: 15.0
 enable_pointcloud: True
 dense_pointcloud: False
-device_type: 'd435'
+# device_type: 'd435'
 initial_reset: False
 rgb_camera:
     auto_exposure_priority: True
@@ -28,4 +28,4 @@ stereo_module:
     inter_cam_sync_mode: 0
     laser_power: 150.0
     visual_preset: 3
-allow_no_texture_points: False
+allow_no_texture_points: True
