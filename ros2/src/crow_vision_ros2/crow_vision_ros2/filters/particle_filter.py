@@ -119,6 +119,14 @@ object_properties = {
     13: {
         "name": "wrench",
         "sigma": 0.2  # TODO
+    },
+    14: {
+        "name": "hand",
+        "sigma": 0.2  # TODO
+    },
+    15: {
+        "name": "kuka",
+        "sigma": 0.2  # TODO
     }
 }
 
@@ -198,7 +206,8 @@ class ParticleFilter():
         """
         if self.n_models == 0:
             return []
-        return [(xyz.numpy(), name + "_" + id[:id.find("-")]) for xyz, name, id in zip(self.model_states, self.model_class_names, self.model_uuid)]
+        #return [(xyz.numpy(), name + "_" + id[:id.find("-")]) for xyz, name, id in zip(self.model_states, self.model_class_names, self.model_uuid)]
+        return [(xyz.numpy(), name) for xyz, name in zip(self.model_states, self.model_class_names)]
 
     def add_measurement(self, z):
         self.observations.append(z)
