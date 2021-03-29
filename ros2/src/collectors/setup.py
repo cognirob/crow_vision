@@ -23,7 +23,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'action_collector = collectors.action_collector:main'
+            'action_collector = collectors.action_collector:main',
+            'image_collector = collectors.calib_collector:main'
         ],
     },
 )
