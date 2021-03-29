@@ -14,6 +14,7 @@ from crow_vision_ros2.filters import ParticleFilter, object_properties
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
+from crow_msgs.msg import FilteredPose, PclDimensions
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -62,8 +63,8 @@ class ParticleFilterNode(Node):
         self.measurementTolerance = rclpy.time.Duration(seconds=0.00001)
         self.lastUpdateMeasurementDDiff = rclpy.time.Duration(seconds=2)
         # Publisher for the output of the filter
-        self.filtered_publisher = self.create_publisher(PoseArray, "filtered_poses", qos)
-        self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update)  # this callback is called periodically to handle everyhing
+        self.filtered_publisher = self.create_publisher(FilteredPose, "filtered_poses", qos)
+        self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
 
     def add_and_process(self, messages):
         if type(messages) is not list:
@@ -103,11 +104,18 @@ class ParticleFilterNode(Node):
             estimates = self.particle_filter.getEstimates()
             self.get_logger().info(str(estimates))
             poses = []
-            for pose, label in estimates:
+            dimensions = []
+            labels = []
+            for pose, label, dims in estimates:
                 pose_msg = Pose()
                 pose_msg.position.x, pose_msg.position.y, pose_msg.position.z = pose.tolist()
                 poses.append(pose_msg)
-            pose_array_msg = PoseArray(poses=poses)
+                dim_msg = PclDimensions(dimensions=dims)
+                dimensions.append(dim_msg)
+                labels.append(label)
+            pose_array_msg = FilteredPose(poses=poses)
+            pose_array_msg.size = dimensions
+            pose_array_msg.label = labels
             pose_array_msg.header.stamp = self.get_clock().now().to_msg()
             pose_array_msg.header.frame_id = self.frame_id
             self.filtered_publisher.publish(pose_array_msg)
