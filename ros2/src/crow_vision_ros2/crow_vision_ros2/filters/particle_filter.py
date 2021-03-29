@@ -140,6 +140,9 @@ class ParticleFilter():
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
     ACCELERATION_LIMIT = 0.05  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
     SPEED_LIMIT = 0.5  # 1m/s is assumed as max speed (higher values are clipped)
+    NEW_MODEL_MIN_UPDATES = 2  # minimum number of measurements required for new model to be reported
+    NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
+    REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
 
     def __init__(self):
         self.timer = self.TIMER_CLASS()
@@ -151,6 +154,7 @@ class ParticleFilter():
         self.model_class_history = None  # ndarray QxH
         self.model_class_names = None  # ndarray Qx1
         self.model_last_update = None  # ndarray Qx1
+        self.model_n_updates = None  # ndarray Qx1
         self.model_uuid = None  # ndarray of str Q,
         self.n_models = 0
         self.observations = []
