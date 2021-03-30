@@ -106,16 +106,19 @@ class ParticleFilterNode(Node):
             poses = []
             dimensions = []
             labels = []
-            for pose, label, dims in estimates:
+            uuids = []
+            for pose, label, dims, uuid in estimates:
                 pose_msg = Pose()
                 pose_msg.position.x, pose_msg.position.y, pose_msg.position.z = pose.tolist()
                 poses.append(pose_msg)
                 dim_msg = PclDimensions(dimensions=dims)
                 dimensions.append(dim_msg)
                 labels.append(label)
+                uuids.append(uuid)
             pose_array_msg = FilteredPose(poses=poses)
             pose_array_msg.size = dimensions
             pose_array_msg.label = labels
+            pose_array_msg.uuid = uuids
             pose_array_msg.header.stamp = self.get_clock().now().to_msg()
             pose_array_msg.header.frame_id = self.frame_id
             self.filtered_publisher.publish(pose_array_msg)

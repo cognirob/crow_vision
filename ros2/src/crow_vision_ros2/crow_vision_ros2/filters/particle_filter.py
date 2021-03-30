@@ -268,7 +268,7 @@ class ParticleFilter():
         if self.n_models == 0:
             return []
         #return [(xyz.numpy(), name + "_" + id[:id.find("-")]) for xyz, name, id in zip(self.model_states, self.model_class_names, self.model_uuid)]
-        return [(xyz.numpy(), name, pcl_dim) for xyz, name, pcl_dim in zip(self.model_states, self.model_class_names, self.model_pcl_dimensions)]
+        return [(xyz.numpy(), name, pcl_dim, uuid) for xyz, name, pcl_dim, uuid in zip(self.model_states, self.model_class_names, self.model_pcl_dimensions, self.model_uuid)]
 
     def add_measurement(self, z):
         self.observations.append(z)
