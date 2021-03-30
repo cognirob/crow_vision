@@ -67,13 +67,14 @@ def launch_cameras(launchContext):
 
     camera_namespaces = []
     for cam_id, device in enumerate(devices):
-        if device.get_info(rs.camera_info.name).lower() == 'platform camera':
+        cam_name = device.get_info(rs.camera_info.name)
+        if cam_name.lower() == 'platform camera':
             continue
 
         camera_namespace = f"camera{cam_id + 1}"
         camera_namespaces.append("/" + camera_namespace)
         device_serial = str(device.get_info(rs.camera_info.serial_number))
-        camera_configs.append(LogInfo(msg=f"Launching device with serial number {device_serial} in namespace /{camera_namespace}."))
+        camera_configs.append(LogInfo(msg=f"Launching device {cam_name} with serial number {device_serial} in namespace /{camera_namespace}."))
 
         camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
         camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
@@ -87,10 +88,12 @@ def launch_cameras(launchContext):
         with open(config_file, "r") as f:
             config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
-        launchParams = {'align_depth': True,
+        print(device_serial)
+        launchParams = {
+            'align_depth': True,
                         'enable_infra1': False,
                         'enable_infra2': False,
-                        'serial_no': device_serial,
+                        'serial_no': "_" + device_serial,
                         }
 
         launchParams = {**launchParams, **camera_frames_dict, **config_dict}
