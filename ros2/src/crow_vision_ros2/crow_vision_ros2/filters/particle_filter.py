@@ -127,7 +127,63 @@ object_properties = {
     15: {
         "name": "kuka",
         "sigma": 0.2  # TODO
-    }
+    },
+    16: {
+        "name": "hammer_handle",
+        "sigma": 0.1  # TODO
+    },
+    17: {
+        "name": "hammer_head",
+        "sigma": 0.1  # TODO
+    },
+    18: {
+        "name": "pliers_handle",
+        "sigma": 0.1  # TODO
+    },
+    19: {
+        "name": "pliers_head",
+        "sigma": 0.1  # TODO
+    },
+    20: {
+        "name": "screw_round_thread",
+        "sigma": 0.2  # TODO
+    },
+    21: {
+        "name": "screw_round_head",
+        "sigma": 0.02  # TODO
+    },
+    22: {
+        "name": "screwdriver_handle",
+        "sigma": 0.11  # TODO
+    },
+    23: {
+        "name": "screwdriver_head",
+        "sigma": 0.1  # TODO
+    },
+    24: {
+        "name": "wrench_handle",
+        "sigma": 0.1  # TODO
+    },
+    25: {
+        "name": "wrench_open",
+        "sigma": 0.05  # TODO
+    },
+    26: {
+        "name": "wrench_ring",
+        "sigma": 0.05  # TODO
+    },
+    27: {
+        "name": "peg_screw_shank",
+        "sigma": 0.05  # TODO
+    },
+    28: {
+        "name": "peg_screw_thread",
+        "sigma": 0.05  # TODO
+    },
+    29: {
+        "name": "kuka_gripper",
+        "sigma": 0.1  # TODO
+    },
 }
 
 

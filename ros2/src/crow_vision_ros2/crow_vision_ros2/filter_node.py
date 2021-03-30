@@ -81,7 +81,7 @@ class ParticleFilterNode(Node):
                 latest = rclpy.time.Time.from_msg(pcl_msg.header.stamp)
             label = pcl_msg.label
             try:
-                class_id = next((k for k, v in object_properties.items() if label in v["name"]))
+                class_id = next((k for k, v in object_properties.items() if label == v["name"]))
             except StopIteration as e:
                 class_id = -1
 
