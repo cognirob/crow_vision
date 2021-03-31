@@ -103,7 +103,7 @@ def launch_cameras(launchContext):
             node_executable='realsense2_camera_node',
             node_namespace=camera_namespace,
             parameters=[launchParams],
-            output='screen',
+            output='log',
             emulate_tty=True
         )
         camera_configs.append(camera_node)
