@@ -41,16 +41,13 @@ def generate_launch_description():
 
     #TODO merger (merge pcl from cameras)
 
-    #4. matcher (IPC object fitting)
-    matcher_node = launch_ros.actions.Node(
+    # #4. filter
+    filter_node = launch_ros.actions.Node(
         package='crow_vision_ros2',
-        node_executable='matcher',
+        node_executable='filter',
         output='screen'
     )
-    launchConfigs.append(matcher_node)
-
-    #TODO tracker (trajectory tracking)
-
+    launchConfigs.append(filter_node)
 
     launchDescription = LaunchDescription(launchConfigs)
 
