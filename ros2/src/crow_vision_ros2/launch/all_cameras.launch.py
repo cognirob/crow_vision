@@ -88,7 +88,7 @@ def launch_cameras(launchContext):
         with open(config_file, "r") as f:
             config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
-        print(device_serial)
+        # print(device_serial)
         launchParams = {
             'align_depth': True,
                         'enable_infra1': False,
