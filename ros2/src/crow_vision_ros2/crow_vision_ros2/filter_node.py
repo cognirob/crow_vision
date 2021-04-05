@@ -43,6 +43,7 @@ class ParticleFilterNode(Node):
         # create necessary topics to get detected PCLs
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
 
+        #time.sleep(5)
         self.particle_filter = ParticleFilter()  # the main component
 
         qos = QoSProfile(
@@ -80,13 +81,14 @@ class ParticleFilterNode(Node):
             if latest < rclpy.time.Time.from_msg(pcl_msg.header.stamp):
                 latest = rclpy.time.Time.from_msg(pcl_msg.header.stamp)
             label = pcl_msg.label
+            score = pcl_msg.confidence
             try:
                 class_id = next((k for k, v in object_properties.items() if label == v["name"]))
             except StopIteration as e:
                 class_id = -1
 
             pcl, _, _ = ftl_pcl2numpy(pcl_msg.pcl)
-            self.particle_filter.add_measurement((pcl, class_id))
+            self.particle_filter.add_measurement((pcl, class_id, score))
 
         now = self.get_clock().now()
         self.lastMeasurement = latest
@@ -102,7 +104,7 @@ class ParticleFilterNode(Node):
 
         if self.particle_filter.n_models > 0:
             estimates = self.particle_filter.getEstimates()
-            self.get_logger().info(str(estimates))
+            #self.get_logger().info(str(estimates))
             poses = []
             dimensions = []
             labels = []
@@ -115,6 +117,7 @@ class ParticleFilterNode(Node):
                 dimensions.append(dim_msg)
                 labels.append(label)
                 uuids.append(uuid)
+            self.get_logger().info('Publishing objects:' + str(labels))
             pose_array_msg = FilteredPose(poses=poses)
             pose_array_msg.size = dimensions
             pose_array_msg.label = labels
@@ -140,7 +143,7 @@ class ParticleFilterNode(Node):
                 # oldest_time += self.measurementTolerance
 
             anyupdate = False  # helper var to see if there was some update
-            while oldest_time <= latest_time:
+            while oldest_time < latest_time:
                 next_time = oldest_time + self.updateWindowDuration
                 messages = self.cache.getInterval(oldest_time, next_time)
                 oldest_time = next_time
@@ -169,7 +172,7 @@ class ParticleFilterNode(Node):
             class_id = -1
 
         pcl, _, _ = ftl_pcl2numpy(pcl_msg.pcl)
-        self.particle_filter.add_measurement((pcl, class_id))
+        self.particle_filter.add_measurement((pcl, class_id, score))
 
 
 def main():

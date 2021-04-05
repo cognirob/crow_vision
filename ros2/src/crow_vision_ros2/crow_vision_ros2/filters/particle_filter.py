@@ -66,123 +66,123 @@ class Timer():
 object_properties = {
     0: {
         "name": "car_roof",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     1: {
         "name": "cube_holes",
-        "sigma": 0.05
+        "sigma": 0.01
     },
     2: {
         "name": "ex_bucket",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     3: {
         "name": "hammer",
-        "sigma": 0.0  # TODO
+        "sigma": 0.01  # TODO
     },
     4: {
         "name": "nut",
-        "sigma": 0.025
+        "sigma": 0.01
     },
     5: {
         "name": "peg_screw",
-        "sigma": 0.06
+        "sigma": 0.01
     },
     6: {
         "name": "peg_simple",
-        "sigma": 0.06
+        "sigma": 0.01
     },
     7: {
         "name": "pliers",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     8: {
         "name": "screw_round",
-        "sigma": 0.13
+        "sigma": 0.01
     },
     9: {
         "name": "screwdriver",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     10: {
         "name": "sphere_holes",
-        "sigma": 0.05  # TODO
+        "sigma": 0.01  # TODO
     },
     11: {
         "name": "wafer",
-        "sigma": 0.05  # TODO
+        "sigma": 0.01  # TODO
     },
     12: {
         "name": "wheel",
-        "sigma": 0.075
+        "sigma": 0.01
     },
     13: {
         "name": "wrench",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     14: {
         "name": "hand",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     15: {
         "name": "kuka",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     16: {
         "name": "hammer_handle",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     17: {
         "name": "hammer_head",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     18: {
         "name": "pliers_handle",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     19: {
         "name": "pliers_head",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     20: {
         "name": "screw_round_thread",
-        "sigma": 0.2  # TODO
+        "sigma": 0.01  # TODO
     },
     21: {
         "name": "screw_round_head",
-        "sigma": 0.02  # TODO
+        "sigma": 0.01  # TODO
     },
     22: {
         "name": "screwdriver_handle",
-        "sigma": 0.11  # TODO
+        "sigma": 0.01  # TODO
     },
     23: {
         "name": "screwdriver_head",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     24: {
         "name": "wrench_handle",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
     25: {
         "name": "wrench_open",
-        "sigma": 0.05  # TODO
+        "sigma": 0.01  # TODO
     },
     26: {
         "name": "wrench_ring",
-        "sigma": 0.05  # TODO
+        "sigma": 0.01  # TODO
     },
     27: {
         "name": "peg_screw_shank",
-        "sigma": 0.05  # TODO
+        "sigma": 0.01  # TODO
     },
     28: {
         "name": "peg_screw_thread",
-        "sigma": 0.05  # TODO
+        "sigma": 0.01  # TODO
     },
     29: {
         "name": "kuka_gripper",
-        "sigma": 0.1  # TODO
+        "sigma": 0.01  # TODO
     },
 }
 
@@ -215,13 +215,16 @@ class ParticleFilter():
         self.model_params = None  # tensor Qx2x3  (3-velocity & 3-acceleration)
         self.model_states = None  # tensor Qx3  (estimated position)
         self.model_classes = None  # ndarray Qx1
+        self.model_classes_scores = None  # ndarray Qx1
         self.model_class_history = None  # ndarray QxH
         self.model_class_names = None  # ndarray Qx1
         self.model_last_update = None  # ndarray Qx1
+        self.model_first_update = None  # ndarray Qx1
         self.model_n_updates = None  # ndarray Qx1
         self.model_uuid = None  # ndarray of str Q,
         self.model_pcl_dimensions = None  # ndarray Qx3
         self.n_models = 0
+        self.last_filter_update = 0
         self.observations = []
         self.__uniform_noise_generator = torch.distributions.uniform.Uniform(-self.PARTICLES_UNIFORM_DISTANCE, self.PARTICLES_UNIFORM_DISTANCE)
         self.__uniform_noise_size = torch.Size((self.PARTICLES_UNIFORM_COUNT, 3))
@@ -267,8 +270,14 @@ class ParticleFilter():
         """
         if self.n_models == 0:
             return []
-        #return [(xyz.numpy(), name + "_" + id[:id.find("-")]) for xyz, name, id in zip(self.model_states, self.model_class_names, self.model_uuid)]
-        return [(xyz.numpy(), name, pcl_dim, uuid) for xyz, name, pcl_dim, uuid in zip(self.model_states, self.model_class_names, self.model_pcl_dimensions, self.model_uuid)]
+        ests = []
+        for i in range(self.n_models):
+            n_updates = self.model_n_updates[i]
+            time_diff = self.timer.now - self.model_first_update[i]
+            if (n_updates >= self.NEW_MODEL_MIN_UPDATES) and (time_diff >= self.NEW_MODEL_TTL):
+                if (self.REPORT_FRESH_MODELS_ONLY==False) or (self.last_filter_update <= self.model_last_update[i]):
+                    ests.append((self.model_states[i].numpy(), self.model_class_names[i], self.model_pcl_dimensions[i], self.model_uuid[i]))
+        return ests
 
     def add_measurement(self, z):
         self.observations.append(z)
@@ -314,7 +323,7 @@ class ParticleFilter():
         """
 
     def _estimate_classes(self):
-        # update classes
+        # update classes @TODO: include score information
         cls_estimate = mode(self.model_class_history, axis=1, nan_policy="propagate")[0]
         cls_estimate[np.isnan(cls_estimate)] = -1
         self.model_classes = cls_estimate.ravel()
@@ -333,12 +342,13 @@ class ParticleFilter():
         # helper variables
         self._model_pcls = np.empty(self.n_models, dtype=np.object)
         self._model_trees = np.empty(self.n_models, dtype=np.object)
+        self.last_filter_update = self.timer.now
 
         # go through every observation
-        for pcl, label in self.observations:
+        for pcl, label, score in self.observations:
             assert pcl.shape[1] == 3
             if self.n_models == 0:  # no models exists -> automatically create model for each PCL
-                self._add_model(pcl, label)
+                self._add_model(pcl, label, score)
                 continue
             # compute PCL center
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
@@ -367,11 +377,11 @@ class ParticleFilter():
                 # calculate model with highest probability
                 if np.any(close_models) and np.max(close_models) > self.CLOSE_MODEL_PROBABILITY_THRESHOLD:
                     closest_model = np.argmax(close_models)
-                    self._append_pcl_to_model(closest_model, pcl, label, pcl_center, pcl_dimension)
+                    self._append_pcl_to_model(closest_model, pcl, label, score, pcl_center, pcl_dimension)
                 else:
-                    self._add_model(pcl, label, pcl_center, pcl_dimension)
+                    self._add_model(pcl, label, score, pcl_center, pcl_dimension)
             else:  # no model is close, add new model
-                self._add_model(pcl, label, pcl_center, pcl_dimension)
+                self._add_model(pcl, label, score, pcl_center, pcl_dimension)
 
         # go through aggregated PCLs for each model
         for idx, mpcls in enumerate(self._model_pcls):
@@ -381,7 +391,7 @@ class ParticleFilter():
             pcl_centers = np.empty((0, 3), dtype=np.float)
             pcl_dimensions = np.empty((0, 3), dtype=np.float)
             labels = []
-            for pcl, pcl_center, pcl_dimension, label in mpcls:
+            for pcl, pcl_center, pcl_dimension, label, score in mpcls:
                 pcls = np.vstack((pcls, pcl))
                 pcl_centers = np.vstack((pcl_centers, pcl_center))
                 pcl_dimensions = np.vstack((pcl_dimensions, pcl_dimension))
@@ -442,17 +452,19 @@ class ParticleFilter():
     def _generate_uniform_noise(self, mean):
         return self.__uniform_noise_generator.sample(self.__uniform_noise_size).add_(mean)
 
-    def _append_pcl_to_model(self, model_idx, pcl, est_class, pcl_center=None, pcl_dimension=None):
+    def _append_pcl_to_model(self, model_idx, pcl, est_class, score, pcl_center=None, pcl_dimension=None):
         if pcl_center is None:
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
         if pcl_dimension is None:
             pcl_dimension = (np.max(pcl, axis=0) - np.min(pcl, axis=0)).reshape(1, 3)
         if self._model_pcls[model_idx] is None:
-            self._model_pcls[model_idx] = [(pcl, pcl_center, pcl_dimension, est_class)]
+            self._model_pcls[model_idx] = [(pcl, pcl_center, pcl_dimension, est_class, score)]
         else:
-            self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class))
+            self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class, score))
+        self.model_n_updates[model_idx] += 1 #update = receive and append new measurement (pcl) to existing model
+        self.model_last_update[model_idx] = self.timer.now #update = receive and append new measurement (pcl) to existing model
 
-    def _add_model(self, pcl, class_est, pcl_center=None, pcl_dimension=None):
+    def _add_model(self, pcl, class_est, score, pcl_center=None, pcl_dimension=None):
         if pcl_center is None:
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
         if pcl_dimension is None:
@@ -483,8 +495,11 @@ class ParticleFilter():
             self.model_params = m_params
             self.model_states = m_state
             self.model_classes = np.r_[class_est]
+            self.model_classes_scores = np.r_[score]
             self.model_class_history = m_class_history
             self.model_last_update = np.r_[last_update]
+            self.model_first_update = np.r_[last_update]
+            self.model_n_updates = np.array([0])
             self.model_uuid = np.array([id])
             self.model_class_names = class_name
             self.model_pcl_dimensions = pcl_dimension
@@ -495,16 +510,19 @@ class ParticleFilter():
             self.model_params = torch.cat((self.model_params, m_params))
             self.model_states = torch.cat((self.model_states, m_state))
             self.model_classes = np.r_[self.model_classes, class_est]
+            self.model_classes_scores = np.r_[self.model_classes_scores, score]
             self.model_class_history = np.vstack((self.model_class_history, m_class_history))
             self.model_last_update = np.r_[self.model_last_update, last_update]
+            self.model_first_update = np.r_[self.model_first_update, last_update]
             self.model_uuid = np.hstack((self.model_uuid, id))
+            self.model_n_updates = np.hstack((self.model_n_updates, 0))
             self.model_class_names += class_name
             self.model_pcl_dimensions = np.r_[self.model_pcl_dimensions, pcl_dimension]
             self._update_velocities = torch.cat((self._update_velocities, update_velocity))
 
         self._model_pcls = np.hstack((self._model_pcls, None))
         self._model_trees = np.hstack((self._model_trees, None))
-        self._append_pcl_to_model(self.n_models, pcl, class_est, pcl_center, pcl_dimension)
+        self._append_pcl_to_model(self.n_models, pcl, class_est, score, pcl_center, pcl_dimension)
         self.n_models += 1
 
     def _delete_model(self, model_number):
@@ -515,8 +533,10 @@ class ParticleFilter():
         self.model_params = self.model_params[mask, ...]
         self.model_states = self.model_states[mask, ...]
         self.model_classes = self.model_classes[mask.tolist()]
+        self.model_classes_scores = self.model_classes_scores[mask.tolist()]
         self.model_class_history = self.model_class_history[mask.tolist(), ...]
         self.model_last_update = self.model_last_update[mask.tolist(), ...]
+        self.model_first_update = self.model_first_update[mask.tolist(), ...]
         self.model_uuid = self.model_uuid[mask.tolist(), ...]
         self.model_class_names = np.array(self.model_class_names)[torch.where(mask)[0].tolist()].tolist()
         self.model_pcl_dimensions = self.model_pcl_dimensions[mask.tolist(), ...]

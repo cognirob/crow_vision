@@ -1,7 +1,7 @@
 {
   "type": "YOLACT", #one of "YOLACT", "Detectron2"
   "top_k": 10,
-  "threshold": 0.51,
+  "threshold": 0.2,
   ## specify path to weights, relative to the YOLACT_REPO
   #"weights": "./data/yolact/weights/yolact_base_54_800000.pth", #generic COCO weights
   "weights": "./data/yolact/weights/weights_yolact_kuka_21/crow_base_25_133333.pth", # uncomment to use CROW model
@@ -12,10 +12,10 @@
   "outputs": { #output ROS topics are formed as: config["inputs"][0]["camera"] + config["outputs"]["masks"] ,etc.
     # pass an empty string "" to ignore/skip that output.
     "prefix": "detections",
-    "image_annotated": "image_annot",
+    "image_annotated": "",
     "masks": "masks",
     "labels": "labels",
     "bboxes": "bboxes",
-    "confidences": ""
+    "confidences": "confidences"
   }
 }
