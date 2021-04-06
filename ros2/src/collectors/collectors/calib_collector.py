@@ -133,8 +133,8 @@ class ImageCollector(Node):
             tmp = self.pauseAcquisition
             if tmp:
                 self.pauseAcquisition = False
-            self.save_data(self.lastImageList[0], os.path.join(self.main_dir, "_camera1_camera2", "camera1"), self.image_counts[0])
-            self.save_data(self.lastImageList[1], os.path.join(self.main_dir, "_camera1_camera2", "camera2"), self.image_counts[0])
+            self.save_data(self.lastImageList[0], os.path.join(self.main_dir, "_camera_1_camera_2", "camera_1"), self.image_counts[0])
+            self.save_data(self.lastImageList[1], os.path.join(self.main_dir, "_camera_1_camera_2", "camera_2"), self.image_counts[0])
             self.image_counts[0] += 1
             self.pauseAcquisition = tmp
         elif key == ord("a"):  # save cam 1
@@ -147,7 +147,7 @@ class ImageCollector(Node):
             print(key)
 
     def store_single_cam(self, cam_id):
-        self.save_data(self.lastImageList[cam_id - 1], os.path.join(self.main_dir, f"_camera{cam_id}", f"camera{cam_id}"), self.image_counts[cam_id])
+        self.save_data(self.lastImageList[cam_id - 1], os.path.join(self.main_dir, f"_camera_{cam_id}", f"camera_{cam_id}"), self.image_counts[cam_id])
         self.image_counts[cam_id] += 1
 
     def save_data(self, image, path, img_id):
