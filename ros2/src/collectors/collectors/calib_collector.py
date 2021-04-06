@@ -30,7 +30,7 @@ class ImageCollector(Node):
     cv_win_name = "image"
     SCREEN_HEIGHT = 1000
     SCREEN_WIDTH = 1900
-    IMAGES_PER_ROW = 3
+    IMAGES_PER_ROW = 2
     GUI_UPDATE_INTERVAL = 0.05
 
     def __init__(self, node_name="image_collector"):
@@ -76,13 +76,13 @@ class ImageCollector(Node):
         self.main_dir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         # Create folder for this recording session
         os.makedirs(self.main_dir)
-        os.makedirs(os.path.join(self.main_dir, "_camera1"))
-        os.makedirs(os.path.join(self.main_dir, "_camera1", "camera1"))
-        os.makedirs(os.path.join(self.main_dir, "_camera2"))
-        os.makedirs(os.path.join(self.main_dir, "_camera2", "camera2"))
-        os.makedirs(os.path.join(self.main_dir, "_camera1_camera2"))
-        os.makedirs(os.path.join(self.main_dir, "_camera1_camera2", "camera1"))
-        os.makedirs(os.path.join(self.main_dir, "_camera1_camera2", "camera2"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_1"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_1", "camera_1"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_2"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_2", "camera_2"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_1_camera_2"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_1_camera_2", "camera_1"))
+        os.makedirs(os.path.join(self.main_dir, "_camera_1_camera_2", "camera_2"))
 
         n_cams = len(subs)
         self.image_counts = np.zeros(n_cams + 1, dtype=np.int)  # image_counts[0] = all cams
