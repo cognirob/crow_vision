@@ -14,7 +14,7 @@ from crow_vision_ros2.filters import ParticleFilter, object_properties
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
-from crow_msgs.msg import FilteredPose, PclDimensions
+from crow_msgs.msg import FilteredPose, PclDimensions, Particles
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -28,6 +28,7 @@ import time
 
 class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.05
+    VISUALIZE_PARTICLES = True
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
@@ -124,6 +125,15 @@ class ParticleFilterNode(Node):
             pose_array_msg.uuid = uuids
             pose_array_msg.header.stamp = self.get_clock().now().to_msg()
             pose_array_msg.header.frame_id = self.frame_id
+
+            if self.VISUALIZE_PARTICLES:
+                particles_msg = []
+                particles = self.particle_filter.get_model_particles()
+                for model_particles in particles:
+                    model_particles_msg = Particles(model_particles=model_particles)
+                    particles_msg.append(model_particles_msg)
+            pose_array_msg.particles = particles_msg
+
             self.filtered_publisher.publish(pose_array_msg)
 
     def filter_update(self):

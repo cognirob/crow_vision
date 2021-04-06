@@ -282,6 +282,12 @@ class ParticleFilter():
     def add_measurement(self, z):
         self.observations.append(z)
 
+    def get_model_particles(self):
+        if type(self.model_particles) == torch.Tensor:
+            return self.model_particles.numpy()
+        else:
+            return self.model_particles
+
     def _predict(self, time_delta):
         """
         * move models according to current state
