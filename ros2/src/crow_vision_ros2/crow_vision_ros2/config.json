@@ -12,7 +12,7 @@
   "outputs": { #output ROS topics are formed as: config["inputs"][0]["camera"] + config["outputs"]["masks"] ,etc.
     # pass an empty string "" to ignore/skip that output.
     "prefix": "detections",
-    "image_annotated": "",
+    "image_annotated": "image_annot",
     "masks": "masks",
     "labels": "labels",
     "bboxes": "bboxes",
