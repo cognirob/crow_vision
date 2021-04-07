@@ -14,6 +14,7 @@ from crow_vision_ros2.filters import ParticleFilter, object_properties
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
+from std_msgs.msg import MultiArrayDimension, Float32MultiArray
 from crow_msgs.msg import FilteredPose, PclDimensions
 
 from rclpy.qos import qos_profile_sensor_data
@@ -28,6 +29,7 @@ import time
 
 class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.05
+    VISUALIZE_PARTICLES = True
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
@@ -124,6 +126,26 @@ class ParticleFilterNode(Node):
             pose_array_msg.uuid = uuids
             pose_array_msg.header.stamp = self.get_clock().now().to_msg()
             pose_array_msg.header.frame_id = self.frame_id
+
+            if self.VISUALIZE_PARTICLES:
+                particles_msg = []
+                particles = self.particle_filter.get_model_particles()
+                for model_particles in particles:
+                    model_particles_msg = Float32MultiArray()
+                    dims = model_particles.shape
+                    model_particles_msg.layout.dim.append(MultiArrayDimension())
+                    model_particles_msg.layout.dim[0].label = 'num_points'
+                    model_particles_msg.layout.dim[0].size = dims[0]
+                    model_particles_msg.layout.dim[0].stride = dims[0]*dims[1]
+                    model_particles_msg.layout.dim.append(MultiArrayDimension())
+                    model_particles_msg.layout.dim[1].label = 'xyz'
+                    model_particles_msg.layout.dim[1].size = dims[1]
+                    model_particles_msg.layout.dim[1].stride = dims[0]
+                    data = np.frombuffer(model_particles.tobytes(),'float32')
+                    model_particles_msg.data = data.tolist()
+                    particles_msg.append(model_particles_msg)
+            pose_array_msg.particles = particles_msg
+
             self.filtered_publisher.publish(pose_array_msg)
 
     def filter_update(self):
