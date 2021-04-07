@@ -283,10 +283,11 @@ class ParticleFilter():
         self.observations.append(z)
 
     def get_model_particles(self):
-        if type(self.model_particles) == torch.Tensor:
-            return self.model_particles.numpy()
+        model_particles = self.model_particles.clone()
+        if type(model_particles) == torch.Tensor:
+            return model_particles.numpy()
         else:
-            return self.model_particles
+            return model_particles
 
     def _predict(self, time_delta):
         """
