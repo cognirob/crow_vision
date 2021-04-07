@@ -75,6 +75,8 @@ class ImageCollector(Node):
         self.pauseAcquisition = False
         self.main_dir = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         # Create folder for this recording session
+        print(os.getcwd())
+        print(self.main_dir)
         os.makedirs(self.main_dir)
         os.makedirs(os.path.join(self.main_dir, "_camera_1"))
         os.makedirs(os.path.join(self.main_dir, "_camera_1", "camera_1"))
