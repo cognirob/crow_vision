@@ -43,3 +43,7 @@ dependencies:
     - open3d==0.10.0 #locator 
     - empy # realsense_msgs fail with 'em', we need empy instead! 
     - matplotlib==2.1.1 #must match apt version installed by ROS2
+    - knowl
+    - rdflib
+    - pymysql
+    - numba
