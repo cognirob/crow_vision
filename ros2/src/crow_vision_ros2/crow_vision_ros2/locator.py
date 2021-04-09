@@ -90,7 +90,7 @@ class Locator(Node):
         self.min_points_pcl = min_points_pcl
 
     @staticmethod
-    # @jit(nopython=True, parallel=False)
+    @jit(nopython=True, parallel=False)
     def project(camera_matrix, point_cloud):
         # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = np.dot(camera_matrix, point_cloud)
@@ -98,7 +98,7 @@ class Locator(Node):
         return imspace[:2, :] / imspace[2, :]
 
     @staticmethod
-    # @jit(nopython=True, parallel=False)
+    @jit(nopython=True, parallel=False)
     def compareMasksPCL_fast(idxs, masks):
         idxs1d = idxs[1, :] + idxs[0, :] * masks[0].shape[1]
         wheres = []
@@ -171,14 +171,12 @@ class Locator(Node):
             if self.PUBLISH_DEBUG:
                 self.pubPCLdebug[camera].publish(segmented_pcl) #for debug visualization only, can be removed.
 
-
-    def compareMaskPCL(self, mask_array, projected_points):
-        a = mask_array.T.astype(np.int32).copy()
-        b = projected_points.T.copy()
-        self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
-        result = np.intersect1d(a.view(self.mask_dtype), b.view(self.mask_dtype), return_indices=True)
-        return result[2]
-
+    # def compareMaskPCL(self, mask_array, projected_points):
+    #     a = mask_array.T.astype(np.int32).copy()
+    #     b = projected_points.T.copy()
+    #     self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
+    #     result = np.intersect1d(a.view(self.mask_dtype), b.view(self.mask_dtype), return_indices=True)
+    #     return result[2]
 
     def getCameraData(self, camera):
         idx = self.cameras.index(camera)
