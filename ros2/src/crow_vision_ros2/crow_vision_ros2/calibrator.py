@@ -11,7 +11,7 @@ import cv_bridge
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
-from crow_vision_ros2.utils import make_vector3, make_quaternion
+from crow_vision_ros2.utils import make_vector3, make_quaternion, getTransformFromTF
 from crow_vision_ros2.filters import CameraPoser
 from time import sleep
 import transforms3d as tf3
@@ -21,6 +21,7 @@ import sys
 
 
 class Calibrator(Node):
+    GLOBAL_FRAME_NAME = "workspace_frame"
 
     markerLength = 0.050  # mm
     squareLength = 0.060  # mm
@@ -52,8 +53,12 @@ class Calibrator(Node):
         self.declare_parameter("camera_namespaces", value=[], descriptor=cameraNamespacesParamDesc)
         cameraMatricesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera intrinsic parameters for available cameras')
         self.declare_parameter("camera_intrinsics", value=[], descriptor=cameraMatricesParamDesc)
+        extrinsicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='Depth to color and color to global transformations for cameras.')
+        self.declare_parameter("camera_extrinsics", value=[], descriptor=extrinsicsParamDesc)
         cameraFramesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera coordinate frames for available cameras')
         self.declare_parameter("camera_frames", value=[], descriptor=cameraFramesParamDesc)
+        globalFrameParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING, description='The global workspace frame name.')
+        self.declare_parameter("global_frame_id", value=self.GLOBAL_FRAME_NAME, descriptor=globalFrameParamDesc)
 
         # parse args
         parser = argparse.ArgumentParser()
@@ -62,6 +67,8 @@ class Calibrator(Node):
 
         # setup vars
         self.optical_frames = dict()
+        self.tf_depth_to_color = dict()
+        self.tf_color_to_global = dict()
         self.intrinsics = dict()
         self.distCoeffs = dict()
         self.camMarkers = {}
@@ -69,9 +76,13 @@ class Calibrator(Node):
         self.cam_info_topics = []
         self.color_image_topics = {}
 
+        # tf listener to get TF frames
+        self.tf_buffer = tf2_ros.Buffer()
+        tf2_ros.TransformListener(buffer=self.tf_buffer, node=self)
+
         # Get cameras
         self.camera_namespaces = args.camera_namespaces
-        if len(self.camera_namespaces) == 0:  # the all way: wait a little and try to detect all cameras
+        if len(self.camera_namespaces) == 0:  # the old way: wait a little and try to detect all cameras
             self.get_logger().info(f"Sleeping to allow the cameras to come online.")
             sleep(15)
             self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
@@ -83,6 +94,7 @@ class Calibrator(Node):
 
             for topic, camera_ns in self.cam_info_topics:
                 # camera = next(ns + "/" + cam for cam, ns in self.cameras if ns in topic)
+                self.get_logger().fatal("===")
                 self.create_subscription(CameraInfo, topic, lambda msg, cam=camera_ns: self.camera_info_cb(msg, cam), 1)
                 self.get_logger().info(f"Connected to '{topic}' camera info topic for camera '{camera_ns}'. Waiting for camera info to start the image subscriber.")
 
@@ -119,9 +131,36 @@ class Calibrator(Node):
             # TODO: get camera color optical frame from /tf
             optical_frame = f"{namespace[1:]}_color_optical_frame"
             self.optical_frames[namespace] = optical_frame
+            depth_frame = f"{namespace[1:]}_depth_optical_frame"
 
+            future = self.tf_buffer.wait_for_transform_async(optical_frame, depth_frame, self.get_clock().now())
+            future.add_done_callback(lambda future, camera_ns=namespace: self.found_dtc_transform_cb(future, camera_ns))
+            # future = self.tf_buffer.wait_for_transform_async(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now())
+            # future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctg_transform_cb(future, camera_ns))
+
+    def makeTransformMatrix(self, transform_msg):
+        translation = [getattr(transform_msg.transform.translation, a) for a in "xyz"]
+        quat = [getattr(transform_msg.transform.rotation, a) for a in "xyzw"]
+        tf_mat = tf3.affines.compose(translation, tf3.quaternions.quat2mat(quat[-1:] + quat[:-1]), np.ones(3))
+        return tf_mat
+
+    def found_dtc_transform_cb(self, future, camera_ns):  # depth to color
+        if not future.result():
+            self.get_logger().fatal(f"Could not get DTC transform for {camera_ns}!")
+            return
+        transform_msg = self.tf_buffer.lookup_transform(self.optical_frames[camera_ns], f"{camera_ns[1:]}_depth_optical_frame", self.get_clock().now(), rclpy.duration.Duration(seconds=5))
+        self.tf_depth_to_color[camera_ns] = self.makeTransformMatrix(transform_msg)
+
+    def found_ctg_transform_cb(self, future, camera_ns):  # color to global
+        if not future.result():
+            self.get_logger().fatal(f"Could not get GTC transform for {camera_ns}!")
+            return
+        transform_msg = self.tf_buffer.lookup_transform(self.GLOBAL_FRAME_NAME, self.optical_frames[camera_ns], self.get_clock().now(), rclpy.duration.Duration(seconds=5))
+        self.tf_color_to_global[camera_ns] = self.makeTransformMatrix(transform_msg)
 
     def camera_info_cb(self, msg, camera_ns):
+        if camera_ns not in self.tf_depth_to_color:  # wating to get the transforms first
+            return
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
         self.distCoeffs[self.optical_frames[camera_ns]] = np.r_[msg.d]
         image_topic = self.color_image_topics[camera_ns]
@@ -148,11 +187,17 @@ class Calibrator(Node):
         paramCameraNamespaces.append(ns)
         # Camera intrinsics parameter
         paramCameraIntrinsics = self.get_parameter("camera_intrinsics").get_parameter_value().string_array_value
-        paramCameraIntrinsics.append(json.dumps({"camera_matrix": self.intrinsics[self.optical_frames[camera_ns]].astype(np.float32).tolist(),
-                                     "distortion_coefficients": self.distCoeffs[self.optical_frames[camera_ns]].astype(np.float32).tolist(),
-                                     "width": msg.width,
-                                     "height": msg.height
-                                     }))
+        paramCameraIntrinsics.append(json.dumps({
+            "camera_matrix": self.intrinsics[self.optical_frames[camera_ns]].astype(np.float32).tolist(),
+            "distortion_coefficients": self.distCoeffs[self.optical_frames[camera_ns]].astype(np.float32).tolist(),
+            "width": msg.width,
+            "height": msg.height
+        }))
+        paramCameraExtrinsics = self.get_parameter("camera_extrinsics").get_parameter_value().string_array_value
+        paramCameraExtrinsics.append(json.dumps({
+            "dtc_tf": self.tf_depth_to_color[camera_ns].astype(np.float32).tolist(),
+            # "ctg_tf": self.tf_color_to_global[camera_ns].astype(np.float32).tolist(),
+        }))
         # Camera coordinate frame name parameter
         paramCameraFrames = self.get_parameter("camera_frames").get_parameter_value().string_array_value
         paramCameraFrames.append(optical_frame)
@@ -183,6 +228,11 @@ class Calibrator(Node):
                 "camera_intrinsics",
                 rclpy.Parameter.Type.STRING_ARRAY,
                 paramCameraIntrinsics
+            ),
+            rclpy.parameter.Parameter(
+                "camera_extrinsics",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramCameraExtrinsics
             ),
             rclpy.parameter.Parameter(
                 "camera_frames",
