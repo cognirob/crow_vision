@@ -133,10 +133,15 @@ class Calibrator(Node):
             self.optical_frames[namespace] = optical_frame
             depth_frame = f"{namespace[1:]}_depth_optical_frame"
 
+            # retrieve depth to color transformation
             future = self.tf_buffer.wait_for_transform_async(optical_frame, depth_frame, self.get_clock().now())
             future.add_done_callback(lambda future, camera_ns=namespace: self.found_dtc_transform_cb(future, camera_ns))
-            # future = self.tf_buffer.wait_for_transform_async(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now())
-            # future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctg_transform_cb(future, camera_ns))
+            # if transform from camera to global frame exists, retrieve it
+            if self.tf_buffer.can_transform(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now(), rclpy.duration.Duration(seconds=5)):
+                future = self.tf_buffer.wait_for_transform_async(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now())
+                future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctg_transform_cb(future, camera_ns))
+            else:
+                self.tf_color_to_global[namespace] = np.eye(4)  # if TF is not defined, use identity
 
     def makeTransformMatrix(self, transform_msg):
         translation = [getattr(transform_msg.transform.translation, a) for a in "xyz"]
@@ -159,7 +164,7 @@ class Calibrator(Node):
         self.tf_color_to_global[camera_ns] = self.makeTransformMatrix(transform_msg)
 
     def camera_info_cb(self, msg, camera_ns):
-        if camera_ns not in self.tf_depth_to_color:  # wating to get the transforms first
+        if camera_ns not in self.tf_depth_to_color or camera_ns not in self.tf_color_to_global:  # wating to get the transforms first
             return
         self.intrinsics[self.optical_frames[camera_ns]] = msg.k.reshape((3, 3))
         self.distCoeffs[self.optical_frames[camera_ns]] = np.r_[msg.d]
@@ -196,7 +201,7 @@ class Calibrator(Node):
         paramCameraExtrinsics = self.get_parameter("camera_extrinsics").get_parameter_value().string_array_value
         paramCameraExtrinsics.append(json.dumps({
             "dtc_tf": self.tf_depth_to_color[camera_ns].astype(np.float32).tolist(),
-            # "ctg_tf": self.tf_color_to_global[camera_ns].astype(np.float32).tolist(),
+            "ctg_tf": self.tf_color_to_global[camera_ns].astype(np.float32).tolist(),
         }))
         # Camera coordinate frame name parameter
         paramCameraFrames = self.get_parameter("camera_frames").get_parameter_value().string_array_value
@@ -241,6 +246,7 @@ class Calibrator(Node):
             )
         ])
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))
+        self.get_logger().info(f"Parameters for camera {camera_ns} are set.")
 
     def image_cb(self, msg, camera_frame, optical_frame):
         if self.get_parameter("halt_calibration").get_parameter_value().bool_value:

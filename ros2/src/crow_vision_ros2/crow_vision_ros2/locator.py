@@ -79,8 +79,7 @@ class Locator(Node):
             self.camera_instrinsics[i]["distortion_coefficients"] = np.array(camera_instrinsics["distortion_coefficients"], dtype=np.float32)
 
             self.camera_extrinsics[i]["dtc_tf"] = np.array(camera_extrinsics["dtc_tf"], dtype=np.float32)
-            self.camera_extrinsics[i]["ctg_tf"] = np.random.rand(4, 4)
-            # self.camera_extrinsics[i]["ctg_tf"] = np.array(camera_extrinsics["ctg_tf"], dtype=np.float32)
+            self.camera_extrinsics[i]["ctg_tf"] = np.array(camera_extrinsics["ctg_tf"], dtype=np.float32)
 
             # create approx syncro callbacks
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #listener for pointcloud data from RealSense camera
@@ -147,9 +146,9 @@ class Locator(Node):
         # cv2.imshow("mask", masks[0] * 255)
         # cv2.waitKey(1)
 
+        ctg_tf_mat = cameraData["ctg_tf"]
         for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
             # 2. segment PCL & compute median
-            start = time.time()
             where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
@@ -157,11 +156,8 @@ class Locator(Node):
                 continue
 
             # create segmented pcl
-            seg_pcd = point_cloud[:, where]
+            seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))[:3, :]
             seg_color = rgb_raw[where]
-
-            end = time.time()
-            #print("Filter: ", end - start)
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
