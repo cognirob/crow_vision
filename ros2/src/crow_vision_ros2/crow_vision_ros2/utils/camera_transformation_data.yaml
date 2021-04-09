@@ -1,0 +1,2 @@
+# camera serial_nr: x y z qx qy qz qw (translation in meters, rotation in quaternion) wrt to world frame
+cam2: -0.24788054 -0.66216250 1.2054029 -0.46125350 0.14195585 -0.017596757 -0.87566209
