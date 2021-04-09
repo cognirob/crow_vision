@@ -26,11 +26,11 @@ import tf2_py as tf
 import tf2_ros
 import transforms3d as tf3
 
+from ctypes import *  # convert float to uint32
+from numba import jit
 
-t = [-0.015, -0.000, 0.000]
-q = [0.002, -0.001, 0.004, 1.000]
-# t = make_vector3([-0.015, -0.000, 0.000])
-# q = make_quaternion([0.002, -0.001, 0.004, 1.000])
+# t = [-0.015, -0.000, 0.000]
+# q = [0.002, -0.001, 0.004, 1.000]
 
 class Locator(Node):
     PUBLISH_DEBUG = True
@@ -89,6 +89,25 @@ class Locator(Node):
 
         self.min_points_pcl = min_points_pcl
 
+    @staticmethod
+    # @jit(nopython=True, parallel=False)
+    def project(camera_matrix, point_cloud):
+        # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
+        imspace = np.dot(camera_matrix, point_cloud)
+        # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
+        return imspace[:2, :] / imspace[2, :]
+
+    @staticmethod
+    # @jit(nopython=True, parallel=False)
+    def compareMasksPCL_fast(idxs, masks):
+        idxs1d = idxs[1, :] + idxs[0, :] * masks[0].shape[1]
+        wheres = []
+        masks_raveled = masks.reshape(masks.shape[0], -1)  # ravel all masks
+        # set (0, 0) to 0 - "wrong" pixels are projected to this
+        masks_raveled[:, 0] = 0
+        for mask in masks_raveled:
+            wheres.append(np.nonzero(mask[idxs1d])[0])
+        return wheres
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
         # print(self.getCameraData(camera))
@@ -97,7 +116,7 @@ class Locator(Node):
             return  # no mask detections (for some reason)
 
         cameraData = self.getCameraData(camera)
-        masks = [self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks]
+        masks = np.array([self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks])
         class_names, scores = mask_msg.class_names, mask_msg.scores
 
         point_cloud, point_rgb, rgb_raw = ftl_pcl2numpy(pcl_msg)
@@ -107,52 +126,29 @@ class Locator(Node):
         tf_mat = cameraData["dtc_tf"]
         point_cloud = np.dot(tf_mat, np.pad(point_cloud, ((0, 1), (0, 0)), mode="constant", constant_values=1))[:3, :]
         point_cloud = point_cloud.astype(np.float32)  # secret hack to make sure this works...
-        ## get pointcloud data from ROS2 msg to open3d format
-        # pcd = convertCloudFromRosTo.astype(np.float32)
 
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
-        start = time.time()
-        camera_matrix = cameraData["camera_matrix"]
-        imspace = np.dot(camera_matrix, point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
-        imspace = imspace[:2, :] / imspace[2, :] # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
+        imspace = self.project(cameraData["camera_matrix"], point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace[np.isnan(imspace)] = -1 #marking as -1 results in deletion (omission) of these points in 3D, as it's impossible to match to -1
         imspace[imspace > self.depth_max] = -1 # drop points with depth outside of range
         imspace[imspace < self.depth_min] = -1 # drop points with depth outside of range
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
-        end = time.time()
-        #print("Transform: ", end - start)
 
-        # IDX_RGB_IN_FIELD = 3
-        # convert_rgbUint32_to_tuple = lambda rgb_uint32: (
-        #   (rgb_uint32 & 0x00ff0000)>>16, (rgb_uint32 & 0x0000ff00)>>8, (rgb_uint32 & 0x000000ff)
-        # )
-        # convert_rgbFloat_to_tuple = lambda rgb_float: convert_rgbUint32_to_tuple(
-        #   int(cast(pointer(c_float(rgb_float)), POINTER(c_uint32)).contents.value)
-        # )
-        # if type(cloud_data[0][IDX_RGB_IN_FIELD])==float: # if float (from pcl::toROSMsg)
-        #     rgb = [convert_rgbFloat_to_tuple(rgb) for x,y,z,rgb in cloud_data ]
-        # else:
-        #     rgb = [convert_rgbUint32_to_tuple(rgb) for x,y,z,rgb in cloud_data ]
-        # colors = np.array(rgb)
+        mshape = masks[0].shape
+        imspace[:, (imspace[0] < 0) | (imspace[1] < 0) | (
+            imspace[1] >= mshape[0]) | (imspace[0] >= mshape[1])] = 0
 
-        # img = np.zeros((480, 640, 3), dtype=np.uint8)
-        # for i in range(imspace.shape[1]):
-        #     # if (imspace[:, i] > np.r_[640, 480]).any() or (imspace[:, i] < np.r_[0, 0]).any():
-        #     #     continue
-        #     img[imspace[1, i], imspace[0, i], :] = colors[i, :]
-        # cv2.imshow("img", img)
-        # cv2.imshow("mask", masks[0] * 255)
-        # cv2.waitKey(1)
+        wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
 
         ctg_tf_mat = cameraData["ctg_tf"]
-        for i, (mask, class_name, score) in enumerate(zip(masks, class_names, scores)):
+        for where, class_name, score in zip(wheres, class_names, scores):
             # 2. segment PCL & compute median
-            where = self.compareMaskPCL(np.array(np.where(mask.T)), imspace)
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
-                self.get_logger().info("Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
+                self.get_logger().info(
+                    "Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
                 continue
 
             # create segmented pcl
