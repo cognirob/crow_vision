@@ -59,7 +59,7 @@ class Locator(Node):
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
         # create output topic and publisher dynamically for each cam
-        qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
+        qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = {} #output: segmented pcl sent as SegmentedPointcloud, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
         self.pubPCLdebug = {} #output: segmented pcl sent as PointCloud2, so we can directly visualize it in rviz2. Not needed, only for debug to avoid custom msgs above.
         for cam in self.cameras:
@@ -84,7 +84,7 @@ class Locator(Node):
             # create approx syncro callbacks
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #listener for pointcloud data from RealSense camera
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos) #listener for masks from detector node
-            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 20, slop=0.03) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.1) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
