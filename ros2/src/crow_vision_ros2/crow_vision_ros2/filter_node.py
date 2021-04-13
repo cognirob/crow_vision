@@ -66,7 +66,7 @@ class ParticleFilterNode(Node):
         self.measurementTolerance = rclpy.time.Duration(seconds=0.00001)
         self.lastUpdateMeasurementDDiff = rclpy.time.Duration(seconds=2)
         # Publisher for the output of the filter
-        self.filtered_publisher = self.create_publisher(FilteredPose, "filtered_poses", qos)
+        self.filtered_publisher = self.create_publisher(FilteredPose, "/filtered_poses", qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
 
     def add_and_process(self, messages):
