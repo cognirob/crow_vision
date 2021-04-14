@@ -29,7 +29,7 @@ import time
 
 class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.05
-    VISUALIZE_PARTICLES = True
+    VISUALIZE_PARTICLES = False
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
@@ -49,7 +49,7 @@ class ParticleFilterNode(Node):
         self.particle_filter = ParticleFilter()  # the main component
 
         qos = QoSProfile(
-            depth=10,
+            depth=20,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
         for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
@@ -68,6 +68,13 @@ class ParticleFilterNode(Node):
         # Publisher for the output of the filter
         self.filtered_publisher = self.create_publisher(FilteredPose, "/filtered_poses", qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
+        if self.VISUALIZE_PARTICLES:
+            self.vis = o3d.visualization.Visualizer()
+            self.vis.create_window()
+            self.particle_cloud = o3d.geometry.PointCloud()
+            self.vis.add_geometry(self.particle_cloud)
+        else:
+            self.vis = None
 
     def add_and_process(self, messages):
         if type(messages) is not list:
@@ -144,7 +151,14 @@ class ParticleFilterNode(Node):
                     data = np.frombuffer(model_particles.tobytes(),'float32')
                     model_particles_msg.data = data.tolist()
                     particles_msg.append(model_particles_msg)
-            pose_array_msg.particles = particles_msg
+
+                pose_array_msg.particles = particles_msg
+
+                print(data.shape)
+                self.particle_cloud.points = o3d.utility.Vector3dVector(data)
+                self.vis.update_geometry(self.particle_cloud)
+                self.vis.poll_events()
+                self.vis.update_renderer()
 
             self.filtered_publisher.publish(pose_array_msg)
 
@@ -179,7 +193,6 @@ class ParticleFilterNode(Node):
         else:
             self.update()
 
-
     def cache_cb(self, *args):
         pass
 
@@ -199,11 +212,13 @@ class ParticleFilterNode(Node):
 
 def main():
     rclpy.init()
-
-    pfilter = ParticleFilterNode()
-
-    rclpy.spin(pfilter)
-    pfilter.destroy_node()
+    try:
+        pfilter = ParticleFilterNode()
+        rclpy.spin(pfilter)
+    finally:
+        if pfilter.vis is not None:
+            pfilter.vis.destroy_window()
+        pfilter.destroy_node()
 
 
 if __name__ == "__main__":
