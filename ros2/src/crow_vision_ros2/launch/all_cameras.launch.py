@@ -1,19 +1,3 @@
-# Copyright (c) 2019 Intel Corporation
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# /* Author: Gary Liu */
-
 import os
 import launch
 from ament_index_python.packages import get_package_share_directory
@@ -25,9 +9,10 @@ import pyrealsense2 as rs
 import rclpy
 import re
 import yaml
+from crow_vision_ros2.utils.get_camera_transformation import CameraGlobalTFGetter
 
 
-def launch_cameras(launchContext):
+def launch_cameras(launchContext, globalTFGetter=None):
 
     frames = ["accel_frame_id",
               "accel_optical_frame_id",
@@ -79,6 +64,21 @@ def launch_cameras(launchContext):
         camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
         camera_frames_dict['base_frame_id'] = f'camera{cam_id + 1}_link'
 
+        if globalTFGetter is not None:
+            transform = globalTFGetter.get_camera_transformation(device_serial)
+            camera_configs.append(LogInfo(msg=f"Adding workspace transform for {device_serial} ({camera_namespace}) with args {transform}."))
+            camera_configs.append(
+                Node(
+                    package='tf2_ros',
+                    node_executable='static_transform_publisher',
+                    arguments=transform.split() + [
+                            camera_frames_dict['color_optical_frame_id'],
+                            "workspace_frame",
+                    ],
+                    output='log',
+                    emulate_tty=True
+                )
+            )
 
         config_file = os.path.join(
             get_package_share_directory('crow_vision_ros2'),
@@ -127,10 +127,17 @@ def launch_cameras(launchContext):
 
 
 def generate_launch_description():
+    config_file = os.path.join(
+        get_package_share_directory('crow_vision_ros2'),
+        'config',
+        'camera_transformation_data.yaml'
+        # launch.substitutions.LaunchConfiguration('camera_config').perform(launchContext)
+    )
+    cgtfg = CameraGlobalTFGetter(config_file)
 
     return LaunchDescription([
         DeclareLaunchArgument("camera_config", default_value="rs_native.yaml"),
         LogInfo(msg=["Configuration file used for cameras: ", LaunchConfiguration('camera_config')]),
         # ,
-        OpaqueFunction(function=launch_cameras)
+        OpaqueFunction(function=launch_cameras, kwargs={'globalTFGetter': cgtfg})
     ])
