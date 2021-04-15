@@ -66,123 +66,153 @@ class Timer():
 object_properties = {
     0: {
         "name": "car_roof",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[113, 0, 255] / 255
     },
     1: {
         "name": "cube_holes",
-        "sigma": 0.01
+        "sigma": 0.01,
+        "color": np.r_[0, 255, 0] / 255
     },
     2: {
         "name": "ex_bucket",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[113, 0, 255] / 255
     },
     3: {
         "name": "hammer",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[255, 0, 0] / 255
     },
     4: {
         "name": "nut",
-        "sigma": 0.01
+        "sigma": 0.01,
+        "color": np.r_[0, 0, 255] / 255
     },
     5: {
         "name": "peg_screw",
-        "sigma": 0.01
+        "sigma": 0.01,
+        "color": np.r_[128, 128, 128] / 255
     },
     6: {
         "name": "peg_simple",
-        "sigma": 0.01
+        "sigma": 0.01,
+        "color": np.r_[128, 128, 128] / 255
     },
     7: {
         "name": "pliers",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[195, 129, 0] / 255
     },
     8: {
         "name": "screw_round",
-        "sigma": 0.01
+        "sigma": 0.01,
+        "color": np.r_[64, 64, 255] / 255
     },
     9: {
         "name": "screwdriver",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[255, 64, 64] / 255
     },
     10: {
         "name": "sphere_holes",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[195, 177, 0] / 255
     },
     11: {
         "name": "wafer",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[113, 0, 255] / 255
     },
     12: {
         "name": "wheel",
-        "sigma": 0.01
+        "sigma": 0.01,
+        "color": np.r_[113, 0, 255] / 255
     },
     13: {
         "name": "wrench",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[113, 0, 255] / 255
     },
     14: {
         "name": "hand",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[255, 124, 140] / 255
     },
     15: {
         "name": "kuka",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[255, 95, 0] / 255
     },
     16: {
         "name": "hammer_handle",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[1, 1, 1] / 255
     },
     17: {
         "name": "hammer_head",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[1, 1, 1] / 255
     },
     18: {
         "name": "pliers_handle",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO,
+        "color": np.r_[1, 1, 1] / 255
     },
     19: {
         "name": "pliers_head",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     20: {
         "name": "screw_round_thread",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     21: {
         "name": "screw_round_head",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     22: {
         "name": "screwdriver_handle",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     23: {
         "name": "screwdriver_head",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     24: {
         "name": "wrench_handle",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     25: {
         "name": "wrench_open",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     26: {
         "name": "wrench_ring",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     27: {
         "name": "peg_screw_shank",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     28: {
         "name": "peg_screw_thread",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
     29: {
         "name": "kuka_gripper",
-        "sigma": 0.01  # TODO
+        "sigma": 0.01,  # TODO
+        "color": np.r_[1, 1, 1] / 255
     },
 }
 
