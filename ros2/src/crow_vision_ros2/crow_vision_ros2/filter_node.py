@@ -29,7 +29,8 @@ import time
 
 class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.05
-    VISUALIZE_PARTICLES = False
+    VISUALIZE_PARTICLES = True
+    INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(object_properties.values())}
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
@@ -69,10 +70,17 @@ class ParticleFilterNode(Node):
         self.filtered_publisher = self.create_publisher(FilteredPose, "/filtered_poses", qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
         if self.VISUALIZE_PARTICLES:
+            # Initialize visualization properties
             self.vis = o3d.visualization.Visualizer()
             self.vis.create_window()
+            # geometry for the particles
             self.particle_cloud = o3d.geometry.PointCloud()
+            # some initial random particles necessary automaticall set the viewpoint
+            self.particle_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
             self.vis.add_geometry(self.particle_cloud)
+            # geometry for the axis
+            self.axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
+            self.vis.add_geometry(self.axis)
         else:
             self.vis = None
 
@@ -151,16 +159,32 @@ class ParticleFilterNode(Node):
                     data = np.frombuffer(model_particles.tobytes(),'float32')
                     model_particles_msg.data = data.tolist()
                     particles_msg.append(model_particles_msg)
-
                 pose_array_msg.particles = particles_msg
 
-                print(data.shape)
-                self.particle_cloud.points = o3d.utility.Vector3dVector(data)
-                self.vis.update_geometry(self.particle_cloud)
+                # Visualization
+                if np.size(particles) > 0:
+                    # clear the geometries
+                    self.particle_cloud.clear()
+                    self.axis.clear()
+                    for pts, (pose, label, dims, uuid) in zip(particles, estimates):
+                        # for each model, add its particles and pose as axis
+                        tmp_pcl = o3d.geometry.PointCloud()
+                        tmp_pcl.points = o3d.utility.Vector3dVector(pts)
+                        c = self._get_obj_color(label)  # get model color according to the label
+                        tmp_pcl.paint_uniform_color(c)
+                        self.particle_cloud += tmp_pcl
+                        self.axis += o3d.geometry.TriangleMesh.create_coordinate_frame(0.2, pose.tolist())
+                    # o3d.visualization.draw_geometries([self.particle_cloud])
+                    self.vis.update_geometry(self.particle_cloud)
+                    self.vis.update_geometry(self.axis)
+                # if there are no models, only update the rendering window (otherwise panning/zooming won't work)
                 self.vis.poll_events()
                 self.vis.update_renderer()
 
             self.filtered_publisher.publish(pose_array_msg)
+
+    def _get_obj_color(self, obj_name):
+        return object_properties[self.INVERSE_OBJ_MAP[obj_name]]["color"]
 
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
