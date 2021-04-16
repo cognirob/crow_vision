@@ -8,8 +8,10 @@ from sensor_msgs.msg import Image as msg_image
 from crow_msgs.msg import DetectionMask, FilteredPose
 from geometry_msgs.msg import PoseArray
 from crow_vision_ros2.filters import object_properties
+from cv_bridge import CvBridge
 import message_filters
 
+import cv2
 import numpy as np
 import time
 import open3d as o3d
@@ -27,8 +29,9 @@ class Visualizator(Node):
             self.get_logger().warn("No cams detected, waiting 2s.")
             time.sleep(2)
             self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
-        self.mask_topics = [cam + "/detections/image" for cam in self.cameras] #input masks from 2D rgb (from our detector.py)
+        self.mask_topics = [cam + "/detections/image_annot" for cam in self.cameras] #input masks from 2D rgb (from our detector.py)
         self.filter_topics = ["filtered_poses"] #input masks from 2D rgb (from our detector.py)
+        self.cvb_ = CvBridge()
 
         #create listeners
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -73,13 +76,16 @@ class Visualizator(Node):
         self.visualize_particles(pose_array_msg.particles, pose_array_msg.label, pose_array_msg.poses)
 
     def input_detector_callback(self,img_array_msg, cam):
-        if not img_array_msg.image:
+        if not img_array_msg.data:
             self.get_logger().info("No image. Quitting early.")
             return  # no annotated image received (for some reason)
-        print(cam)
-        print(img_array_msg.data)
-        print(img_array_msg.height)
-        print(img_array_msg.width)
+        # print(cam)
+        # print(img_array_msg.height)
+        # print(img_array_msg.width)
+        
+        cv_image = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='bgr8')
+        cv2.imshow('img_labeled', cv_image) #brg?rgb
+        cv2.waitKey(1)
 
     def _get_obj_color(self, obj_name):
         return object_properties[self.INVERSE_OBJ_MAP[obj_name]]["color"]
@@ -151,7 +157,7 @@ class Visualizator(Node):
 
 def main():
     rclpy.init()
-    time.sleep(1)
+    #time.sleep(5)
     visualizator = Visualizator()
     rclpy.spin(visualizator)
     visualizator.destroy_node()
