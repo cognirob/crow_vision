@@ -279,7 +279,7 @@ class ParticleFilter():
         # remove stale models
         toBeDeleted = np.where((time_now - self.model_last_update) > self.DELETION_TIME_LIMIT)[0].tolist()
         if len(toBeDeleted) > 0:
-            for tbd in toBeDeleted:
+            for tbd in sorted(toBeDeleted, reverse=True):
                 self._delete_model(tbd)
         # move
         self._predict(time_delta)
