@@ -35,7 +35,7 @@ from numba import jit
 class Locator(Node):
     PUBLISH_DEBUG = True
 
-    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(100, 1500)):
+    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 1.5)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud.
         @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in mm], default 10cm .. 1m. Points in cloud
@@ -131,8 +131,9 @@ class Locator(Node):
         # 1. convert 3d pcl to 2d image-space
         imspace = self.project(cameraData["camera_matrix"], point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace[np.isnan(imspace)] = -1 #marking as -1 results in deletion (omission) of these points in 3D, as it's impossible to match to -1
-        imspace[imspace > self.depth_max] = -1 # drop points with depth outside of range
-        imspace[imspace < self.depth_min] = -1 # drop points with depth outside of range
+        dist = np.linalg.norm(point_cloud, axis=0)
+        bad_points = np.logical_or(dist < self.depth_min, dist > self.depth_max)
+        imspace[:, bad_points] = -1
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
 
