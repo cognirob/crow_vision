@@ -1,5 +1,7 @@
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.srv import GetParameters
+from rclpy.exceptions import ParameterNotDeclaredException
 from ros2param.api import call_get_parameters
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -20,9 +22,13 @@ from pyquaternion import Quaternion
 
 class Visualizator(Node):
     INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(object_properties.values())}
+    TIMER_FREQ = 5 # seconds
+    VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
 
     def __init__(self, node_name="visualizator"):
         super().__init__(node_name)
+
+        self.processor_state_srv = self.create_client(GetParameters, '/sentence_processor/get_parameters')
 
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
@@ -32,6 +38,9 @@ class Visualizator(Node):
         self.mask_topics = [cam + "/detections/image_annot" for cam in self.cameras] #input masks from 2D rgb (from our detector.py)
         self.filter_topics = ["filtered_poses"] #input masks from 2D rgb (from our detector.py)
         self.cvb_ = CvBridge()
+
+        #create timer for nlp params check - periodically check and update params in the annot figure
+        self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
 
         #create listeners
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -44,30 +53,35 @@ class Visualizator(Node):
 
             self.get_logger().info('Input listener created on topic: "%s"' % maskTopic)
 
-        self.create_subscription(msg_type=FilteredPose,
-                                        topic=self.filter_topics[0],
-                                        # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
-                                        callback=lambda pose_array_msg: self.input_filter_callback(pose_array_msg),
-                                        qos_profile=qos) #the listener QoS has to be =1, "keep last only".
-            
-        self.get_logger().info('Input listener created on topic: "%s"' % self.filter_topics[0])
+        if self.VISUALIZE_PARTICLES:
+            self.create_subscription(msg_type=FilteredPose,
+                                            topic=self.filter_topics[0],
+                                            # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                            callback=lambda pose_array_msg: self.input_filter_callback(pose_array_msg),
+                                            qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+                
+            self.get_logger().info('Input listener created on topic: "%s"' % self.filter_topics[0])
 
-        # Initialize visualization properties
-        self.vis = o3d.visualization.Visualizer()
-        self.vis.create_window()
-        # geometry for the particles
-        self.particle_cloud = o3d.geometry.PointCloud()
-        # some initial random particles necessary automaticall set the viewpoint
-        self.particle_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
-        self.vis.add_geometry(self.particle_cloud)
-        # geometry for the axis
-        self.axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
-        self.vis.add_geometry(self.axis)
-        # geometry for the texts
-        self.text_cloud = o3d.geometry.PointCloud()
-        # some initial random particles necessary automaticall set the viewpoint
-        self.text_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
-        self.vis.add_geometry(self.text_cloud)
+            # Initialize visualization properties
+            self.vis = o3d.visualization.Visualizer()
+            #self.vis.create_window()
+            # geometry for the particles
+            self.particle_cloud = o3d.geometry.PointCloud()
+            # some initial random particles necessary automaticall set the viewpoint
+            self.particle_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
+            self.vis.add_geometry(self.particle_cloud)
+            # geometry for the axis
+            self.axis = o3d.geometry.TriangleMesh.create_coordinate_frame()
+            self.vis.add_geometry(self.axis)
+            # geometry for the texts
+            self.text_cloud = o3d.geometry.PointCloud()
+            # some initial random particles necessary automaticall set the viewpoint
+            self.text_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
+            self.vis.add_geometry(self.text_cloud)
+
+        # Initialize cv2 annotated image visualization with descriptions
+        self.cv_image = np.zeros((128, 128, 3))
+        self.params = []
 
     def input_filter_callback(self, pose_array_msg):
         if not pose_array_msg.particles:
@@ -79,16 +93,78 @@ class Visualizator(Node):
         if not img_array_msg.data:
             self.get_logger().info("No image. Quitting early.")
             return  # no annotated image received (for some reason)
-        # print(cam)
-        # print(img_array_msg.height)
-        # print(img_array_msg.width)
+        self.cv_image = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='bgr8')
+        self.update_annot_image()
+
+    def check_nlp_params_timer(self):
+        print('in check_nlp_params')
+        req = GetParameters.Request()
+        req.names = ['template_detected','object_detected','found_in_workspace']
+        # print(self.processor_state_srv.service_is_ready())
+        future = self.processor_state_srv.call_async(req)
         
-        cv_image = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='bgr8')
-        cv2.imshow('img_labeled', cv_image) #brg?rgb
-        cv2.waitKey(1)
+        #future.add_done_callback(self.nlp_params_callback)
+        
+        # rclpy.spin_until_future_complete(self, future, timeout_sec=0)
+        # if future.done():
+        #     self.nlp_params_callback(future)
+        # # else:
+        # #     return
+        # self.update_annot_image()
+        
+        while not future.done():
+            rclpy.spin_once(self)
+        self.nlp_params_callback(future)
+        #     #TODO: check if node/service is alive        
+        # print(future.result().values[0].bool_value)
+        # return future.result().values[0].bool_value
+
+    def nlp_params_callback(self, future):
+        print('nlp_params_callback')
+        try:
+            result = future.result()
+        except Exception as e:
+            self.get_logger().warn("Nlp service call failed %r" % (e,))
+        else:
+            self.params = []
+            for param in result.values:
+                print("Got global param: {}".format(param.string_value))
+                #self.params.append(param.string_value)
+            # self.update_annot_image()
+
+    def __putText(self, image, text, origin, size=1, color=(255, 255, 255), thickness=2):
+        """ Prints text into an image. Uses the original OpenCV functions
+        but simplifies some things. The main difference betwenn OpenCV and this function
+        is that in this function, the origin is the center of the text.
+        Arguments:
+            image {ndarray} -- the image where the text is to be printed into
+            text {str} -- the text itself
+            origin {tuple} -- position in the image where the text should be centered around
+        Keyword Arguments:
+            size {int} -- size/scale of the font (default: {1})
+            color {tuple} -- color of the text (default: {(255, 255, 255)})
+            thickness {int} -- line thickness of the text (default: {2})
+        Returns:
+            ndarray -- the original image with the text printed into it
+        """
+        offset = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, size, thickness)[0] * np.r_[-1, 1] * 0 # / 2
+        offset = 0
+        return cv2.putText(image, text, tuple(np.int32(origin + offset).tolist()), cv2.FONT_HERSHEY_SIMPLEX, size, color, thickness)
 
     def _get_obj_color(self, obj_name):
         return object_properties[self.INVERSE_OBJ_MAP[obj_name]]["color"]
+
+    def update_annot_image(self):
+        xp = 5
+        yp = 20
+        scoreScreen = np.zeros((128, self.cv_image.shape[1], 3), dtype=np.uint8)
+        scoreScreen = self.__putText(scoreScreen, "Objects in the workspace: {}".format(self.params), (xp, yp), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params), (5, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params), (5, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+
+        up_image = np.vstack((self.cv_image, scoreScreen))
+        cv2.imshow('Detections', up_image)
+        cv2.waitKey(1)
 
     def text_3d(self, text, pos, direction=None, degree=-90, density=10, font='/usr/share/fonts/truetype/freefont/FreeMono.ttf', font_size=8):
         """
