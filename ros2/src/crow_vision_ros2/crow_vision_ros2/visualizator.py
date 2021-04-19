@@ -12,6 +12,7 @@ from geometry_msgs.msg import PoseArray
 from crow_vision_ros2.filters import object_properties
 from cv_bridge import CvBridge
 import message_filters
+from crow_ontology.crowracle_client import CrowtologyClient
 
 import cv2
 import numpy as np
@@ -29,6 +30,7 @@ class Visualizator(Node):
         super().__init__(node_name)
 
         self.processor_state_srv = self.create_client(GetParameters, '/sentence_processor/get_parameters')
+        self.crowracle = CrowtologyClient(node=self)
 
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
@@ -129,7 +131,13 @@ class Visualizator(Node):
             self.params = []
             for param in result.values:
                 print("Got global param: {}".format(param.string_value))
-                self.params.append(param.string_value)
+            self.params.append(result.values[0].string_value)
+            self.params.append(result.values[1].string_value)
+            self.params.append(result.values[2].bool_value)
+            obj_str = result.values[1].string_value
+            obj_uri = self.crowracle.get_uri_from_str(obj_str)
+            nlp_name = self.crowracle.get_nlp_from_uri(obj_uri)
+            self.params.append(nlp_name)
             self.update_annot_image()
 
     def __putText(self, image, text, origin, size=1, color=(255, 255, 255), thickness=2):
@@ -157,9 +165,10 @@ class Visualizator(Node):
         xp = 5
         yp = 20
         scoreScreen = np.zeros((128, self.cv_image.shape[1], 3), dtype=np.uint8)
-        scoreScreen = self.__putText(scoreScreen, "Objects in the workspace: {}".format(self.params[0]), (xp, yp), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params[1]), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params[2]), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params[0]), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params[1]), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Object in the workspace: {}".format(self.params[3]), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Object in the workspace: {}".format(self.params[2]), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
 
         up_image = np.vstack((self.cv_image, scoreScreen))
         cv2.imshow('Detections', up_image)
