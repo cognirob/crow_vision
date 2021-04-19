@@ -81,7 +81,7 @@ class Visualizator(Node):
 
         # Initialize cv2 annotated image visualization with descriptions
         self.cv_image = np.zeros((128, 128, 3))
-        self.params = []
+        self.params = ['-']*3
 
     def input_filter_callback(self, pose_array_msg):
         if not pose_array_msg.particles:
