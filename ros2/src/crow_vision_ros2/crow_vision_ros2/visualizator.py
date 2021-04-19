@@ -103,7 +103,7 @@ class Visualizator(Node):
         # print(self.processor_state_srv.service_is_ready())
         future = self.processor_state_srv.call_async(req)
         
-        #future.add_done_callback(self.nlp_params_callback)
+        future.add_done_callback(self.nlp_params_callback)
         
         # rclpy.spin_until_future_complete(self, future, timeout_sec=0)
         # if future.done():
@@ -112,9 +112,9 @@ class Visualizator(Node):
         # #     return
         # self.update_annot_image()
         
-        while not future.done():
-            rclpy.spin_once(self)
-        self.nlp_params_callback(future)
+        # while not future.done():
+        #     rclpy.spin_once(self)
+        # self.nlp_params_callback(future)
         #     #TODO: check if node/service is alive        
         # print(future.result().values[0].bool_value)
         # return future.result().values[0].bool_value
@@ -129,8 +129,8 @@ class Visualizator(Node):
             self.params = []
             for param in result.values:
                 print("Got global param: {}".format(param.string_value))
-                #self.params.append(param.string_value)
-            # self.update_annot_image()
+                self.params.append(param.string_value)
+            self.update_annot_image()
 
     def __putText(self, image, text, origin, size=1, color=(255, 255, 255), thickness=2):
         """ Prints text into an image. Uses the original OpenCV functions
@@ -148,7 +148,6 @@ class Visualizator(Node):
             ndarray -- the original image with the text printed into it
         """
         offset = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, size, thickness)[0] * np.r_[-1, 1] * 0 # / 2
-        offset = 0
         return cv2.putText(image, text, tuple(np.int32(origin + offset).tolist()), cv2.FONT_HERSHEY_SIMPLEX, size, color, thickness)
 
     def _get_obj_color(self, obj_name):
@@ -158,9 +157,9 @@ class Visualizator(Node):
         xp = 5
         yp = 20
         scoreScreen = np.zeros((128, self.cv_image.shape[1], 3), dtype=np.uint8)
-        scoreScreen = self.__putText(scoreScreen, "Objects in the workspace: {}".format(self.params), (xp, yp), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params), (5, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params), (5, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Objects in the workspace: {}".format(self.params[0]), (xp, yp), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params[1]), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params[2]), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
 
         up_image = np.vstack((self.cv_image, scoreScreen))
         cv2.imshow('Detections', up_image)
