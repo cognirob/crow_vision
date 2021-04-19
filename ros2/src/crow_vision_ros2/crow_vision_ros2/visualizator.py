@@ -83,7 +83,7 @@ class Visualizator(Node):
 
         # Initialize cv2 annotated image visualization with descriptions
         self.cv_image = np.zeros((128, 128, 3))
-        self.params = ['-']*3
+        self.params = ['-']*4
 
     def input_filter_callback(self, pose_array_msg):
         if not pose_array_msg.particles:
@@ -167,7 +167,7 @@ class Visualizator(Node):
         scoreScreen = np.zeros((128, self.cv_image.shape[1], 3), dtype=np.uint8)
         scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params[0]), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
         scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params[1]), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Object in the workspace: {}".format(self.params[3]), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+        scoreScreen = self.__putText(scoreScreen, "Detected object name: {}".format(self.params[3]), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
         scoreScreen = self.__putText(scoreScreen, "Object in the workspace: {}".format(self.params[2]), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
 
         up_image = np.vstack((self.cv_image, scoreScreen))
