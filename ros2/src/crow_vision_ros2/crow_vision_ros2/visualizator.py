@@ -21,6 +21,7 @@ import open3d as o3d
 from PIL import Image, ImageFont, ImageDraw
 from pyquaternion import Quaternion
 from unicodedata import normalize
+import subprocess
 
 
 class Visualizator(Node):
@@ -49,10 +50,13 @@ class Visualizator(Node):
         self.nlp_topics = ["/nlp/status"] #nlp status (from our sentence_processor.py)
         self.cvb_ = CvBridge()
         self.cv_image = {} # initialize dict of images, each one for one camera
+        # response = str(subprocess.check_output("ros2 param get /sentence_processor halt_nlp".split()))
+        self.NLP_HALTED = False  #"False" in response
 
         #create timer for nlp params check - periodically check and update params in the annot figure
         #self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
 
+        self.infoPanel = None
         #create listeners
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         for i, (cam, maskTopic) in enumerate(zip(self.cameras, self.mask_topics)):
@@ -66,6 +70,9 @@ class Visualizator(Node):
 
             # Initialize cv2 annotated image visualization with descriptions
             self.cv_image['{}'.format(cam)] = np.zeros((128, 128, 3))
+
+            cv2.namedWindow('Detekce{}'.format(cam))
+            cv2.setMouseCallback('Detekce{}'.format(cam), self.window_click)
 
         self.create_subscription(msg_type=NlpStatus,
                                             topic=self.nlp_topics[0],
@@ -103,6 +110,17 @@ class Visualizator(Node):
 
         # Initialize nlp params for info bellow image
         self.params = {'det_obj': '-', 'det_command': '-', 'det_obj_name': '-', 'det_obj_in_ws': '-', 'status': '-'}
+
+    def window_click(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            response = str(subprocess.check_output("ros2 param get /sentence_processor halt_nlp".split()))
+            if "False" in response:
+                subprocess.run("ros2 param set /sentence_processor halt_nlp True".split())
+                self.NLP_HALTED = True
+            else:
+                subprocess.run("ros2 param set /sentence_processor halt_nlp False".split())
+                self.NLP_HALTED = False
+            # print("Response === " + str(response.stdout))
 
     def input_filter_callback(self, pose_array_msg):
         if not pose_array_msg.particles:
@@ -209,19 +227,41 @@ class Visualizator(Node):
     def update_annot_image(self):
         xp = 5
         yp = 20
-        im_shape = next(iter(self.cv_image.values())).shape[1]
-        scoreScreen = np.zeros((128, im_shape, 3), dtype=np.uint8)
+        scHeight = 128
+        im_shape = next(iter(self.cv_image.values())).shape
+        scoreScreen = np.zeros((scHeight, im_shape[1], 3), dtype=np.uint8)
+        if self.infoPanel is None:
+            self.infoPanel = np.zeros((im_shape[0] + scHeight, 256, 3), dtype=np.uint8)
+            self.infoPanel = self.__putText(self.infoPanel, "Prikazy:", (xp, yp*1), color=self.COLOR_GRAY, size=0.5, thickness=1)
+            self.infoPanel = self.__putText(self.infoPanel, "Ukaz na <OBJEKT>", (xp, yp*2), color=self.COLOR_GRAY, size=0.5, thickness=1)
+            self.infoPanel = self.__putText(self.infoPanel, "Ukaz na <BARVA> <OBJEKT>", (xp, yp*3), color=self.COLOR_GRAY, size=0.5, thickness=1)
+            self.infoPanel = self.__putText(self.infoPanel, "Seber <OBJEKT>", (xp, yp*4), color=self.COLOR_GRAY, size=0.5, thickness=1)
+
         if self.LANGUAGE == 'CZ':
             scoreScreen = self.__putText(scoreScreen, "Detekovany prikaz: {}".format(self.params['det_command']), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
             scoreScreen = self.__putText(scoreScreen, "Detekovany objekt: {}".format(self.params['det_obj']), (xp, yp*2), color=self.COLOR_GRAY, size=0.5, thickness=1)
             scoreScreen = self.__putText(scoreScreen, "Detekovany objekt (jmeno): {}".format(self.params['det_obj_name']), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
             scoreScreen = self.__putText(scoreScreen, "Objekt je na pracovisti: {}".format(self.params['det_obj_in_ws']), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
             scoreScreen = self.__putText(scoreScreen, "Stav: {}".format(self.params['status']), (xp, yp*5 + 10), color=(255, 224, 200), size=0.7, thickness=2)
+            if self.NLP_HALTED:
+                scoreScreen = self.__putText(scoreScreen, "STOP", (im_shape[1] - 70, yp), color=(0, 0, 255), size=0.7, thickness=2)
 
             for cam, img in self.cv_image.items():
-                up_image = np.vstack((img, scoreScreen))
+                up_image = np.hstack((self.infoPanel, np.vstack((img, scoreScreen))))
                 cv2.imshow('Detekce{}'.format(cam), up_image)
-                cv2.waitKey(1)
+                key = cv2.waitKey(10) & 0xFF
+                if key == ord("f"):
+                    print(cv2.getWindowProperty('Detekce{}'.format(cam), cv2.WND_PROP_FULLSCREEN))
+                    print(cv2.WINDOW_FULLSCREEN)
+                    print(cv2.getWindowProperty('Detekce{}'.format(cam), cv2.WND_PROP_FULLSCREEN) == cv2.WINDOW_FULLSCREEN)
+                    if cv2.getWindowProperty('Detekce{}'.format(cam), cv2.WND_PROP_FULLSCREEN) == cv2.WINDOW_FULLSCREEN:
+                        cv2.setWindowProperty('Detekce{}'.format(cam), cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_AUTOSIZE)
+                    else:
+                        cv2.setWindowProperty('Detekce{}'.format(cam), cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                if key == ord(" "):
+                    self.window_click(cv2.EVENT_LBUTTONDOWN, None, None, None, None)
+                if key == ord("q"):
+                    rclpy.utilities.try_shutdown()
 
         else:
             scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params['det_command']), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
@@ -231,9 +271,9 @@ class Visualizator(Node):
             scoreScreen = self.__putText(scoreScreen, "Status: {}".format(self.params['status']), (xp, yp*5), color=(255, 255, 255), size=0.5, thickness=1)
 
             for cam, img in self.cv_image.items():
-                up_image = np.vstack((img, scoreScreen))
+                up_image = np.hstack((self.infoPanel, np.vstack((img, scoreScreen))))
                 cv2.imshow('Detections{}'.format(cam), up_image)
-                cv2.waitKey(1)
+                cv2.waitKey(10)
 
     def text_3d(self, text, pos, direction=None, degree=-90, density=10, font='/usr/share/fonts/truetype/freefont/FreeMono.ttf', font_size=8):
         """
@@ -309,6 +349,7 @@ def main():
     #     print("sadasd")
     #     rclpy.spin_once(visualizator)
     rclpy.spin(visualizator)
+    cv2.destroyAllWindows()
     visualizator.destroy_node()
 
 if __name__ == "__main__":
