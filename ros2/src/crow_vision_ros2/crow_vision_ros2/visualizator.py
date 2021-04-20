@@ -7,7 +7,7 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from sensor_msgs.msg import Image as msg_image
-from crow_msgs.msg import DetectionMask, FilteredPose
+from crow_msgs.msg import FilteredPose, NlpStatus
 from geometry_msgs.msg import PoseArray
 from crow_vision_ros2.filters import object_properties
 from cv_bridge import CvBridge
@@ -24,7 +24,8 @@ from pyquaternion import Quaternion
 class Visualizator(Node):
     INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(object_properties.values())}
     TIMER_FREQ = .5 # seconds
-    VISUALIZE_PARTICLES = True #@TODO: communicate with ParticleFilter about this param!
+    VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
+    LANGUAGE = 'CZ' #language of the visualization
 
     def __init__(self, node_name="visualizator"):
         super().__init__(node_name)
@@ -39,10 +40,12 @@ class Visualizator(Node):
             self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
         self.mask_topics = [cam + "/detections/image_annot" for cam in self.cameras] #input masks from 2D rgb (from our detector.py)
         self.filter_topics = ["filtered_poses"] #input masks from 2D rgb (from our detector.py)
+        self.nlp_topics = ["/nlp/status"] #nlp status (from our sentence_processor.py)
         self.cvb_ = CvBridge()
+        self.cv_image = {} # initialize dict of images, each one for one camera
 
         #create timer for nlp params check - periodically check and update params in the annot figure
-        # self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
+        #self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
 
         #create listeners
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -54,6 +57,17 @@ class Visualizator(Node):
                                           qos_profile=qos) #the listener QoS has to be =1, "keep last only".
 
             self.get_logger().info('Input listener created on topic: "%s"' % maskTopic)
+
+            # Initialize cv2 annotated image visualization with descriptions
+            self.cv_image['{}'.format(cam)] = np.zeros((128, 128, 3))
+
+        self.create_subscription(msg_type=NlpStatus,
+                                            topic=self.nlp_topics[0],
+                                            # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                            callback=lambda status_array_msg: self.input_nlp_callback(status_array_msg),
+                                            qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+                
+        self.get_logger().info('Input listener created on topic: "%s"' % self.nlp_topics[0])
 
         if self.VISUALIZE_PARTICLES:
             self.create_subscription(msg_type=FilteredPose,
@@ -81,9 +95,8 @@ class Visualizator(Node):
             self.text_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
             self.vis.add_geometry(self.text_cloud)
 
-        # Initialize cv2 annotated image visualization with descriptions
-        self.cv_image = np.zeros((128, 128, 3))
-        self.params = ['-']*4
+        # Initialize nlp params for info bellow image
+        self.params = {'det_obj': '-', 'det_command': '-', 'det_obj_name': '-', 'det_obj_in_ws': '-', 'status': '-'}
 
     def input_filter_callback(self, pose_array_msg):
         if not pose_array_msg.particles:
@@ -91,11 +104,36 @@ class Visualizator(Node):
             return  # no particles received (for some reason)
         self.visualize_particles(pose_array_msg.particles, pose_array_msg.label, pose_array_msg.poses)
 
-    def input_detector_callback(self,img_array_msg, cam):
+    def input_detector_callback(self, img_array_msg, cam):
         if not img_array_msg.data:
             self.get_logger().info("No image. Quitting early.")
             return  # no annotated image received (for some reason)
-        self.cv_image = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='bgr8')
+        self.cv_image['{}'.format(cam)] = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='bgr8')
+        self.update_annot_image()
+
+    def input_nlp_callback(self, status_array_msg):
+        if not status_array_msg.det_obj:
+            self.get_logger().info("No nlp detections. Quitting early.")
+            return  # no nlp detections received (for some reason)
+
+        obj_str = status_array_msg.det_obj
+        obj_uri = self.crowracle.get_uri_from_str(obj_str)
+        nlp_name = self.crowracle.get_nlp_from_uri(obj_uri)
+        if len(nlp_name) > 0:
+            nlp_name = nlp_name[0]
+        else:
+            nlp_name = '-'
+
+        if status_array_msg.found_in_ws:
+            obj_in_ws = 'ano'
+        else:
+            obj_in_ws = 'ne'
+
+        self.params['det_obj'] = status_array_msg.det_obj
+        self.params['det_command'] = status_array_msg.det_command
+        self.params['det_obj_name'] = nlp_name
+        self.params['det_obj_in_ws'] = obj_in_ws
+        self.params['status'] = status_array_msg.status
         self.update_annot_image()
 
     def check_nlp_params_timer(self):
@@ -136,7 +174,7 @@ class Visualizator(Node):
             self.params.append(result.values[2].bool_value)
             obj_str = result.values[1].string_value
             obj_uri = self.crowracle.get_uri_from_str(obj_str)
-            nlp_name = self.crowracle.get_nlp_from_uri(obj_uri)
+            nlp_name = self.crowracle.get_nlp_from_uri(obj_uri, language=self.LANGUAGE)
             self.params.append(nlp_name)
             self.update_annot_image()
 
@@ -164,15 +202,31 @@ class Visualizator(Node):
     def update_annot_image(self):
         xp = 5
         yp = 20
-        scoreScreen = np.zeros((128, self.cv_image.shape[1], 3), dtype=np.uint8)
-        scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params[0]), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params[1]), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Detected object name: {}".format(self.params[3]), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
-        scoreScreen = self.__putText(scoreScreen, "Object in the workspace: {}".format(self.params[2]), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
+        im_shape = next(iter(self.cv_image.values())).shape[1]
+        scoreScreen = np.zeros((128, im_shape, 3), dtype=np.uint8)
+        if self.LANGUAGE == 'CZ':
+            scoreScreen = self.__putText(scoreScreen, "Detekovany prikaz: {}".format(self.params['det_command']), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Detekovany objekt: {}".format(self.params['det_obj']), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Detekovany objekt (jmeno): {}".format(self.params['det_obj_name']), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Objekt je na pracovisti: {}".format(self.params['det_obj_in_ws']), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Stav: {}".format(self.params['status']), (xp, yp*5), color=(255, 255, 255), size=0.5, thickness=1)
 
-        up_image = np.vstack((self.cv_image, scoreScreen))
-        cv2.imshow('Detections', up_image)
-        cv2.waitKey(1)
+            for cam, img in self.cv_image.items():
+                up_image = np.vstack((img, scoreScreen))
+                cv2.imshow('Detekce{}'.format(cam), up_image)
+                cv2.waitKey(1)
+
+        else:
+            scoreScreen = self.__putText(scoreScreen, "Detected this command: {}".format(self.params['det_command']), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Detected this object: {}".format(self.params['det_obj']), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Detected object name: {}".format(self.params['det_obj_name']), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Object in the workspace: {}".format(self.params['det_obj_in_ws']), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Status: {}".format(self.params['status']), (xp, yp*5), color=(255, 255, 255), size=0.5, thickness=1)
+
+            for cam, img in self.cv_image.items():
+                up_image = np.vstack((img, scoreScreen))
+                cv2.imshow('Detections{}'.format(cam), up_image)
+                cv2.waitKey(1)
 
     def text_3d(self, text, pos, direction=None, degree=-90, density=10, font='/usr/share/fonts/truetype/freefont/FreeMono.ttf', font_size=8):
         """
