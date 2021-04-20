@@ -220,23 +220,23 @@ object_properties = {
 class ParticleFilter():
     MEAN_SHIFT_PRECISSION = 0.001
     CLASS_HISTORY_LEN = 10
-    PARTICLES_PER_MODEL = 1000
+    PARTICLES_PER_MODEL = 500
     TIMER_CLASS = Timer
-    DELETION_TIME_LIMIT = 10  # 10 seconds
+    DELETION_TIME_LIMIT = 5  # 10 seconds
     MAX_SHIFT_ITERS = 20
     STATIC_NOISE = 0.01  # 5 cm
-    GLOBAL_DISTANCE_LIMIT = 0.2  # limit for a model to be considered "close" to new observation
+    GLOBAL_DISTANCE_LIMIT = 0.1  # limit for a model to be considered "close" to new observation
     TREE_DISTANCE_UPPER_BOUND = 0.01  # TODO: should be probably 1mm?
-    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-2  # TODO: search for optimal value
+    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-7  # TODO: search for optimal value
     PARTICLES_PCL_COUNT = 200  # how many particles to generate from measured PCLs
-    PARTICLES_UNIFORM_COUNT = 200  # how many uniformly distributed particles to generate
-    PARTICLES_UNIFORM_DISTANCE = 0.7  # size of circle or cube around the object in which the uniformly random ptcs should be generated
+    PARTICLES_UNIFORM_COUNT = 500  # how many uniformly distributed particles to generate
+    PARTICLES_UNIFORM_DISTANCE = 0.2  # size of circle or cube around the object in which the uniformly random ptcs should be generated
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
-    ACCELERATION_LIMIT = 0.05  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
-    SPEED_LIMIT = 0.5  # 1m/s is assumed as max speed (higher values are clipped)
-    NEW_MODEL_MIN_UPDATES = 2  # minimum number of measurements required for new model to be reported
+    ACCELERATION_LIMIT = 0.0005  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
+    SPEED_LIMIT = 0.05  # 1m/s is assumed as max speed (higher values are clipped)
+    NEW_MODEL_MIN_UPDATES = 10  # minimum number of measurements required for new model to be reported
     NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
-    REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
+    REPORT_FRESH_MODELS_ONLY = False  # if True, reports only models that had updates lately
 
     def __init__(self):
         self.timer = self.TIMER_CLASS()
@@ -325,6 +325,7 @@ class ParticleFilter():
         * spread particles
         * add uniformly random particles
         """
+        # return  # FIXME remove to start updating speed
         time_tensor = tensor([time_delta, time_delta**2], dtype=torch.float32).unsqueeze(0)  # (1x2)
         self._update_velocities = time_tensor.matmul(self.model_params)  # model_params : (Qx2x3) -> Qx1x3
         # TODO: update velocity and acceleration?
