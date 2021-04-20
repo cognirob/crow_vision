@@ -174,7 +174,7 @@ class Visualizator(Node):
             self.params.append(result.values[2].bool_value)
             obj_str = result.values[1].string_value
             obj_uri = self.crowracle.get_uri_from_str(obj_str)
-            nlp_name = self.crowracle.get_nlp_from_uri(obj_uri)
+            nlp_name = self.crowracle.get_nlp_from_uri(obj_uri, language=self.LANGUAGE)
             self.params.append(nlp_name)
             self.update_annot_image()
 
