@@ -20,12 +20,15 @@ import time
 import open3d as o3d
 from PIL import Image, ImageFont, ImageDraw
 from pyquaternion import Quaternion
+from unicodedata import normalize
+
 
 class Visualizator(Node):
     INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(object_properties.values())}
     TIMER_FREQ = .5 # seconds
     VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
     LANGUAGE = 'CZ' #language of the visualization
+    COLOR_GRAY = (128, 128, 128)
 
     def __init__(self, node_name="visualizator"):
         super().__init__(node_name)
@@ -33,6 +36,9 @@ class Visualizator(Node):
         self.processor_state_srv = self.create_client(GetParameters, '/sentence_processor/get_parameters')
         self.crowracle = CrowtologyClient(node=self)
 
+        calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
+        self.get_logger().info("Waiting for calibrator to setup cameras")
+        calib_client.wait_for_service()
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
             self.get_logger().warn("No cams detected, waiting 2s.")
@@ -193,6 +199,7 @@ class Visualizator(Node):
         Returns:
             ndarray -- the original image with the text printed into it
         """
+        text = normalize('NFKD', text).encode('ascii', 'ignore').decode("utf-8")
         offset = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, size, thickness)[0] * np.r_[-1, 1] * 0 # / 2
         return cv2.putText(image, text, tuple(np.int32(origin + offset).tolist()), cv2.FONT_HERSHEY_SIMPLEX, size, color, thickness)
 
@@ -206,10 +213,10 @@ class Visualizator(Node):
         scoreScreen = np.zeros((128, im_shape, 3), dtype=np.uint8)
         if self.LANGUAGE == 'CZ':
             scoreScreen = self.__putText(scoreScreen, "Detekovany prikaz: {}".format(self.params['det_command']), (xp, yp*1), color=(255, 255, 255), size=0.5, thickness=1)
-            scoreScreen = self.__putText(scoreScreen, "Detekovany objekt: {}".format(self.params['det_obj']), (xp, yp*2), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Detekovany objekt: {}".format(self.params['det_obj']), (xp, yp*2), color=self.COLOR_GRAY, size=0.5, thickness=1)
             scoreScreen = self.__putText(scoreScreen, "Detekovany objekt (jmeno): {}".format(self.params['det_obj_name']), (xp, yp*3), color=(255, 255, 255), size=0.5, thickness=1)
             scoreScreen = self.__putText(scoreScreen, "Objekt je na pracovisti: {}".format(self.params['det_obj_in_ws']), (xp, yp*4), color=(255, 255, 255), size=0.5, thickness=1)
-            scoreScreen = self.__putText(scoreScreen, "Stav: {}".format(self.params['status']), (xp, yp*5), color=(255, 255, 255), size=0.5, thickness=1)
+            scoreScreen = self.__putText(scoreScreen, "Stav: {}".format(self.params['status']), (xp, yp*5 + 10), color=(255, 224, 200), size=0.7, thickness=2)
 
             for cam, img in self.cv_image.items():
                 up_image = np.vstack((img, scoreScreen))
@@ -297,11 +304,11 @@ def main():
     rclpy.init()
     #time.sleep(5)
     visualizator = Visualizator()
-    while rclpy.ok():
-        visualizator.check_nlp_params_timer()
-        print("sadasd")
-        rclpy.spin_once(visualizator)
-    # rclpy.spin(visualizator)
+    # while rclpy.ok():
+    #     visualizator.check_nlp_params_timer()
+    #     print("sadasd")
+    #     rclpy.spin_once(visualizator)
+    rclpy.spin(visualizator)
     visualizator.destroy_node()
 
 if __name__ == "__main__":
