@@ -23,8 +23,8 @@ from pyquaternion import Quaternion
 
 class Visualizator(Node):
     INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(object_properties.values())}
-    TIMER_FREQ = 5 # seconds
-    VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
+    TIMER_FREQ = .5 # seconds
+    VISUALIZE_PARTICLES = True #@TODO: communicate with ParticleFilter about this param!
 
     def __init__(self, node_name="visualizator"):
         super().__init__(node_name)
@@ -42,7 +42,7 @@ class Visualizator(Node):
         self.cvb_ = CvBridge()
 
         #create timer for nlp params check - periodically check and update params in the annot figure
-        self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
+        # self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
 
         #create listeners
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
@@ -66,7 +66,7 @@ class Visualizator(Node):
 
             # Initialize visualization properties
             self.vis = o3d.visualization.Visualizer()
-            #self.vis.create_window()
+            self.vis.create_window()
             # geometry for the particles
             self.particle_cloud = o3d.geometry.PointCloud()
             # some initial random particles necessary automaticall set the viewpoint
@@ -105,13 +105,13 @@ class Visualizator(Node):
         # print(self.processor_state_srv.service_is_ready())
         future = self.processor_state_srv.call_async(req)
         
-        future.add_done_callback(self.nlp_params_callback)
+        # future.add_done_callback(self.nlp_params_callback)
         
-        # rclpy.spin_until_future_complete(self, future, timeout_sec=0)
-        # if future.done():
-        #     self.nlp_params_callback(future)
-        # # else:
-        # #     return
+        rclpy.spin_until_future_complete(self, future, timeout_sec=1)
+        if future.done():
+            self.nlp_params_callback(future)
+        # else:
+        #     return
         # self.update_annot_image()
         
         # while not future.done():
@@ -243,7 +243,11 @@ def main():
     rclpy.init()
     #time.sleep(5)
     visualizator = Visualizator()
-    rclpy.spin(visualizator)
+    while rclpy.ok():
+        visualizator.check_nlp_params_timer()
+        print("sadasd")
+        rclpy.spin_once(visualizator)
+    # rclpy.spin(visualizator)
     visualizator.destroy_node()
 
 if __name__ == "__main__":
