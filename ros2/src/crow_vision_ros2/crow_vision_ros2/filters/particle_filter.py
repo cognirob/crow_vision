@@ -444,6 +444,9 @@ class ParticleFilter():
             # aggregate labels from PCLs
             self.model_class_history[idx, :] = np.roll(self.model_class_history[idx, :], -1, axis=0)  # shift old data out
             self.model_class_history[idx, -1] = mode(labels)[0][0]
+            # aggregate PCLs dimensions from PCLs
+            dimension = np.median(pcl_dimensions, axis=0)
+            self.model_pcl_dimensions[idx] = dimension
             # create particles form PCLs (downsample PCL)
             particles_pcl = tensor(pcls[np.random.choice(np.arange(pcls.shape[0]), self.PARTICLES_PCL_COUNT), :], dtype=torch.float32)
             # create uniformly random particles
