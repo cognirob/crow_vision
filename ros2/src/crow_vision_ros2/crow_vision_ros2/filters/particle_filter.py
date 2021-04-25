@@ -237,6 +237,7 @@ class ParticleFilter():
     NEW_MODEL_MIN_UPDATES = 10  # minimum number of measurements required for new model to be reported
     NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
     REPORT_FRESH_MODELS_ONLY = False  # if True, reports only models that had updates lately
+    LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
 
     def __init__(self):
         self.timer = self.TIMER_CLASS()
@@ -411,7 +412,13 @@ class ParticleFilter():
                     if not np.any(valid):  # no particle is close to points in the PCL
                         continue
                     p_idx = p_idx[valid]  # take points with pairs
-                    close_models[idx] = self.particle_weights[idx, p_idx].sum()  # sum weights
+                    close_models[idx] = self.particle_weights[idx, p_idx].sum()  # model probability = sum weights
+                    if label == self.model_classes[idx]: # compare pcl's label with close_model's label
+                        # increase probability when labels match (by score*weight)
+                        close_models[idx] = close_models[idx] * (1 + score * self.LABEL_WEIGHT)
+                    else:
+                        # decrease probability when labels don't match (by score*weight)
+                        close_models[idx] = close_models[idx] * (1 - score * self.LABEL_WEIGHT)
                 # calculate model with highest probability
                 if np.any(close_models) and np.max(close_models) > self.CLOSE_MODEL_PROBABILITY_THRESHOLD:
                     closest_model = np.argmax(close_models)
