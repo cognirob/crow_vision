@@ -9,7 +9,6 @@ from rclpy.qos import QoSReliabilityPolicy
 from sensor_msgs.msg import Image as msg_image
 from crow_msgs.msg import FilteredPose, NlpStatus
 from geometry_msgs.msg import PoseArray
-from crow_vision_ros2.filters import object_properties
 from cv_bridge import CvBridge
 import message_filters
 from crow_ontology.crowracle_client import CrowtologyClient
@@ -25,7 +24,6 @@ import subprocess
 
 
 class Visualizator(Node):
-    INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(object_properties.values())}
     TIMER_FREQ = .5 # seconds
     VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
     LANGUAGE = 'CZ' #language of the visualization
@@ -36,6 +34,8 @@ class Visualizator(Node):
 
         self.processor_state_srv = self.create_client(GetParameters, '/sentence_processor/get_parameters')
         self.crowracle = CrowtologyClient(node=self)
+        self.object_properties = self.crowracle.get_filter_object_properties()
+        self.INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(self.object_properties.values())}
 
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
         self.get_logger().info("Waiting for calibrator to setup cameras")
@@ -52,9 +52,6 @@ class Visualizator(Node):
         self.cv_image = {} # initialize dict of images, each one for one camera
         # response = str(subprocess.check_output("ros2 param get /sentence_processor halt_nlp".split()))
         self.NLP_HALTED = False  #"False" in response
-
-        #create timer for nlp params check - periodically check and update params in the annot figure
-        #self.create_timer(self.TIMER_FREQ, self.check_nlp_params_timer)
 
         self.infoPanel = None
         #create listeners
@@ -160,48 +157,6 @@ class Visualizator(Node):
         self.params['status'] = status_array_msg.status
         self.update_annot_image()
 
-    def check_nlp_params_timer(self):
-        print('in check_nlp_params')
-        req = GetParameters.Request()
-        req.names = ['template_detected','object_detected','found_in_workspace']
-        # print(self.processor_state_srv.service_is_ready())
-        future = self.processor_state_srv.call_async(req)
-        
-        # future.add_done_callback(self.nlp_params_callback)
-        
-        rclpy.spin_until_future_complete(self, future, timeout_sec=1)
-        if future.done():
-            self.nlp_params_callback(future)
-        # else:
-        #     return
-        # self.update_annot_image()
-        
-        # while not future.done():
-        #     rclpy.spin_once(self)
-        # self.nlp_params_callback(future)
-        #     #TODO: check if node/service is alive        
-        # print(future.result().values[0].bool_value)
-        # return future.result().values[0].bool_value
-
-    def nlp_params_callback(self, future):
-        print('nlp_params_callback')
-        try:
-            result = future.result()
-        except Exception as e:
-            self.get_logger().warn("Nlp service call failed %r" % (e,))
-        else:
-            self.params = []
-            for param in result.values:
-                print("Got global param: {}".format(param.string_value))
-            self.params.append(result.values[0].string_value)
-            self.params.append(result.values[1].string_value)
-            self.params.append(result.values[2].bool_value)
-            obj_str = result.values[1].string_value
-            obj_uri = self.crowracle.get_uri_from_str(obj_str)
-            nlp_name = self.crowracle.get_nlp_from_uri(obj_uri, language=self.LANGUAGE)
-            self.params.append(nlp_name)
-            self.update_annot_image()
-
     def __putText(self, image, text, origin, size=1, color=(255, 255, 255), thickness=2):
         """ Prints text into an image. Uses the original OpenCV functions
         but simplifies some things. The main difference betwenn OpenCV and this function
@@ -222,7 +177,7 @@ class Visualizator(Node):
         return cv2.putText(image, text, tuple(np.int32(origin + offset).tolist()), cv2.FONT_HERSHEY_SIMPLEX, size, color, thickness)
 
     def _get_obj_color(self, obj_name):
-        return object_properties[self.INVERSE_OBJ_MAP[obj_name]]["color"]
+        return self.object_properties[self.INVERSE_OBJ_MAP[obj_name]]["color"]
 
     def update_annot_image(self):
         xp = 5
@@ -344,10 +299,6 @@ def main():
     rclpy.init()
     #time.sleep(5)
     visualizator = Visualizator()
-    # while rclpy.ok():
-    #     visualizator.check_nlp_params_timer()
-    #     print("sadasd")
-    #     rclpy.spin_once(visualizator)
     rclpy.spin(visualizator)
     cv2.destroyAllWindows()
     visualizator.destroy_node()

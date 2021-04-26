@@ -8,7 +8,7 @@ import message_filters
 from crow_msgs.msg import SegmentedPointcloud
 import open3d as o3d
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
-from crow_vision_ros2.filters import ParticleFilter, object_properties
+from crow_vision_ros2.filters import ParticleFilter
 
 #TF
 import tf2_py as tf
@@ -48,8 +48,8 @@ class ParticleFilterNode(Node):
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
 
         #time.sleep(5)
-        object_properties = self.crowracle.get_filter_object_properties()
-        self.particle_filter = ParticleFilter(object_properties)  # the main component
+        self.object_properties = self.crowracle.get_filter_object_properties()
+        self.particle_filter = ParticleFilter(self.object_properties)  # the main component
 
         qos = QoSProfile(
             depth=20,
@@ -88,7 +88,7 @@ class ParticleFilterNode(Node):
             label = pcl_msg.label
             score = pcl_msg.confidence
             try:
-                class_id = next((k for k, v in object_properties.items() if label == v["name"]))
+                class_id = next((k for k, v in self.object_properties.items() if label == v["name"]))
             except StopIteration as e:
                 class_id = -1
 
@@ -191,7 +191,7 @@ class ParticleFilterNode(Node):
         self.frame_id = pcl_msg.header.frame_id
         label = pcl_msg.label
         try:
-            class_id = next((k for k, v in object_properties.items() if label in v["name"]))
+            class_id = next((k for k, v in self.object_properties.items() if label in v["name"]))
         except StopIteration as e:
             class_id = -1
 
