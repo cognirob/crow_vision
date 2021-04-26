@@ -16,6 +16,7 @@ import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
 from crow_msgs.msg import FilteredPose, PclDimensions
+from crow_ontology.crowracle_client import CrowtologyClient
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -33,6 +34,7 @@ class ParticleFilterNode(Node):
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
+        self.crowracle = CrowtologyClient(node=self)
         # Get existing cameras from and topics from the calibrator
         self.cameras = []
         while(len(self.cameras) == 0):
@@ -46,7 +48,8 @@ class ParticleFilterNode(Node):
         self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
 
         #time.sleep(5)
-        self.particle_filter = ParticleFilter()  # the main component
+        object_properties = self.crowracle.get_filter_object_properties()
+        self.particle_filter = ParticleFilter(object_properties)  # the main component
 
         qos = QoSProfile(
             depth=20,
