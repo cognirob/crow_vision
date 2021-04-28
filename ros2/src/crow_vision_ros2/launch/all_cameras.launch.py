@@ -51,6 +51,8 @@ def launch_cameras(launchContext, globalTFGetter=None):
     devices = list(rs.context().query_devices())
 
     camera_namespaces = []
+    camera_serials = []
+    camera_transforms = []
     for cam_id, device in enumerate(devices):
         cam_name = device.get_info(rs.camera_info.name)
         if cam_name.lower() == 'platform camera':
@@ -59,6 +61,7 @@ def launch_cameras(launchContext, globalTFGetter=None):
         camera_namespace = f"camera{cam_id + 1}"
         camera_namespaces.append("/" + camera_namespace)
         device_serial = str(device.get_info(rs.camera_info.serial_number))
+        camera_serials.append(device_serial)
         camera_configs.append(LogInfo(msg=f"Launching device {cam_name} with serial number {device_serial} in namespace /{camera_namespace}."))
 
         camera_frames_dict = {f: f'camera{cam_id + 1}_' + frame_regex.search(f).group(1) for f in frames}
@@ -67,18 +70,24 @@ def launch_cameras(launchContext, globalTFGetter=None):
         if globalTFGetter is not None:
             transform = globalTFGetter.get_camera_transformation(device_serial)
             camera_configs.append(LogInfo(msg=f"Adding workspace transform for {device_serial} ({camera_namespace}) with args {transform}."))
-            camera_configs.append(
-                Node(
-                    package='tf2_ros',
-                    node_executable='static_transform_publisher',
-                    arguments=transform.split() + [
-                            camera_frames_dict['color_optical_frame_id'],
-                            "workspace_frame",
-                    ],
-                    output='log',
-                    emulate_tty=True
-                )
-            )
+            camera_configs.append(LogInfo(msg=f"Transform for frame {camera_frames_dict['base_frame_id']}."))
+            # camera_configs.append(
+            #     Node(
+            #         package='tf2_ros',
+            #         node_executable='static_transform_publisher',
+            #         arguments=transform.split() + [
+            #                 "workspace_frame",
+            #                 camera_frames_dict['base_frame_id'],
+            #                 # camera_frames_dict['color_optical_frame_id'],
+            #         ],
+            #         output='screen',
+            #         emulate_tty=True
+            #     )
+            # )
+            camera_transforms.append(transform)
+        else:
+            camera_transforms.append(None)
+
 
         config_file = os.path.join(
             get_package_share_directory('crow_vision_ros2'),
@@ -118,6 +127,8 @@ def launch_cameras(launchContext, globalTFGetter=None):
                     }],
         arguments=[
             "--camera_namespaces", ' '.join(camera_namespaces),
+            "--camera_serials", ' '.join(camera_serials),
+            "--camera_transforms", ' | '.join(camera_transforms),
         ],
     )
     camera_configs.append(calibrator_node)
