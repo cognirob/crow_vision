@@ -63,182 +63,183 @@ class Timer():
         return self._lastTime
 
 
-object_properties = {
-    0: {
-        "name": "car_roof",
-        "sigma": 0.01,
-        "color": np.r_[69, 39, 160] / 255
-    },
-    1: {
-        "name": "cube_holes",
-        "sigma": 0.01,
-        "color": np.r_[0, 255, 0] / 255
-    },
-    2: {
-        "name": "ex_bucket",
-        "sigma": 0.01,
-        "color": np.r_[221, 160, 221] / 255
-    },
-    3: {
-        "name": "hammer",
-        "sigma": 0.01,
-        "color": np.r_[255, 0, 0] / 255
-    },
-    4: {
-        "name": "nut",
-        "sigma": 0.01,
-        "color": np.r_[0, 153, 255] / 255
-    },
-    5: {
-        "name": "peg_screw",
-        "sigma": 0.01,
-        "color": np.r_[128, 128, 128] / 255
-    },
-    6: {
-        "name": "peg_simple",
-        "sigma": 0.01,
-        "color": np.r_[128, 128, 128] / 255
-    },
-    7: {
-        "name": "pliers",
-        "sigma": 0.01,
-        "color": np.r_[255, 255, 0] / 255
-    },
-    8: {
-        "name": "screw_round",
-        "sigma": 0.01,
-        "color": np.r_[0, 0, 255] / 255
-    },
-    9: {
-        "name": "screwdriver",
-        "sigma": 0.01,
-        "color": np.r_[250, 128, 114] / 255
-    },
-    10: {
-        "name": "sphere_holes",
-        "sigma": 0.01,
-        "color": np.r_[204, 153, 0] / 255
-    },
-    11: {
-        "name": "wafer",
-        "sigma": 0.01,
-        "color": np.r_[255, 0, 255] / 255
-    },
-    12: {
-        "name": "wheel",
-        "sigma": 0.01,
-        "color": np.r_[102, 0, 0] / 255
-    },
-    13: {
-        "name": "wrench",
-        "sigma": 0.01,
-        "color": np.r_[215, 0, 215] / 255
-    },
-    14: {
-        "name": "hand",
-        "sigma": 0.01,
-        "color": np.r_[1, 1, 1] / 255
-    },
-    15: {
-        "name": "kuka",
-        "sigma": 0.01,
-        "color": np.r_[255, 160, 16] / 255
-    },
-    16: {
-        "name": "hammer_handle",
-        "sigma": 0.01,  # TODO,
-        "color": np.r_[1, 1, 1] / 255
-    },
-    17: {
-        "name": "hammer_head",
-        "sigma": 0.01,
-        "color": np.r_[255, 0, 0] / 255
-    },
-    18: {
-        "name": "pliers_handle",
-        "sigma": 0.01,  # TODO,
-        "color": np.r_[1, 1, 1] / 255
-    },
-    19: {
-        "name": "pliers_head",
-        "sigma": 0.01,
-        "color": np.r_[255, 255, 0] / 255
-    },
-    20: {
-        "name": "screw_round_thread",
-        "sigma": 0.01,  # TODO
-        "color": np.r_[1, 1, 1] / 255
-    },
-    21: {
-        "name": "screw_round_head",
-        "sigma": 0.01,
-        "color": np.r_[0, 0, 255] / 255
-    },
-    22: {
-        "name": "screwdriver_handle",
-        "sigma": 0.01,  # TODO
-        "color": np.r_[1, 1, 1] / 255
-    },
-    23: {
-        "name": "screwdriver_head",
-        "sigma": 0.01,
-        "color": np.r_[250, 128, 114] / 255
-    },
-    24: {
-        "name": "wrench_handle",
-        "sigma": 0.01,  # TODO
-        "color": np.r_[1, 1, 1] / 255
-    },
-    25: {
-        "name": "wrench_open",
-        "sigma": 0.01,
-        "color": np.r_[215, 0, 215] / 255
-    },
-    26: {
-        "name": "wrench_ring",
-        "sigma": 0.01,
-        "color": np.r_[215, 0, 215] / 255
-    },
-    27: {
-        "name": "peg_screw_shank",
-        "sigma": 0.01,  # TODO
-        "color": np.r_[1, 1, 1] / 255
-    },
-    28: {
-        "name": "peg_screw_thread",
-        "sigma": 0.01,
-        "color": np.r_[128, 128, 128] / 255
-    },
-    29: {
-        "name": "kuka_gripper",
-        "sigma": 0.01,  # TODO
-        "color": np.r_[1, 1, 1] / 255
-    },
-}
+# object_properties = {
+#     0: {
+#         "name": "car_roof",
+#         "sigma": 0.01,
+#         "color": np.r_[69, 39, 160] / 255
+#     },
+#     1: {
+#         "name": "cube_holes",
+#         "sigma": 0.01,
+#         "color": np.r_[0, 255, 0] / 255
+#     },
+#     2: {
+#         "name": "ex_bucket",
+#         "sigma": 0.01,
+#         "color": np.r_[221, 160, 221] / 255
+#     },
+#     3: {
+#         "name": "hammer",
+#         "sigma": 0.01,
+#         "color": np.r_[255, 0, 0] / 255
+#     },
+#     4: {
+#         "name": "nut",
+#         "sigma": 0.01,
+#         "color": np.r_[0, 153, 255] / 255
+#     },
+#     5: {
+#         "name": "peg_screw",
+#         "sigma": 0.01,
+#         "color": np.r_[128, 128, 128] / 255
+#     },
+#     6: {
+#         "name": "peg_simple",
+#         "sigma": 0.01,
+#         "color": np.r_[128, 128, 128] / 255
+#     },
+#     7: {
+#         "name": "pliers",
+#         "sigma": 0.01,
+#         "color": np.r_[255, 255, 0] / 255
+#     },
+#     8: {
+#         "name": "screw_round",
+#         "sigma": 0.01,
+#         "color": np.r_[0, 0, 255] / 255
+#     },
+#     9: {
+#         "name": "screwdriver",
+#         "sigma": 0.01,
+#         "color": np.r_[250, 128, 114] / 255
+#     },
+#     10: {
+#         "name": "sphere_holes",
+#         "sigma": 0.01,
+#         "color": np.r_[204, 153, 0] / 255
+#     },
+#     11: {
+#         "name": "wafer",
+#         "sigma": 0.01,
+#         "color": np.r_[255, 0, 255] / 255
+#     },
+#     12: {
+#         "name": "wheel",
+#         "sigma": 0.01,
+#         "color": np.r_[102, 0, 0] / 255
+#     },
+#     13: {
+#         "name": "wrench",
+#         "sigma": 0.01,
+#         "color": np.r_[215, 0, 215] / 255
+#     },
+#     14: {
+#         "name": "hand",
+#         "sigma": 0.01,
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     15: {
+#         "name": "kuka",
+#         "sigma": 0.01,
+#         "color": np.r_[255, 160, 16] / 255
+#     },
+#     16: {
+#         "name": "hammer_handle",
+#         "sigma": 0.01,  # TODO,
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     17: {
+#         "name": "hammer_head",
+#         "sigma": 0.01,
+#         "color": np.r_[255, 0, 0] / 255
+#     },
+#     18: {
+#         "name": "pliers_handle",
+#         "sigma": 0.01,  # TODO,
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     19: {
+#         "name": "pliers_head",
+#         "sigma": 0.01,
+#         "color": np.r_[255, 255, 0] / 255
+#     },
+#     20: {
+#         "name": "screw_round_thread",
+#         "sigma": 0.01,  # TODO
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     21: {
+#         "name": "screw_round_head",
+#         "sigma": 0.01,
+#         "color": np.r_[0, 0, 255] / 255
+#     },
+#     22: {
+#         "name": "screwdriver_handle",
+#         "sigma": 0.01,  # TODO
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     23: {
+#         "name": "screwdriver_head",
+#         "sigma": 0.01,
+#         "color": np.r_[250, 128, 114] / 255
+#     },
+#     24: {
+#         "name": "wrench_handle",
+#         "sigma": 0.01,  # TODO
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     25: {
+#         "name": "wrench_open",
+#         "sigma": 0.01,
+#         "color": np.r_[215, 0, 215] / 255
+#     },
+#     26: {
+#         "name": "wrench_ring",
+#         "sigma": 0.01,
+#         "color": np.r_[215, 0, 215] / 255
+#     },
+#     27: {
+#         "name": "peg_screw_shank",
+#         "sigma": 0.01,  # TODO
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+#     28: {
+#         "name": "peg_screw_thread",
+#         "sigma": 0.01,
+#         "color": np.r_[128, 128, 128] / 255
+#     },
+#     29: {
+#         "name": "kuka_gripper",
+#         "sigma": 0.01,  # TODO
+#         "color": np.r_[1, 1, 1] / 255
+#     },
+# }
 
 
 class ParticleFilter():
     MEAN_SHIFT_PRECISSION = 0.001
     CLASS_HISTORY_LEN = 10
-    PARTICLES_PER_MODEL = 1000
+    PARTICLES_PER_MODEL = 500
     TIMER_CLASS = Timer
-    DELETION_TIME_LIMIT = 10  # 10 seconds
+    DELETION_TIME_LIMIT = 5  # 10 seconds
     MAX_SHIFT_ITERS = 20
     STATIC_NOISE = 0.01  # 5 cm
-    GLOBAL_DISTANCE_LIMIT = 0.2  # limit for a model to be considered "close" to new observation
+    GLOBAL_DISTANCE_LIMIT = 0.1  # limit for a model to be considered "close" to new observation
     TREE_DISTANCE_UPPER_BOUND = 0.01  # TODO: should be probably 1mm?
-    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-2  # TODO: search for optimal value
+    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-7  # TODO: search for optimal value
     PARTICLES_PCL_COUNT = 200  # how many particles to generate from measured PCLs
-    PARTICLES_UNIFORM_COUNT = 200  # how many uniformly distributed particles to generate
-    PARTICLES_UNIFORM_DISTANCE = 0.7  # size of circle or cube around the object in which the uniformly random ptcs should be generated
+    PARTICLES_UNIFORM_COUNT = 500  # how many uniformly distributed particles to generate
+    PARTICLES_UNIFORM_DISTANCE = 0.2  # size of circle or cube around the object in which the uniformly random ptcs should be generated
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
-    ACCELERATION_LIMIT = 0.05  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
-    SPEED_LIMIT = 0.5  # 1m/s is assumed as max speed (higher values are clipped)
-    NEW_MODEL_MIN_UPDATES = 2  # minimum number of measurements required for new model to be reported
+    ACCELERATION_LIMIT = 0.0005  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
+    SPEED_LIMIT = 0.05  # 1m/s is assumed as max speed (higher values are clipped)
+    NEW_MODEL_MIN_UPDATES = 10  # minimum number of measurements required for new model to be reported
     NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
-    REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
+    REPORT_FRESH_MODELS_ONLY = False  # if True, reports only models that had updates lately
+    LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
 
-    def __init__(self):
+    def __init__(self, object_properties):
         self.timer = self.TIMER_CLASS()
         self.model_particles = None  # tensor QxMx3
         self.particle_weights = None  # tensor QxMx1
@@ -258,6 +259,7 @@ class ParticleFilter():
         self.observations = []
         self.__uniform_noise_generator = torch.distributions.uniform.Uniform(-self.PARTICLES_UNIFORM_DISTANCE, self.PARTICLES_UNIFORM_DISTANCE)
         self.__uniform_noise_size = torch.Size((self.PARTICLES_UNIFORM_COUNT, 3))
+        self.object_properties = object_properties
 
     @property
     def classes(self):
@@ -325,6 +327,7 @@ class ParticleFilter():
         * spread particles
         * add uniformly random particles
         """
+        # return  # FIXME remove to start updating speed
         time_tensor = tensor([time_delta, time_delta**2], dtype=torch.float32).unsqueeze(0)  # (1x2)
         self._update_velocities = time_tensor.matmul(self.model_params)  # model_params : (Qx2x3) -> Qx1x3
         # TODO: update velocity and acceleration?
@@ -364,7 +367,7 @@ class ParticleFilter():
         cls_estimate = mode(self.model_class_history, axis=1, nan_policy="propagate")[0]
         cls_estimate[np.isnan(cls_estimate)] = -1
         self.model_classes = cls_estimate.ravel()
-        self.model_class_names = [object_properties[class_key]["name"] if class_key in object_properties else "unknown" for class_key in self.model_classes]
+        self.model_class_names = [self.object_properties[class_key]["name"] if class_key in self.object_properties else "unknown" for class_key in self.model_classes]
 
     def _processMeasurements(self):
         """
@@ -410,7 +413,13 @@ class ParticleFilter():
                     if not np.any(valid):  # no particle is close to points in the PCL
                         continue
                     p_idx = p_idx[valid]  # take points with pairs
-                    close_models[idx] = self.particle_weights[idx, p_idx].sum()  # sum weights
+                    close_models[idx] = self.particle_weights[idx, p_idx].sum()  # model probability = sum weights
+                    if label == self.model_classes[idx]: # compare pcl's label with close_model's label
+                        # increase probability when labels match (by score*weight)
+                        close_models[idx] = close_models[idx] * (1 + score * self.LABEL_WEIGHT)
+                    else:
+                        # decrease probability when labels don't match (by score*weight)
+                        close_models[idx] = close_models[idx] * (1 - score * self.LABEL_WEIGHT)
                 # calculate model with highest probability
                 if np.any(close_models) and np.max(close_models) > self.CLOSE_MODEL_PROBABILITY_THRESHOLD:
                     closest_model = np.argmax(close_models)
@@ -436,6 +445,9 @@ class ParticleFilter():
             # aggregate labels from PCLs
             self.model_class_history[idx, :] = np.roll(self.model_class_history[idx, :], -1, axis=0)  # shift old data out
             self.model_class_history[idx, -1] = mode(labels)[0][0]
+            # aggregate PCLs dimensions from PCLs
+            dimension = np.median(pcl_dimensions, axis=0)
+            self.model_pcl_dimensions[idx] = dimension
             # create particles form PCLs (downsample PCL)
             particles_pcl = tensor(pcls[np.random.choice(np.arange(pcls.shape[0]), self.PARTICLES_PCL_COUNT), :], dtype=torch.float32)
             # create uniformly random particles
@@ -445,7 +457,7 @@ class ParticleFilter():
             # compute PCLs mean
             center = np.median(pcl_centers, axis=0)
             # sigma from model (add sigma from pcl? <- np.std(pcls, axis=0))
-            sigma = object_properties[self.model_classes[idx]]["sigma"]
+            sigma = self.object_properties[self.model_classes[idx]]["sigma"]
             # resample
             resamp_particles, resamp_weights = self._weigh_resample_particles(particles, center, sigma, self.PARTICLES_PER_MODEL)
             self.model_particles[idx, ...] = resamp_particles  # resampled particles are of the same type as input, so no need for "tensorification"
@@ -509,7 +521,7 @@ class ParticleFilter():
 
         n_pcl = pcl.shape[0]
 
-        sigma = object_properties[class_est]["sigma"]
+        sigma = self.object_properties[class_est]["sigma"]
         # generate particles
         noisy_pcl = pcl + np.random.randn(n_pcl, 3) * self.STATIC_NOISE
         m_particles, p_weights = self._weigh_resample_particles(noisy_pcl, pcl_center, sigma, self.PARTICLES_PER_MODEL)
@@ -523,7 +535,7 @@ class ParticleFilter():
         # m_class_history[..., -1] = class_est  # this is actually done in processing model pcls, no need to do it here
         last_update = self.timer.now
         id = str(uuid4())
-        class_name = [object_properties[class_est]["name"] if class_est in object_properties else "unknown"]
+        class_name = [self.object_properties[class_est]["name"] if class_est in self.object_properties else "unknown"]
         update_velocity = torch.zeros((1, 1, 3))
 
         if self.n_models == 0:
