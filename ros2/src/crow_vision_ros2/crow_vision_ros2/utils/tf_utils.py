@@ -1,5 +1,6 @@
 from geometry_msgs.msg import Vector3, Quaternion
 import numpy as np
+import transforms3d as tf3
 
 
 def make_vector3(tvec, order="xyz"):
@@ -10,5 +11,6 @@ def make_quaternion(quat, order="xyzw"):
 
 def getTransformFromTF(tf_msg):
     trans = np.r_["0,2,0", [getattr(tf_msg.transform.translation, a) for a in "xyz"]]
-    rot = tf.transformations.quaternion_matrix(np.r_[[getattr(tf_msg.transform.rotation, a) for a in "xyzw"]])[:3, :3]
+    quat = [getattr(tf_msg.transform.rotation, a) for a in "xyzw"]
+    rot = tf3.quaternions.quat2mat(quat[3:] + quat[:3])
     return trans, rot
