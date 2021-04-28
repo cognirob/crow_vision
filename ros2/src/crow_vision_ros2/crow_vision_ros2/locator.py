@@ -84,7 +84,7 @@ class Locator(Node):
             # create approx syncro callbacks
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #listener for pointcloud data from RealSense camera
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos) #listener for masks from detector node
-            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.1) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
@@ -157,7 +157,7 @@ class Locator(Node):
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
-            # segmented_pcl.header.frame_id = self.global_frame_id
+            segmented_pcl.header.frame_id = self.global_frame_id
             segmented_pcl.header.stamp = mask_msg.header.stamp
 
             # wrap together PointCloud2 + label + score => SegmentedPointcloud
