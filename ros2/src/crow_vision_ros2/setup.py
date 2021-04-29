@@ -30,7 +30,8 @@ setup(
             'matcher = crow_vision_ros2.match3d:main',
             'merger = crow_vision_ros2.merger:main',
             'filter = crow_vision_ros2.filter_node:main',
-            'visualizator = crow_vision_ros2.visualizator:main'
+            'visualizator = crow_vision_ros2.visualizator:main',
+            'marker_detector = crow_vision_ros2.marker_detector:main'
         ],
     },
 )
