@@ -62,7 +62,9 @@ class Calibrator(Node):
 
         # parse args
         parser = argparse.ArgumentParser()
-        parser.add_argument("--camera_namespaces", nargs="*")
+        parser.add_argument("--camera_namespaces")
+        parser.add_argument("--camera_serials")
+        parser.add_argument("--camera_transforms")
         args = parser.parse_known_args(sys.argv[1:])[0]
 
         # setup vars
@@ -79,9 +81,13 @@ class Calibrator(Node):
         # tf listener to get TF frames
         self.tf_buffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(buffer=self.tf_buffer, node=self)
+        self.tf_static_broadcaster = tf2_ros.StaticTransformBroadcaster(self)
 
         # Get cameras
-        self.camera_namespaces = args.camera_namespaces
+        self.camera_namespaces = args.camera_namespaces.split(" ")
+        self.camera_serials = args.camera_serials.split(" ")
+        self.camera_global_transforms = args.camera_transforms.split(" | ")
+
         if len(self.camera_namespaces) == 0:  # the old way: wait a little and try to detect all cameras
             self.get_logger().info(f"Sleeping to allow the cameras to come online.")
             sleep(15)
@@ -132,16 +138,20 @@ class Calibrator(Node):
             optical_frame = f"{namespace[1:]}_color_optical_frame"
             self.optical_frames[namespace] = optical_frame
             depth_frame = f"{namespace[1:]}_depth_optical_frame"
+            link_frame = f"{namespace[1:]}_link"
 
             # retrieve depth to color transformation
             future = self.tf_buffer.wait_for_transform_async(optical_frame, depth_frame, self.get_clock().now())
             future.add_done_callback(lambda future, camera_ns=namespace: self.found_dtc_transform_cb(future, camera_ns))
-            # if transform from camera to global frame exists, retrieve it
-            if self.tf_buffer.can_transform(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now(), rclpy.duration.Duration(seconds=5)):
-                future = self.tf_buffer.wait_for_transform_async(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now())
-                future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctg_transform_cb(future, camera_ns))
-            else:
-                self.tf_color_to_global[namespace] = np.eye(4)  # if TF is not defined, use identity
+            # retrieve color to link transformation
+            future = self.tf_buffer.wait_for_transform_async(link_frame, optical_frame, self.get_clock().now())
+            future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctl_transform_cb(future, camera_ns))
+            # # if transform from camera to global frame exists, retrieve it
+            # if self.tf_buffer.can_transform(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now(), rclpy.duration.Duration(seconds=5)):
+            #     future = self.tf_buffer.wait_for_transform_async(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now())
+            #     future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctg_transform_cb(future, camera_ns))
+            # else:
+            #     self.tf_color_to_global[namespace] = np.eye(4)  # if TF is not defined, use identity
 
     def makeTransformMatrix(self, transform_msg):
         translation = [getattr(transform_msg.transform.translation, a) for a in "xyz"]
@@ -156,12 +166,55 @@ class Calibrator(Node):
         transform_msg = self.tf_buffer.lookup_transform(self.optical_frames[camera_ns], f"{camera_ns[1:]}_depth_optical_frame", self.get_clock().now(), rclpy.duration.Duration(seconds=5))
         self.tf_depth_to_color[camera_ns] = self.makeTransformMatrix(transform_msg)
 
+    def found_ctl_transform_cb(self, future, camera_ns):  # color to baselink
+        if not future.result():
+            self.get_logger().fatal(f"Could not get CTL transform for {camera_ns}!")
+            return
+        link_frame = f"{camera_ns[1:]}_link"
+        transform_msg = self.tf_buffer.lookup_transform(self.optical_frames[camera_ns], link_frame, self.get_clock().now(), rclpy.duration.Duration(seconds=5))
+        t_ctl, r_ctl = getTransformFromTF(transform_msg)
+        t_ctl = t_ctl.ravel()
+
+        transform = TransformStamped()
+        d = np.array(self.camera_global_transforms[self.camera_namespaces.index(camera_ns)].split()).astype(np.float64).tolist()
+        t_global, r_global = d[:3], tf3.quaternions.quat2mat(d[-1:] + d[3:-1])
+
+        tf_global = tf3.affines.compose(t_global, r_global, np.ones(3))
+        tf_ctl = tf3.affines.compose(t_ctl, r_ctl, np.ones(3))
+
+        tf = np.dot(tf_global, tf_ctl)
+
+        t, r, _, _ = tf3.affines.decompose(tf)
+        wrong_quat = tf3.quaternions.mat2quat(r).tolist()
+        quat = wrong_quat[1:] + wrong_quat[:1]
+        transform.transform.translation = make_vector3(t)
+        transform.transform.rotation = make_quaternion(quat)
+
+        print(self.makeTransformMatrix(transform))
+
+        transform.header.frame_id = self.GLOBAL_FRAME_NAME
+        transform.child_frame_id = link_frame
+        transform.header.stamp = self.get_clock().now().to_msg()
+
+        # self.tf_static_broadcaster.sendTransform(transform)
+
+        self.tf_color_to_global[camera_ns] = np.linalg.inv(tf_global)
+        # if transform from camera to global frame exists, retrieve it
+        # if self.tf_buffer.can_transform(self.GLOBAL_FRAME_NAME, self.optical_frames[camera_ns], self.get_clock().now(), rclpy.duration.Duration(seconds=15)):
+        #     print("Yasssss")
+        #     future = self.tf_buffer.wait_for_transform_async(self.GLOBAL_FRAME_NAME, optical_frame, self.get_clock().now())
+        #     future.add_done_callback(lambda future, camera_ns=camera_ns: self.found_ctg_transform_cb(future, camera_ns))
+        # else:
+        #     print("Nyeeee")
+        #     self.tf_color_to_global[camera_ns] = np.eye(4)  # if TF is not defined, use identity
+
     def found_ctg_transform_cb(self, future, camera_ns):  # color to global
         if not future.result():
             self.get_logger().fatal(f"Could not get GTC transform for {camera_ns}!")
             return
         transform_msg = self.tf_buffer.lookup_transform(self.GLOBAL_FRAME_NAME, self.optical_frames[camera_ns], self.get_clock().now(), rclpy.duration.Duration(seconds=5))
         self.tf_color_to_global[camera_ns] = self.makeTransformMatrix(transform_msg)
+        self.get_logger().warn(f"{self.tf_color_to_global[camera_ns]}!")
 
     def camera_info_cb(self, msg, camera_ns):
         if camera_ns not in self.tf_depth_to_color or camera_ns not in self.tf_color_to_global:  # wating to get the transforms first
