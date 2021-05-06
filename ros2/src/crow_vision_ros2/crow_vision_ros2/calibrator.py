@@ -201,7 +201,8 @@ class Calibrator(Node):
         self.tf_static_broadcaster.sendTransform(transform)
 
         # self.tf_color_to_global[camera_ns] = tf_global  # FIXME: this might be good?
-        self.tf_color_to_global[camera_ns] = np.linalg.inv(tf3.affines.compose(t_global, np.linalg.inv(r_global), np.ones(3)))
+        # self.tf_color_to_global[camera_ns] = np.linalg.inv(tf3.affines.compose(t_global, np.linalg.inv(r_global), np.ones(3)))
+        self.tf_color_to_global[camera_ns] = np.linalg.inv(tf3.affines.compose(t_global, r_global, np.ones(3)))
         # self.get_logger().error(str(tf_global.tolist()))
 
         # self.tf_color_to_global[camera_ns] = np.linalg.inv(tf_global)
