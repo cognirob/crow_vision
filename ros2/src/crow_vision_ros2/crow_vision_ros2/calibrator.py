@@ -178,8 +178,10 @@ class Calibrator(Node):
         transform = TransformStamped()
         d = np.array(self.camera_global_transforms[self.camera_namespaces.index(camera_ns)].split()).astype(np.float64).tolist()
         t_global, r_global = d[:3], tf3.quaternions.quat2mat(d[-1:] + d[3:-1])
-
+        # import time
+        # time.sleep(5)
         tf_global = tf3.affines.compose(t_global, r_global, np.ones(3))
+        tf_global = np.linalg.inv(tf_global)
         tf_ctl = tf3.affines.compose(t_ctl, r_ctl, np.ones(3))
 
         tf = np.dot(tf_global, tf_ctl)
@@ -190,15 +192,19 @@ class Calibrator(Node):
         transform.transform.translation = make_vector3(t)
         transform.transform.rotation = make_quaternion(quat)
 
-        print(self.makeTransformMatrix(transform))
+        # print(self.makeTransformMatrix(transform))
 
         transform.header.frame_id = self.GLOBAL_FRAME_NAME
         transform.child_frame_id = link_frame
         transform.header.stamp = self.get_clock().now().to_msg()
 
-        # self.tf_static_broadcaster.sendTransform(transform)
+        self.tf_static_broadcaster.sendTransform(transform)
 
-        self.tf_color_to_global[camera_ns] = np.linalg.inv(tf_global)
+        # self.tf_color_to_global[camera_ns] = tf_global  # FIXME: this might be good?
+        self.tf_color_to_global[camera_ns] = np.linalg.inv(tf3.affines.compose(t_global, np.linalg.inv(r_global), np.ones(3)))
+        # self.get_logger().error(str(tf_global.tolist()))
+
+        # self.tf_color_to_global[camera_ns] = np.linalg.inv(tf_global)
         # if transform from camera to global frame exists, retrieve it
         # if self.tf_buffer.can_transform(self.GLOBAL_FRAME_NAME, self.optical_frames[camera_ns], self.get_clock().now(), rclpy.duration.Duration(seconds=15)):
         #     print("Yasssss")

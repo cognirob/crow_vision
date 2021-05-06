@@ -150,12 +150,16 @@ class Locator(Node):
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
                 self.get_logger().info(
-                    "Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(len(where), class_name, score))
+                    "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
             # create segmented pcl
-            seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))[:3, :]
+            # self.get_logger().error(f"{camera} ({class_name}) RAW : {point_cloud[:, where].mean(axis=1)}")
+
+            seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
+            seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
             seg_color = rgb_raw[where]
+            # self.get_logger().error(f"{camera} ({class_name}) TRANSFORMED : {seg_pcd.mean(axis=1)}")
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
