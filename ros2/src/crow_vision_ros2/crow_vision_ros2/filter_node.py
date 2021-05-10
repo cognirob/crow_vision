@@ -15,7 +15,7 @@ import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
-from crow_msgs.msg import FilteredPose, PclDimensions
+from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud
 from crow_ontology.crowracle_client import CrowtologyClient
 
 from rclpy.qos import qos_profile_sensor_data
@@ -70,6 +70,7 @@ class ParticleFilterNode(Node):
         self.lastUpdateMeasurementDDiff = rclpy.time.Duration(seconds=2)
         # Publisher for the output of the filter
         self.filtered_publisher = self.create_publisher(FilteredPose, "/filtered_poses", qos)
+        self.pcl_publisher = self.create_publisher(ObjectPointcloud, "/filtered_pcls", qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
 
     def add_and_process(self, messages):
@@ -150,6 +151,27 @@ class ParticleFilterNode(Node):
                 pose_array_msg.particles = particles_msg
 
             self.filtered_publisher.publish(pose_array_msg)
+
+            pcl_uuids, pcl_points = self.particle_filter.getPclsEstimates()
+            pcl_msg = ObjectPointcloud()
+            pcl_msg.header.stamp = self.get_clock().now().to_msg()
+            pcl_msg.header.frame_id = self.frame_id
+            aggregate_pcl = []
+            for obj in pcl_points:
+                if len(obj) > 1:
+                    aggregate_pcl.append(np.concatenate(obj, axis=0))
+                else:
+                    aggregate_pcl.append(obj[0])
+            pcls = []
+            for i, np_pcl in enumerate(aggregate_pcl):
+                if len(np_pcl) > 0:
+                    pcls.append(ftl_numpy2pcl(np_pcl.T, pcl_msg.header))
+                else:
+                    pcl_uuids.pop(i)
+            if len(pcl_uuids) > 0:
+                pcl_msg.uuid = pcl_uuids
+                pcl_msg.pcl = pcls
+                self.pcl_publisher.publish(pcl_msg)
 
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer

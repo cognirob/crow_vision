@@ -238,6 +238,7 @@ class ParticleFilter():
     NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
     REPORT_FRESH_MODELS_ONLY = False  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
+    NUM_STORED_PCLS = 3 # number of latest pcls to aggregate and send in the pcl message
 
     def __init__(self, object_properties):
         self.timer = self.TIMER_CLASS()
@@ -297,8 +298,24 @@ class ParticleFilter():
         # estimate
         self._estimate(time_delta)
 
+    def getPclsEstimates(self):
+        """Return a dict of uuids and corresponding point clouds (aggreagated form several last pcls)
+        """
+        if self.n_models == 0:
+            return {}
+        ests_uuids = []
+        ests_pcls = []
+        for k, v in self.model_stored_pcls.items():
+            ests_uuids.append(k)
+            ests_pcls.append(v[-1:-1*min(self.NUM_STORED_PCLS+1, len(v)+1):-1])# -1*min(self.NUM_STORED_PCLS+1, len(v)+1)])
+            print('est',ests_pcls[-1])
+            print('min', -1*min(self.NUM_STORED_PCLS+1, len(v)+1))
+            print(len(v))
+            #print('pcl in filter', v[-1])
+        return ests_uuids, ests_pcls
+
     def getEstimates(self):
-        """Return a tuple of "xyz" position and class name (with uuid)
+        """Return a tuple of "xyz" position, class name, pcl dimensions and with uuid
         """
         if self.n_models == 0:
             return []
@@ -510,6 +527,10 @@ class ParticleFilter():
             self._model_pcls[model_idx] = [(pcl, pcl_center, pcl_dimension, est_class, score)]
         else:
             self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class, score))
+        if self.model_stored_pcls.get(str(self.model_uuid[model_idx])) is None:
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = [pcl]
+        else:
+            self.model_stored_pcls[str(self.model_uuid[model_idx])].append(pcl)
         self.model_n_updates[model_idx] += 1 #update = receive and append new measurement (pcl) to existing model
         self.model_last_update[model_idx] = self.timer.now #update = receive and append new measurement (pcl) to existing model
 
@@ -552,6 +573,7 @@ class ParticleFilter():
             self.model_uuid = np.array([id])
             self.model_class_names = class_name
             self.model_pcl_dimensions = pcl_dimension
+            self.model_stored_pcls = {}
             self._update_velocities = update_velocity
         else:
             self.model_particles = torch.cat((self.model_particles, m_particles))
@@ -571,6 +593,7 @@ class ParticleFilter():
 
         self._model_pcls = np.hstack((self._model_pcls, None))
         self._model_trees = np.hstack((self._model_trees, None))
+
         self._append_pcl_to_model(self.n_models, pcl, class_est, score, pcl_center, pcl_dimension)
         self.n_models += 1
 
@@ -589,6 +612,7 @@ class ParticleFilter():
         self.model_uuid = self.model_uuid[mask.tolist(), ...]
         self.model_class_names = np.array(self.model_class_names)[torch.where(mask)[0].tolist()].tolist()
         self.model_pcl_dimensions = self.model_pcl_dimensions[mask.tolist(), ...]
+        #self.model_stored_pcls = self.model_stored_pcls[mask.tolist(), ...]
         self._update_velocities = self._update_velocities[mask, ...]
 
         self.n_models -= 1
