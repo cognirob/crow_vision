@@ -3,14 +3,17 @@ from rclpy.node import Node
 from ros2param.api import call_get_parameters
 
 import sensor_msgs
-from std_msgs import TransformStamped
+#from std_msgs import TransformStamped
 from crow_ontology.crowracle_client import CrowtologyClient
 from crow_vision_ros2.filters import CameraPoser
+from crow_msgs.msg import StorageMsg
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+import json
 import cv2
 import cv_bridge
 import numpy as np
@@ -31,39 +34,51 @@ class MarkerDetector(Node):
     def __init__(self, node_name='marker_detector'):
         super().__init__('marker_detector')
         self.crowracle = CrowtologyClient(node=self)
-        self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
+        self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
             self.get_logger().warn("No cams detected, waiting 2s.")
             time.sleep(2)
-            self.image_topics, self.cameras, self.camera_instrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_frames"]).values]
-        for (topic, cam, intrinsic) in zip(self.image_topics, self.cameras, self.camera_instrinsics):
+            self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
+        self.detect_markers_flag = {}
+        for (topic, cam, intrinsic, extrinsic) in zip(self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics):
             # create INput listener with raw images
             listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
                                                 topic=topic,
                                                 # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
-                                                callback=lambda msg, cam=cam, intrinsic=intrinsic: self.input_callback(msg, cam, intrinsic),
+                                                callback=lambda msg, cam=cam, intrinsic=intrinsic, extrinsic=extrinsic: self.image_callback(msg, cam, intrinsic, extrinsic),
                                                 qos_profile=1) #the listener QoS has to be =1, "keep last only".
             self.get_logger().info('Input listener created on topic: "%s"' % topic)
+            self.detect_markers_flag[cam] = False
+        topic = "/new_storage"
+        listener = self.create_subscription(msg_type=StorageMsg,
+                                                topic=topic,
+                                                # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                                callback=lambda msg: self.control_callback(msg),
+                                                qos_profile=1) #the listener QoS has to be =1, "keep last only".
+        self.get_logger().info('Input listener created on topic: "%s"' % topic)
         self.bridge = cv_bridge.CvBridge()
-        self.detect_markers_flag = False
+        self.pose_markers = []
 
-    def nlp_callback(self, msg):
+    def control_callback(self, msg):
         marker_group_info = self.crowracle.getMarkerGroupProps(msg.group_name)
         self.aruco_dict = cv2.aruco.Dictionary_create(marker_group_info['dict_num'], marker_group_info['size'], marker_group_info['seed'])
         self.storage_name = msg.storage_name
-        self.marker_group_ids = marker_group_info['ids']
-        self.detect_markers_flag = True
+        self.marker_group_ids = marker_group_info['id']
+        self.square_length = marker_group_info['square_len']
+        for cam in self.cameras:
+            self.detect_markers_flag[cam] = True
 
-    def image_callback(self, msg, cam, intrinsic):
-        if self.detect_markers_flag:
+    def image_callback(self, msg, cam, intrinsic, extrinsic):
+        if self.detect_markers_flag[cam]:
             intrinsic = json.loads(intrinsic)
+            extrinsic = json.loads(extrinsic)
             image = self.bridge.imgmsg_to_cv2(msg)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            color_K = intrinsic['camera_matrix']
-            distCoeffs = intrinsic['distortion_coefficients']
+            color_K = np.asarray(intrinsic['camera_matrix'])
+            distCoeffs = np.asarray(intrinsic['distortion_coefficients'])
+            ctg_tf_mat = np.asarray(extrinsic["ctg_tf"])
             
             markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.aruco_dict, cameraMatrix=color_K)
-            
             cameraMarkers = CameraPoser(cam)
             if len(markerCorners) > 0:
                 for m_idx, (markerId, mrkCorners) in enumerate(zip(markerIds, markerCorners)):
@@ -75,31 +90,44 @@ class MarkerDetector(Node):
             if len(markerCorners) > 2 and cameraMarkers.markersReady:
                 try:
                     #img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
-                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(markerCorners, (-1, 4, 2)), self.squareLength, color_K, distCoeffs)
+                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(markerCorners, (-1, 4, 2)), self.square_length, color_K, distCoeffs)
                     rmat = cv2.Rodrigues(rvec)[0]
                     quat = tf3.quaternions.mat2quat(rmat)
+                    mtc_tf_mat = [tf3.affines.compose(tvec_i, rmat_i, np.ones(3)) for (tvec_i, rmat_i) in zip(tvec, rmat)]
+                    for mtc_tf_mat_i in mtc_tf_mat:
+                        self.pose_markers.append(np.matmul(np.matmul(ctg_tf_mat, mtc_tf_mat_i), np.array([0, 0, 0, 1])))
                     #img_out = cv2.aruco.drawAxis(image, color_K, distCoeffs, rvec, tvec, 0.1)
                     print('rvec', rvec)
                     print('rmat', rmat)
                     print('quat', quat)
+                    print('mtc_tf_mat', mtc_tf_mat)
+                    print('pose_namerkes', self.pose_markers[-1])
                     
-                    tf_msg = TransformStamped()
-                    tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    tf_msg.header.frame_id = "world"
-                    tf_msg.child_frame_id = optical_frame
-                    tf_msg.transform.translation = make_vector3(tvec)
-                    tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
-
+                    # tf_msg = TransformStamped()
+                    # tf_msg.header.stamp = self.get_clock().now().to_msg()
+                    # tf_msg.header.frame_id = "world"
+                    # tf_msg.child_frame_id = optical_frame
+                    # tf_msg.transform.translation = make_vector3(tvec)
+                    # tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
                 except Exception as e:
                     print(e)
                     # pass
-        self.detect_markers_flag = False
+            print('image call done')
+            self.detect_markers_flag[cam] = False
+            if True not in self.detect_markers_flag.values():
+                self.merge_markers(self.pose_markers)
 
-    def markers_callback(self, marker_message_points, marker_message_name):
-        points = [[1., 0., 2.001], [0.0000001, 0.0000001, 0.0000001], [1., 1., 2.], [0., 1., 0.], [2., 0., 4.], [2., 1., 4.]] # = marker_message_points
-        height = 2
-        name = 'storage1' # = marker_message_name
+    def merge_markers(self, poses):
+        poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
+        poses_linkage = linkage(poses, method='complete', metric='euclidean')
+        clusters = fcluster(poses_linkage, self.square_length, criterion='distance')
+        marker_poses = []
+        for i in range(1, max(clusters)+1):
+            marker_poses.append(np.mean(np.asarray(poses)[np.where(clusters==i)], axis=0).tolist())
+        print(marker_poses)
+        self.process_markers(marker_poses, self.storage_name)
 
+    def process_markers(self, points, name, height = 2):
         fit = self.get_plane_from_points(points)
         polygon3d = self.project_points_to_plane(points, fit)
         polygon2d = self.project_3d_to_2d(polygon3d)
@@ -262,8 +290,6 @@ def main():
     time.sleep(1)
     marker_detector = MarkerDetector()
     
-    marker_detector.markers_callback([],'')
-
     rclpy.spin(marker_detector)
     marker_detector.destroy_node()
 
