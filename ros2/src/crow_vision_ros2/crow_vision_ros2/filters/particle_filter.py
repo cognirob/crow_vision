@@ -63,160 +63,6 @@ class Timer():
         return self._lastTime
 
 
-# object_properties = {
-#     0: {
-#         "name": "car_roof",
-#         "sigma": 0.01,
-#         "color": np.r_[69, 39, 160] / 255
-#     },
-#     1: {
-#         "name": "cube_holes",
-#         "sigma": 0.01,
-#         "color": np.r_[0, 255, 0] / 255
-#     },
-#     2: {
-#         "name": "ex_bucket",
-#         "sigma": 0.01,
-#         "color": np.r_[221, 160, 221] / 255
-#     },
-#     3: {
-#         "name": "hammer",
-#         "sigma": 0.01,
-#         "color": np.r_[255, 0, 0] / 255
-#     },
-#     4: {
-#         "name": "nut",
-#         "sigma": 0.01,
-#         "color": np.r_[0, 153, 255] / 255
-#     },
-#     5: {
-#         "name": "peg_screw",
-#         "sigma": 0.01,
-#         "color": np.r_[128, 128, 128] / 255
-#     },
-#     6: {
-#         "name": "peg_simple",
-#         "sigma": 0.01,
-#         "color": np.r_[128, 128, 128] / 255
-#     },
-#     7: {
-#         "name": "pliers",
-#         "sigma": 0.01,
-#         "color": np.r_[255, 255, 0] / 255
-#     },
-#     8: {
-#         "name": "screw_round",
-#         "sigma": 0.01,
-#         "color": np.r_[0, 0, 255] / 255
-#     },
-#     9: {
-#         "name": "screwdriver",
-#         "sigma": 0.01,
-#         "color": np.r_[250, 128, 114] / 255
-#     },
-#     10: {
-#         "name": "sphere_holes",
-#         "sigma": 0.01,
-#         "color": np.r_[204, 153, 0] / 255
-#     },
-#     11: {
-#         "name": "wafer",
-#         "sigma": 0.01,
-#         "color": np.r_[255, 0, 255] / 255
-#     },
-#     12: {
-#         "name": "wheel",
-#         "sigma": 0.01,
-#         "color": np.r_[102, 0, 0] / 255
-#     },
-#     13: {
-#         "name": "wrench",
-#         "sigma": 0.01,
-#         "color": np.r_[215, 0, 215] / 255
-#     },
-#     14: {
-#         "name": "hand",
-#         "sigma": 0.01,
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     15: {
-#         "name": "kuka",
-#         "sigma": 0.01,
-#         "color": np.r_[255, 160, 16] / 255
-#     },
-#     16: {
-#         "name": "hammer_handle",
-#         "sigma": 0.01,  # TODO,
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     17: {
-#         "name": "hammer_head",
-#         "sigma": 0.01,
-#         "color": np.r_[255, 0, 0] / 255
-#     },
-#     18: {
-#         "name": "pliers_handle",
-#         "sigma": 0.01,  # TODO,
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     19: {
-#         "name": "pliers_head",
-#         "sigma": 0.01,
-#         "color": np.r_[255, 255, 0] / 255
-#     },
-#     20: {
-#         "name": "screw_round_thread",
-#         "sigma": 0.01,  # TODO
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     21: {
-#         "name": "screw_round_head",
-#         "sigma": 0.01,
-#         "color": np.r_[0, 0, 255] / 255
-#     },
-#     22: {
-#         "name": "screwdriver_handle",
-#         "sigma": 0.01,  # TODO
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     23: {
-#         "name": "screwdriver_head",
-#         "sigma": 0.01,
-#         "color": np.r_[250, 128, 114] / 255
-#     },
-#     24: {
-#         "name": "wrench_handle",
-#         "sigma": 0.01,  # TODO
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     25: {
-#         "name": "wrench_open",
-#         "sigma": 0.01,
-#         "color": np.r_[215, 0, 215] / 255
-#     },
-#     26: {
-#         "name": "wrench_ring",
-#         "sigma": 0.01,
-#         "color": np.r_[215, 0, 215] / 255
-#     },
-#     27: {
-#         "name": "peg_screw_shank",
-#         "sigma": 0.01,  # TODO
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-#     28: {
-#         "name": "peg_screw_thread",
-#         "sigma": 0.01,
-#         "color": np.r_[128, 128, 128] / 255
-#     },
-#     29: {
-#         "name": "kuka_gripper",
-#         "sigma": 0.01,  # TODO
-#         "color": np.r_[1, 1, 1] / 255
-#     },
-# }
-
-
 class ParticleFilter():
     MEAN_SHIFT_PRECISSION = 0.001
     CLASS_HISTORY_LEN = 10
@@ -308,10 +154,6 @@ class ParticleFilter():
         for k, v in self.model_stored_pcls.items():
             ests_uuids.append(k)
             ests_pcls.append(v[-1:-1*min(self.NUM_STORED_PCLS+1, len(v)+1):-1])# -1*min(self.NUM_STORED_PCLS+1, len(v)+1)])
-            print('est',ests_pcls[-1])
-            print('min', -1*min(self.NUM_STORED_PCLS+1, len(v)+1))
-            print(len(v))
-            #print('pcl in filter', v[-1])
         return ests_uuids, ests_pcls
 
     def getEstimates(self):
@@ -531,6 +373,9 @@ class ParticleFilter():
             self.model_stored_pcls[str(self.model_uuid[model_idx])] = [pcl]
         else:
             self.model_stored_pcls[str(self.model_uuid[model_idx])].append(pcl)
+        len_diff = len(self.model_stored_pcls[str(self.model_uuid[model_idx])]) - self.NUM_STORED_PCLS
+        if len_diff > 0:
+            del self.model_stored_pcls[str(self.model_uuid[model_idx])][:len_diff]
         self.model_n_updates[model_idx] += 1 #update = receive and append new measurement (pcl) to existing model
         self.model_last_update[model_idx] = self.timer.now #update = receive and append new measurement (pcl) to existing model
 
