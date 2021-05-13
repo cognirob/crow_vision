@@ -34,4 +34,4 @@ def print_markers(random_seed, marker_ids, markers_dict_num=54, markers_size=4, 
         writer.write(file, [row for row in image])
     print('done')
 
-print_markers(65536, np.arange(54))
+print_markers(66, np.arange(54))
