@@ -7,11 +7,12 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from sensor_msgs.msg import Image as msg_image
-from crow_msgs.msg import FilteredPose, NlpStatus
+from crow_msgs.msg import FilteredPose, NlpStatus, ObjectPointcloud
 from geometry_msgs.msg import PoseArray
 from cv_bridge import CvBridge
 import message_filters
 from crow_ontology.crowracle_client import CrowtologyClient
+from crow_vision_ros2.utils import ftl_pcl2numpy
 
 import cv2
 import numpy as np
@@ -26,6 +27,7 @@ import subprocess
 class Visualizator(Node):
     TIMER_FREQ = .5 # seconds
     VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
+    VISUALIZE_DEBUG_PCL = False
     LANGUAGE = 'CZ' #language of the visualization
     COLOR_GRAY = (128, 128, 128)
 
@@ -104,6 +106,24 @@ class Visualizator(Node):
             # some initial random particles necessary automaticall set the viewpoint
             self.text_cloud.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
             self.vis.add_geometry(self.text_cloud)
+        
+        if self.VISUALIZE_DEBUG_PCL:
+            # For debug visualization of assembled PCLs from filter
+            self.create_subscription(msg_type=ObjectPointcloud,
+                                                topic="filtered_pcls",
+                                                # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                                callback=lambda pose_array_msg: self.input_pcl_callback(pose_array_msg),
+                                                qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+            self.get_logger().info('Input listener created on topic: "filtered_pcls"')
+
+            # Initialize visualization properties
+            self.vis2 = o3d.visualization.Visualizer()
+            self.vis2.create_window()
+            # geometry for the particles
+            self.particle_cloud2 = o3d.geometry.PointCloud()
+            # some initial random particles necessary automaticall set the viewpoint
+            self.particle_cloud2.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
+            self.vis2.add_geometry(self.particle_cloud2)
 
         # Initialize nlp params for info bellow image
         self.params = {'det_obj': '-', 'det_command': '-', 'det_obj_name': '-', 'det_obj_in_ws': '-', 'status': '-'}
@@ -124,6 +144,12 @@ class Visualizator(Node):
             self.get_logger().info("No particles. Quitting early.")
             return  # no particles received (for some reason)
         self.visualize_particles(pose_array_msg.particles, pose_array_msg.label, pose_array_msg.poses)
+
+    def input_pcl_callback(self, pcl_array_msg):
+        uuids = pcl_array_msg.uuid
+        pcls = pcl_array_msg.pcl
+        particles = ftl_pcl2numpy(pcls[0])
+        self.visualize_pcl(particles)
 
     def input_detector_callback(self, img_array_msg, cam):
         if not img_array_msg.data:
@@ -294,6 +320,17 @@ class Visualizator(Node):
         # if there are no models, only update the rendering window (otherwise panning/zooming won't work)
         self.vis.poll_events()
         self.vis.update_renderer()
+
+    def visualize_pcl(self, particles):
+        if np.size(particles) > 0:
+            # clear the geometries
+            self.particle_cloud2.clear()
+            tmp_pcl = o3d.geometry.PointCloud()
+            tmp_pcl.points = o3d.utility.Vector3dVector(particles)
+            self.particle_cloud2 += tmp_pcl
+            self.vis2.update_geometry(self.particle_cloud2)
+        self.vis2.poll_events()
+        self.vis2.update_renderer()
 
 def main():
     rclpy.init()
