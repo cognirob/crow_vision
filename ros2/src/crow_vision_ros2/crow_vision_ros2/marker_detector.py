@@ -13,12 +13,12 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from scipy.linalg import lstsq
 import json
 import cv2
 import cv_bridge
 import numpy as np
-from scipy.linalg import lstsq
-
+import transforms3d as tf3
 import pkg_resources
 import time
 
@@ -30,7 +30,8 @@ class MarkerDetector(Node):
 
     TODO
     """
-    
+    VISUALIZE = False
+
     def __init__(self, node_name='marker_detector'):
         super().__init__('marker_detector')
         self.crowracle = CrowtologyClient(node=self)
@@ -61,8 +62,10 @@ class MarkerDetector(Node):
 
     def control_callback(self, msg):
         marker_group_info = self.crowracle.getMarkerGroupProps(msg.group_name)
+        #marker_group_info = self.crowracle.getMarkerGroupProps('blue')
         self.aruco_dict = cv2.aruco.Dictionary_create(marker_group_info['dict_num'], marker_group_info['size'], marker_group_info['seed'])
         self.storage_name = msg.storage_name
+        #self.storage_name = 'blue_strorage'
         self.marker_group_ids = marker_group_info['id']
         self.square_length = marker_group_info['square_len']
         for cam in self.cameras:
@@ -79,53 +82,56 @@ class MarkerDetector(Node):
             ctg_tf_mat = np.asarray(extrinsic["ctg_tf"])
             
             markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.aruco_dict, cameraMatrix=color_K)
-            cameraMarkers = CameraPoser(cam)
+            markerCornersKeep = []
             if len(markerCorners) > 0:
-                for m_idx, (markerId, mrkCorners) in enumerate(zip(markerIds, markerCorners)):
-                    if markerId in self.marker_group_ids:
-                        cameraMarkers.updateMarker(markerId, mrkCorners)
+                for (mrkCrn, mrkId) in zip(markerCorners, markerIds):
+                    if mrkId in self.marker_group_ids:
+                        markerCornersKeep.append(mrkCrn)
+            
+            # filter for stabilization - not tested, but not needed now
+            # cameraMarkers = CameraPoser(cam)
+            # if len(markerCorners) > 0:
+            #     for m_idx, (markerId, mrkCorners) in enumerate(zip(markerIds, markerCorners)):
+            #         if markerId in self.marker_group_ids:
+            #             cameraMarkers.updateMarker(markerId, mrkCorners)
 
-                markerCorners, markerIds = cameraMarkers.getMarkers()
+            #     markerCorners, markerIds = cameraMarkers.getMarkers()
 
-            if len(markerCorners) > 2 and cameraMarkers.markersReady:
+            if len(markerCornersKeep) > 2: # and cameraMarkers.markersReady:
                 try:
-                    #img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
-                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(markerCorners, (-1, 4, 2)), self.square_length, color_K, distCoeffs)
-                    rmat = cv2.Rodrigues(rvec)[0]
-                    quat = tf3.quaternions.mat2quat(rmat)
-                    mtc_tf_mat = [tf3.affines.compose(tvec_i, rmat_i, np.ones(3)) for (tvec_i, rmat_i) in zip(tvec, rmat)]
+                    if self.VISUALIZE:
+                        img_out1 = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
+                        cv2.imshow(f'marker detections {cam}', img_out1)
+                        cv2.waitKey(1)
+                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(markerCornersKeep, (-1, 4, 2)), self.square_length, color_K, distCoeffs)                    
+                    rmat = [cv2.Rodrigues(rvec_i)[0] for rvec_i in rvec]
+                    mtc_tf_mat = [tf3.affines.compose(tvec_i[0], rmat_i, np.ones(3)) for (tvec_i, rmat_i) in zip(tvec, rmat)]
                     for mtc_tf_mat_i in mtc_tf_mat:
-                        self.pose_markers.append(np.matmul(np.matmul(ctg_tf_mat, mtc_tf_mat_i), np.array([0, 0, 0, 1])))
-                    #img_out = cv2.aruco.drawAxis(image, color_K, distCoeffs, rvec, tvec, 0.1)
-                    print('rvec', rvec)
-                    print('rmat', rmat)
-                    print('quat', quat)
-                    print('mtc_tf_mat', mtc_tf_mat)
-                    print('pose_namerkes', self.pose_markers[-1])
-                    
-                    # tf_msg = TransformStamped()
-                    # tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    # tf_msg.header.frame_id = "world"
-                    # tf_msg.child_frame_id = optical_frame
-                    # tf_msg.transform.translation = make_vector3(tvec)
-                    # tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
+                        pose = np.matmul(np.matmul(ctg_tf_mat, mtc_tf_mat_i), np.array([0, 0, 0, 1]))
+                        self.pose_markers.append(pose[:-1])
+                    if self.VISUALIZE:
+                        for i in range(len(rvec)):
+                            img_out2 = cv2.aruco.drawAxis(image, color_K, distCoeffs, rvec[i], tvec[i], 0.1)
+                        cv2.imshow(f'group marker poses, {cam}', img_out2)
+                        cv2.waitKey(1)                    
                 except Exception as e:
                     print(e)
                     # pass
-            print('image call done')
             self.detect_markers_flag[cam] = False
-            if True not in self.detect_markers_flag.values():
+            if (True not in self.detect_markers_flag.values()) and len(self.pose_markers) > 2:
                 self.merge_markers(self.pose_markers)
 
     def merge_markers(self, poses):
-        poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
+        #poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
         poses_linkage = linkage(poses, method='complete', metric='euclidean')
         clusters = fcluster(poses_linkage, self.square_length, criterion='distance')
         marker_poses = []
         for i in range(1, max(clusters)+1):
             marker_poses.append(np.mean(np.asarray(poses)[np.where(clusters==i)], axis=0).tolist())
-        print(marker_poses)
-        self.process_markers(marker_poses, self.storage_name)
+        if len(marker_poses) > 2:
+            self.process_markers(marker_poses, self.storage_name)
+        else:
+            self.get_logger().info('Not enough markers detected, cannot create storage.')
 
     def process_markers(self, points, name, height = 2):
         fit = self.get_plane_from_points(points)
