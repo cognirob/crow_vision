@@ -1,16 +1,12 @@
-from sys import argv
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterType
-from rclpy.time_source import ROSClock
-from ros2node import api
 from sensor_msgs.msg import Image, CameraInfo
 import numpy as np
 import cv2
 import cv_bridge
-import tf2_py as tf
 import tf2_ros
-from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
+from geometry_msgs.msg import TransformStamped
 from crow_vision_ros2.utils import make_vector3, make_quaternion, getTransformFromTF
 from crow_vision_ros2.filters import CameraPoser
 from time import sleep
@@ -65,6 +61,7 @@ class Calibrator(Node):
         parser.add_argument("--camera_namespaces")
         parser.add_argument("--camera_serials")
         parser.add_argument("--camera_transforms")
+        parser.add_argument("--color_fps")
         args = parser.parse_known_args(sys.argv[1:])[0]
 
         # setup vars
@@ -86,7 +83,11 @@ class Calibrator(Node):
         # Get cameras
         self.camera_namespaces = args.camera_namespaces.split(" ")
         self.camera_serials = args.camera_serials.split(" ")
+        self.color_fps = [float(f) for f in args.color_fps.split(" ")]
         self.camera_global_transforms = args.camera_transforms.split(" | ")
+
+        fpsDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE_ARRAY, description='The color camera FPS.')
+        self.declare_parameter("color_fps", value=self.color_fps, descriptor=fpsDesc)
 
         if len(self.camera_namespaces) == 0:  # the old way: wait a little and try to detect all cameras
             self.get_logger().info(f"Sleeping to allow the cameras to come online.")

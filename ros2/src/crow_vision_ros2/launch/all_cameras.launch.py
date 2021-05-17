@@ -53,6 +53,7 @@ def launch_cameras(launchContext, globalTFGetter=None):
     camera_namespaces = []
     camera_serials = []
     camera_transforms = []
+    color_fps = []
     for cam_id, device in enumerate(devices):
         cam_name = device.get_info(rs.camera_info.name)
         if cam_name.lower() == 'platform camera':
@@ -97,7 +98,11 @@ def launch_cameras(launchContext, globalTFGetter=None):
         with open(config_file, "r") as f:
             config_dict = yaml.load(f, Loader=yaml.SafeLoader)
 
-        # print(device_serial)
+        if "color_fps" in config_dict:
+            color_fps.append(config_dict["color_fps"])
+        else:
+            color_fps.append("30.0")  # this is hopefully the default value
+
         launchParams = {
             'align_depth': True,
                         'enable_infra1': False,
@@ -128,6 +133,7 @@ def launch_cameras(launchContext, globalTFGetter=None):
         arguments=[
             "--camera_namespaces", ' '.join(camera_namespaces),
             "--camera_serials", ' '.join(camera_serials),
+            "--color_fps", ' '.join([str(f) for f in color_fps]),
             "--camera_transforms", ' | '.join(camera_transforms),
         ],
     )
