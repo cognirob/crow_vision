@@ -3,26 +3,25 @@ from rclpy.node import Node
 from ros2param.api import call_get_parameters
 
 import sensor_msgs
-import std_msgs
 
 from crow_msgs.msg import DetectionMask, DetectionBBox, BBox
 from cv_bridge import CvBridge
 
-from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 
 import cv2
-import torch
 import numpy as np
+import torch
 
 import commentjson as json
 import pkg_resources
-import argparse
 import time
 import copy
 
-
+print(f"Running PyTorch:")
+print(f"\tver: {torch.__version__}")
+print(f"\tfile: {torch.__file__}")
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
 class CrowVision(Node):
@@ -78,6 +77,8 @@ class CrowVision(Node):
                                                 topic=camera_topic,
                                                 # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
                                                 callback=lambda msg, topic=camera_topic: self.input_callback(msg, topic),
+                                                callback_group=rclpy.callback_groups.MutuallyExclusiveCallbackGroup(),
+                                                # callback_group=rclpy.callback_groups.ReentrantCallbackGroup(),
                                                 qos_profile=1) #the listener QoS has to be =1, "keep last only".
             self.get_logger().info('Input listener created on topic: "%s"' % camera_topic)
             self.ros[camera_topic] = {} # camera_topic is used as an ID for this input, all I/O listeners,publishers will be based under that id.
@@ -130,6 +131,7 @@ class CrowVision(Node):
         print('Hi from crow_vision_ros2.')
 
     def input_callback(self, msg, topic):
+        print(topic)
         """
         @param msg - ROS msg (Image data) to be processed. From camera
         @param topic - str, from camera/input on given topic.
@@ -209,7 +211,10 @@ def main(args=None):
     rclpy.init(args=args)
     try:
         cnn = CrowVision()
-        rclpy.spin(cnn)
+        n_threads = len(cnn.cameras)
+        mte = rclpy.executors.MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        rclpy.spin(cnn, executor=mte)
+        # rclpy.spin(cnn)
         cnn.destroy_node()
     finally:
         cv2.destroyAllWindows()
