@@ -82,8 +82,9 @@ class Locator(Node):
             self.camera_extrinsics[i]["ctg_tf"] = np.array(camera_extrinsics["ctg_tf"], dtype=np.float32)
 
             # create approx syncro callbacks
-            subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos) #listener for pointcloud data from RealSense camera
-            subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos) #listener for masks from detector node
+            cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
+            subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos, callback_group=cb_group) #listener for pointcloud data from RealSense camera
+            subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos, callback_group=cb_group) #listener for masks from detector node
             sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
@@ -159,7 +160,7 @@ class Locator(Node):
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
             seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
             seg_color = rgb_raw[where]
-            # self.get_logger().error(f"{camera} ({class_name}) TRANSFORMED : {seg_pcd.mean(axis=1)}")
+            self.get_logger().error(f"{camera} ({class_name}) TRANSFORMED : {seg_pcd.mean(axis=1)}")
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
@@ -205,8 +206,10 @@ def main():
     rclpy.init()
 
     locator = Locator()
-
-    rclpy.spin(locator)
+    n_threads = len(locator.cameras)
+    mte = rclpy.executors.MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+    rclpy.spin(locator, executor=mte)
+    # rclpy.spin(locator)
     locator.destroy_node()
 
 
