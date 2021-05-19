@@ -21,6 +21,7 @@ import numpy as np
 import transforms3d as tf3
 import pkg_resources
 import time
+import subprocess
 
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
@@ -61,15 +62,16 @@ class MarkerDetector(Node):
         self.pose_markers = []
 
     def control_callback(self, msg):
-        marker_group_info = self.crowracle.getMarkerGroupProps(msg.group_name)
+        marker_group_info = self.crowracle.getMarkerGroupProps(msg.group_name, language='CZ')
         #marker_group_info = self.crowracle.getMarkerGroupProps('blue')
-        self.aruco_dict = cv2.aruco.Dictionary_create(marker_group_info['dict_num'], marker_group_info['size'], marker_group_info['seed'])
-        self.storage_name = msg.storage_name
-        #self.storage_name = 'blue_strorage'
-        self.marker_group_ids = marker_group_info['id']
-        self.square_length = marker_group_info['square_len']
-        for cam in self.cameras:
-            self.detect_markers_flag[cam] = True
+        if marker_group_info.get('dict_num', False):
+            self.aruco_dict = cv2.aruco.Dictionary_create(marker_group_info['dict_num'], marker_group_info['size'], marker_group_info['seed'])
+            self.storage_name = msg.storage_name
+            #self.storage_name = 'blue_strorage'
+            self.marker_group_ids = marker_group_info['id']
+            self.square_length = marker_group_info['square_len']
+            for cam in self.cameras:
+                self.detect_markers_flag[cam] = True
 
     def image_callback(self, msg, cam, intrinsic, extrinsic):
         if self.detect_markers_flag[cam]:
@@ -118,8 +120,11 @@ class MarkerDetector(Node):
                     print(e)
                     # pass
             self.detect_markers_flag[cam] = False
-            if (True not in self.detect_markers_flag.values()) and len(self.pose_markers) > 2:
-                self.merge_markers(self.pose_markers)
+            if True not in self.detect_markers_flag.values():
+                if len(self.pose_markers) > 2:
+                    self.merge_markers(self.pose_markers)
+                else:
+                    self.get_logger().info('Not enough markers detected, cannot create storage.')
 
     def merge_markers(self, poses):
         #poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
@@ -146,6 +151,7 @@ class MarkerDetector(Node):
             polyhedron.append(point)
 
         self.crowracle.add_storage_space(name, polygon3d, polyhedron, area, volume, centroid)
+        subprocess.run("ros2 param set /sentence_processor robot_done True".split())
     
     def get_plane_from_points(self, points):
         """Fit plane equation ax + by + cz = d to measured points and find normal vector
