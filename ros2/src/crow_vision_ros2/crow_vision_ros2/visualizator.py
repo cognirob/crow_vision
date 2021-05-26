@@ -7,12 +7,13 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from sensor_msgs.msg import Image as msg_image
-from crow_msgs.msg import FilteredPose, NlpStatus, ObjectPointcloud
+from crow_msgs.msg import FilteredPose, NlpStatus, ObjectPointcloud, ActionDetection
 from geometry_msgs.msg import PoseArray
 from cv_bridge import CvBridge
 import message_filters
 from crow_ontology.crowracle_client import CrowtologyClient
 from crow_vision_ros2.utils import ftl_pcl2numpy
+from crow_vision_ros2.utils.opencv_multiplot import Plotter
 
 import cv2
 import numpy as np
@@ -22,12 +23,15 @@ from PIL import Image, ImageFont, ImageDraw
 from pyquaternion import Quaternion
 from unicodedata import normalize
 import subprocess
-
+import matplotlib.pyplot as plt
+import matplotlib.animation as ani
+from datetime import datetime
 
 class Visualizator(Node):
     TIMER_FREQ = .5 # seconds
     VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
     VISUALIZE_DEBUG_PCL = False
+    VISUALIZE_ACTIONS = True
     LANGUAGE = 'CZ' #language of the visualization
     COLOR_GRAY = (128, 128, 128)
 
@@ -125,8 +129,59 @@ class Visualizator(Node):
             self.particle_cloud2.points = o3d.utility.Vector3dVector(np.random.randn(10, 3)*2)
             self.vis2.add_geometry(self.particle_cloud2)
 
+        if self.VISUALIZE_ACTIONS:
+            # For debug visualization of actions detected by floating window
+            self.create_subscription(msg_type=ActionDetection,
+                                                topic="action_rec",
+                                                # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                                callback=lambda action_array_msg: self.input_action_callback(action_array_msg),
+                                                qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+            self.get_logger().info('Input listener created on topic: "filtered_pcls"')
+            
+            with open("./src/action_recognition/action_recognition/category_crow_33actions.txt") as f:
+                self.categories = f.read().splitlines()
+            self.categories.insert(0, '0 Nothing')
+            self.f_w_results = []
+            self.f_w_times = []
+
+            self.NUM_COLORS = len(self.categories)
+            self.LINE_STYLES = ['solid', 'dashed', 'dotted']
+            self.NUM_STYLES = len(self.LINE_STYLES)
+            self.cm1 = plt.get_cmap('tab20c')
+            self.cm2 = plt.get_cmap('tab20b')
+            self.fig = plt.figure()
+            self.hl, = plt.plot([], [])
+
+            # plt.xlabel('Time [s]')
+            # plt.ylabel('Weighted score [1]')
+            # plt.title('Floating window outputs')
+            # #plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1.1), ncol=1)
+            # plt.grid(axis='both')
+            # plt.xticks(rotation=45, ha="right", rotation_mode="anchor") #rotate the x-axis values
+            #plt.subplots_adjust(bottom = 0.2, top = 0.9) #ensuring the dates (on the x-axis) fit in the screen
+            #self.animator = ani.FuncAnimation(self.fig, self.buildmebarchart, interval = 500)
+            #plt.show()
+
+            self.ac_plot = Plotter(250, 150, len(self.categories), 10)
+
         # Initialize nlp params for info bellow image
         self.params = {'det_obj': '-', 'det_command': '-', 'det_obj_name': '-', 'det_obj_in_ws': '-', 'status': '-'}
+
+    def buildmebarchart(self, i):
+        print(len(self.f_w_times))
+        print(len(self.f_w_results))
+        # p = plt.plot(self.f_w_times, self.f_w_results, label = self.categories) #note it only returns the dataset, up to the point i
+        # for k in range(len(p)):
+        #     if k >= 20:
+        #         cm = self.cm2
+        #     else:
+        #         cm = self.cm1
+        #     p[k].set_color(cm(k/self.NUM_COLORS))
+        #     p[k].set_linestyle(self.LINE_STYLES[k%self.NUM_STYLES])
+        # plt.legend(self.categories, loc='upper right', bbox_to_anchor=(1.15, 1.1), ncol=1)
+        self.hl.set_xdata(self.f_w_times)
+        self.hl.set_ydata(self.f_w_results)
+        plt.draw()
 
     def window_click(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -182,6 +237,20 @@ class Visualizator(Node):
         self.params['det_obj_in_ws'] = obj_in_ws
         self.params['status'] = status_array_msg.status
         self.update_annot_image()
+
+    def input_action_callback(self, action_array_msg):
+        time_fw = datetime.strptime(action_array_msg.time_end, '%Y-%m-%dT%H:%M:%SZ')
+        timestamp = datetime.timestamp(time_fw)
+        self.f_w_results.append(action_array_msg.fw_classes)
+        self.f_w_times.append(timestamp)
+        # self.hl.set_xdata(self.f_w_times)
+        # self.hl.set_ydata(self.f_w_results)
+        # plt.draw()
+        # plt.show()
+        #self.buildmebarchart(0)
+        #plt.show(block=False)
+
+        self.ac_plot.multiplot(action_array_msg.fw_classes)
 
     def __putText(self, image, text, origin, size=1, color=(255, 255, 255), thickness=2):
         """ Prints text into an image. Uses the original OpenCV functions
