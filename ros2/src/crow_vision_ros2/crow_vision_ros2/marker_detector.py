@@ -125,7 +125,7 @@ class MarkerDetector(Node):
                     self.merge_markers(self.pose_markers)
                 else:
                     self.get_logger().info('Not enough markers detected, cannot create storage.')
-                    self.pclient.define("robot_done", True)
+                    self.pclient.robot_done = True
 
     def merge_markers(self, poses):
         #poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
@@ -138,7 +138,7 @@ class MarkerDetector(Node):
             self.process_markers(marker_poses, self.storage_name)
         else:
             self.get_logger().info('Not enough markers detected, cannot create storage.')
-            self.pclient.define("robot_done", True)
+            self.pclient.robot_done = True
 
     def process_markers(self, points, name, height = 2):
         fit = self.get_plane_from_points(points)
@@ -153,7 +153,7 @@ class MarkerDetector(Node):
             polyhedron.append(point)
 
         self.crowracle.add_storage_space(name, polygon3d, polyhedron, area, volume, centroid)
-        self.pclient.define("robot_done", True)
+        self.pclient.robot_done = True
     
     def get_plane_from_points(self, points):
         """Fit plane equation ax + by + cz = d to measured points and find normal vector
