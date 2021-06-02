@@ -8,7 +8,6 @@ class CameraGlobalTFGetter():
     def __init__(self, config_path='camera_transformation_data.yaml'):
         with open(config_path) as f:
             self.data = yaml.safe_load(f)
-            print(self.data)
 
     def get_camera_transformation(self, serial_nr):
         if serial_nr[0] is "_":
