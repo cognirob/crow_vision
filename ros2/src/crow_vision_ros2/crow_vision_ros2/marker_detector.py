@@ -7,6 +7,7 @@ import sensor_msgs
 from crow_ontology.crowracle_client import CrowtologyClient
 from crow_vision_ros2.filters import CameraPoser
 from crow_msgs.msg import StorageMsg
+from crow_control.utils import ParamClient
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -36,6 +37,8 @@ class MarkerDetector(Node):
     def __init__(self, node_name='marker_detector'):
         super().__init__('marker_detector')
         self.crowracle = CrowtologyClient(node=self)
+        self.pclient = ParamClient()
+        self.pclient.declare("robot_done", True)
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
             self.get_logger().warn("No cams detected, waiting 2s.")
