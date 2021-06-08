@@ -54,13 +54,17 @@ class ParticleFilterNode(Node):
         qos = QoSProfile(
             depth=20,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
-
-        for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
-            self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
-            # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
-            sub = message_filters.Subscriber(self, SegmentedPointcloud, pclTopic, qos_profile=qos)
-            self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
+        self.get_logger().info("Created subscriber for segmented_pcl '/detections/segmented_pointcloud'")
+        # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
+        sub = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
+        self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
             # self.cache.registerCallback(self.cache_cb)
+        # for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
+        #     self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
+        #     # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
+        #     sub = message_filters.Subscriber(self, SegmentedPointcloud, pclTopic, qos_profile=qos)
+        #     self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
+        #     # self.cache.registerCallback(self.cache_cb)
 
         self.lastFilterUpdate = self.get_clock().now()  # when was the filter last update (called pf.update())
         self.lastMeasurement = self.get_clock().now()  # timestamp of the last measurement (last segmented PCL message processed)
