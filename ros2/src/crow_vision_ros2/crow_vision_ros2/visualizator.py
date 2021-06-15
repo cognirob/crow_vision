@@ -32,6 +32,7 @@ class Visualizator(Node):
     VISUALIZE_PARTICLES = False #@TODO: communicate with ParticleFilter about this param!
     VISUALIZE_DEBUG_PCL = False
     VISUALIZE_ACTIONS = True
+    VISUALIZE_DETECTIONS = False
     LANGUAGE = 'CZ' #language of the visualization
     COLOR_GRAY = (128, 128, 128)
 
@@ -39,9 +40,6 @@ class Visualizator(Node):
         super().__init__(node_name)
 
         self.processor_state_srv = self.create_client(GetParameters, '/sentence_processor/get_parameters')
-        self.crowracle = CrowtologyClient(node=self)
-        self.object_properties = self.crowracle.get_filter_object_properties()
-        self.INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(self.object_properties.values())}
 
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
         self.get_logger().info("Waiting for calibrator to setup cameras")
@@ -62,28 +60,33 @@ class Visualizator(Node):
         self.infoPanel = None
         #create listeners
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
-        for i, (cam, maskTopic) in enumerate(zip(self.cameras, self.mask_topics)):
-            listener = self.create_subscription(msg_type=msg_image,
-                                          topic=maskTopic,
-                                          # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
-                                          callback=lambda img_array_msg, cam=cam: self.input_detector_callback(img_array_msg, cam),
-                                          qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+        if self.VISUALIZE_DETECTIONS:
+            self.crowracle = CrowtologyClient(node=self)
+            self.object_properties = self.crowracle.get_filter_object_properties()
+            self.INVERSE_OBJ_MAP = {v["name"]: i for i, v in enumerate(self.object_properties.values())}
 
-            self.get_logger().info('Input listener created on topic: "%s"' % maskTopic)
-
-            # Initialize cv2 annotated image visualization with descriptions
-            self.cv_image['{}'.format(cam)] = np.zeros((128, 128, 3))
-
-            cv2.namedWindow('Detekce{}'.format(cam))
-            cv2.setMouseCallback('Detekce{}'.format(cam), self.window_click)
-
-        self.create_subscription(msg_type=NlpStatus,
-                                            topic=self.nlp_topics[0],
+            for i, (cam, maskTopic) in enumerate(zip(self.cameras, self.mask_topics)):
+                listener = self.create_subscription(msg_type=msg_image,
+                                            topic=maskTopic,
                                             # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
-                                            callback=lambda status_array_msg: self.input_nlp_callback(status_array_msg),
+                                            callback=lambda img_array_msg, cam=cam: self.input_detector_callback(img_array_msg, cam),
                                             qos_profile=qos) #the listener QoS has to be =1, "keep last only".
-                
-        self.get_logger().info('Input listener created on topic: "%s"' % self.nlp_topics[0])
+
+                self.get_logger().info('Input listener created on topic: "%s"' % maskTopic)
+
+                # Initialize cv2 annotated image visualization with descriptions
+                self.cv_image['{}'.format(cam)] = np.zeros((128, 128, 3))
+
+                cv2.namedWindow('Detekce{}'.format(cam))
+                cv2.setMouseCallback('Detekce{}'.format(cam), self.window_click)
+
+            self.create_subscription(msg_type=NlpStatus,
+                                                topic=self.nlp_topics[0],
+                                                # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                                callback=lambda status_array_msg: self.input_nlp_callback(status_array_msg),
+                                                qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+                    
+            self.get_logger().info('Input listener created on topic: "%s"' % self.nlp_topics[0])
 
         if self.VISUALIZE_PARTICLES:
             self.create_subscription(msg_type=FilteredPose,
@@ -136,31 +139,18 @@ class Visualizator(Node):
                                                 # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
                                                 callback=lambda action_array_msg: self.input_action_callback(action_array_msg),
                                                 qos_profile=qos) #the listener QoS has to be =1, "keep last only".
-            self.get_logger().info('Input listener created on topic: "filtered_pcls"')
+            self.create_subscription(msg_type=msg_image,
+                                                topic="action_rec_pa",
+                                                # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
+                                                callback=lambda action_array_msg: self.input_pa_callback(action_array_msg),
+                                                qos_profile=qos) #the listener QoS has to be =1, "keep last only".
+            self.get_logger().info('Input listeners created on topic: "action_rec", "action_rec_pa"')
             
             with open("./src/action_recognition/action_recognition/category_crow_33actions.txt") as f:
                 self.categories = f.read().splitlines()
             self.categories.insert(0, '0 Nothing')
             self.f_w_results = []
             self.f_w_times = []
-
-            self.NUM_COLORS = len(self.categories)
-            self.LINE_STYLES = ['solid', 'dashed', 'dotted']
-            self.NUM_STYLES = len(self.LINE_STYLES)
-            self.cm1 = plt.get_cmap('tab20c')
-            self.cm2 = plt.get_cmap('tab20b')
-            self.fig = plt.figure()
-            self.hl, = plt.plot([], [])
-
-            # plt.xlabel('Time [s]')
-            # plt.ylabel('Weighted score [1]')
-            # plt.title('Floating window outputs')
-            # #plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1.1), ncol=1)
-            # plt.grid(axis='both')
-            # plt.xticks(rotation=45, ha="right", rotation_mode="anchor") #rotate the x-axis values
-            #plt.subplots_adjust(bottom = 0.2, top = 0.9) #ensuring the dates (on the x-axis) fit in the screen
-            #self.animator = ani.FuncAnimation(self.fig, self.buildmebarchart, interval = 500)
-            #plt.show()
 
             self.ac_plot = Plotter(250, 150, len(self.categories), 10)
 
@@ -212,6 +202,14 @@ class Visualizator(Node):
             return  # no annotated image received (for some reason)
         self.cv_image['{}'.format(cam)] = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='bgr8')
         self.update_annot_image()
+
+    def input_pa_callback(self, img_array_msg):
+        if not img_array_msg.data:
+            self.get_logger().info("No image. Quitting early.")
+            return  # no annotated image received (for some reason)
+        imall = self.cvb_.imgmsg_to_cv2(img_array_msg, desired_encoding='rgb8')
+        cv2.imshow(f'PA visualization',imall)
+        cv2.waitKey(10)
 
     def input_nlp_callback(self, status_array_msg):
         if not status_array_msg.det_obj:
