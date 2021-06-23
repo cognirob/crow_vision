@@ -13,6 +13,8 @@ from trio3_ros2_interfaces.srv import GetMaskedPointCloud
 
 #PointCloud2
 from crow_vision_ros2.utils import ftl_pcl2numpy
+import open3d as o3d
+import sys
 
 
 class PCLItem():
@@ -44,6 +46,10 @@ class PCLItem():
         return self._pcl
 
     @property
+    def pcl_numpy(self):
+        return self._pcl_numpy
+
+    @property
     def center(self):
         return self._center
 
@@ -53,6 +59,7 @@ class PCLCacher(Node):
     PCL_GETTER_SERVICE_NAME = "get_masked_point_cloud_rs"
     MAX_ALLOWED_DISTANCE = 0.2  # in meters
     KEEP_ALIVE_DURATION = 10
+    DEBUG = False
 
     def __init__(self, node_name="pcl_cacher"):
         super().__init__(node_name)
@@ -86,32 +93,43 @@ class PCLCacher(Node):
 
 
     def get_pcl(self, request, response):
-        request_pose = np.r_["0,1,0", [getattr(request.expected_position.position, a) for a in "xyz"]]
-        if request.request_units.unit_type == Units.MILIMETERS:
-            request_pose / 1000
-        self.get_logger().info(f"Got a request for a segmented PCL near location {str(request_pose.tolist())}")
-        response.response_units.unit_type = Units.METERS
-        self.refresh_pcls()
-        if len(self.objects) == 0:
-            self.get_logger().error("Error requesting a segmented PCL: There are no PCLs in the cacher!")
-            return response
+        try:
+            request_pose = np.r_["0,1,0", [getattr(request.expected_position.position, a) for a in "xyz"]]
+            if request.request_units.unit_type == Units.MILIMETERS:
+                request_pose / 1000
+            self.get_logger().info(f"Got a request for a segmented PCL near location {str(request_pose.tolist())}")
+            response.response_units.unit_type = Units.METERS
+            self.refresh_pcls()
+            if len(self.objects) == 0:
+                self.get_logger().error("Error requesting a segmented PCL: There are no PCLs in the cacher!")
+                return response
 
-        dist_objs = np.r_["0,2,0", [[o.compute_distance(request_pose), uid] for uid, o in self.objects.items()]]
-        distances = dist_objs[:, 0].astype(float)
-        min_idx = np.argmin(distances)
-        min_value = distances[min_idx]
-        if min_value > self.MAX_ALLOWED_DISTANCE:
-            self.get_logger().error(f"Error requesting a segmented PCL: No PCL is close enough to the requested position!\n\trequest: {str(request_pose)}\n\tdistances: {str(distances)}")
-            return response
+            dist_objs = np.r_["0,2,0", [[o.compute_distance(request_pose), uid] for uid, o in self.objects.items()]]
+            distances = dist_objs[:, 0].astype(float)
+            min_idx = np.argmin(distances)
+            min_value = distances[min_idx]
+            if min_value > self.MAX_ALLOWED_DISTANCE:
+                self.get_logger().error(f"Error requesting a segmented PCL: No PCL is close enough to the requested position!\n\trequest: {str(request_pose)}\n\tdistances: {str(distances)}")
+                return response
 
-        closest_object = self.objects[dist_objs[min_idx, 1]]
-        self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} located {min_value}m away from the requested location.")
-        response.masked_point_cloud = closest_object.pcl
-        return response
+            closest_object = self.objects[dist_objs[min_idx, 1]]
+            self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} located {min_value}m away from the requested location.")
+            response.masked_point_cloud = closest_object.pcl
+            if self.DEBUG:
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(closest_object.pcl_numpy.astype(np.float32))
+                o3d.visualization.draw_geometries([pcd])
+        except BaseException as e:
+            self.get_logger().fatal(f"Fatal error requesting a segmented PCL:\n{e}")
+        finally:
+            return response
 
 
 def main():
     rclpy.init()
+    if "-d" in sys.argv:
+        PCLCacher.DEBUG = True
+
     pclCacher = PCLCacher()
     try:
         rclpy.spin(pclCacher)

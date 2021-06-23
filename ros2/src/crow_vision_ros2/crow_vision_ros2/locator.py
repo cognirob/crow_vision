@@ -46,7 +46,6 @@ realsense_2_robot = np.array(
 
 
 class Locator(Node):
-    PUBLISH_DEBUG = True
 
     def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 1.6)):
         """
@@ -75,13 +74,11 @@ class Locator(Node):
         qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
         # self.pubPCL = {} #output: segmented pcl sent as SegmentedPointcloud, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
-        self.pubPCLdebug = {} #output: segmented pcl sent as PointCloud2, so we can directly visualize it in rviz2. Not needed, only for debug to avoid custom msgs above.
         for cam in self.cameras:
             out_pcl_topic = cam + "/" + "detections/segmented_pointcloud"
             # out_pcl_publisher = self.create_publisher(SegmentedPointcloud, out_pcl_topic, qos_profile=qos)
             # self.pubPCL[cam] = out_pcl_publisher
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
-            self.pubPCLdebug[cam] = self.create_publisher(PointCloud2, out_pcl_topic+"_debug", qos_profile=qos)
 
         self.cvb = cv_bridge.CvBridge()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
@@ -189,8 +186,6 @@ class Locator(Node):
             seg_pcl_msg.confidence = float(score)
 
             self.pubPCL.publish(seg_pcl_msg)
-            if self.PUBLISH_DEBUG:
-                self.pubPCLdebug[camera].publish(segmented_pcl) #for debug visualization only, can be removed.
 
     # def compareMaskPCL(self, mask_array, projected_points):
     #     a = mask_array.T.astype(np.int32).copy()
