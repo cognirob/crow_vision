@@ -43,6 +43,10 @@ class PCLItem():
     def pcl(self):
         return self._pcl
 
+    @property
+    def center(self):
+        return self._center
+
 
 class PCLCacher(Node):
     PCL_MEMORY_SIZE = 5
@@ -101,6 +105,7 @@ class PCLCacher(Node):
             return response
 
         closest_object = self.objects[dist_objs[min_idx, 1]]
+        self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} located {min_value}m away from the requested location.")
         response.masked_point_cloud = closest_object.pcl
         return response
 
