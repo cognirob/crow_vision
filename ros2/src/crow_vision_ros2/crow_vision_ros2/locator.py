@@ -29,8 +29,21 @@ import transforms3d as tf3
 from ctypes import *  # convert float to uint32
 from numba import jit
 
-# t = [-0.015, -0.000, 0.000]
-# q = [0.002, -0.001, 0.004, 1.000]
+
+global_2_robot = np.array(
+    [0.7071068, 0.7071068, 0, 0,
+     -0.7071068, 0.7071068, 0, 0,
+     0, 0, 1, 0.233,
+     0, 0, 0, 1]
+).reshape(4, 4)
+robot_2_global = np.linalg.inv(global_2_robot)
+realsense_2_robot = np.array(
+    [6.168323755264282227e-01, 3.375786840915679932e-01, -7.110263705253601074e-01, 1.405695068359375000,
+     7.858521938323974609e-01, -3.148722648620605469e-01, 5.322515964508056641e-01, -0.3209410400390625000,
+     -4.420567303895950317e-02, -8.870716691017150879e-01, -4.595103561878204346e-01, 0.6574929809570312500,
+     0, 0, 0, 1]
+).reshape(4, 4)
+
 
 class Locator(Node):
     PUBLISH_DEBUG = True
@@ -161,7 +174,7 @@ class Locator(Node):
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
             seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
             seg_color = rgb_raw[where]
-            self.get_logger().error(f"{camera} ({class_name}) TRANSFORMED : {seg_pcd.mean(axis=1)}")
+            # self.get_logger().error(f"{camera} ({class_name}) TRANSFORMED : {seg_pcd.mean(axis=1)}")
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
@@ -195,7 +208,8 @@ class Locator(Node):
             # "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
             "distortion_coefficients": self.camera_instrinsics[idx]["distortion_coefficients"],
             "dtc_tf": self.camera_extrinsics[idx]["dtc_tf"],
-            "ctg_tf": self.camera_extrinsics[idx]["ctg_tf"],
+            # "ctg_tf": self.camera_extrinsics[idx]["ctg_tf"],
+            "ctg_tf": (robot_2_global @ realsense_2_robot @ self.camera_extrinsics[idx]["ctg_tf"]).astype(np.float32),
             "optical_frame": self.camera_frames[idx],
             "mask_topic": self.mask_topics[idx],
             "pcl_topic": self.pcl_topics[idx],
