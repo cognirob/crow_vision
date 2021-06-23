@@ -57,7 +57,7 @@ class ParticleFilterNode(Node):
         self.get_logger().info("Created subscriber for segmented_pcl '/detections/segmented_pointcloud'")
         # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
         sub = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
-        self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
+        self.cache = message_filters.Cache(sub, 15, allow_headerless=False)
             # self.cache.registerCallback(self.cache_cb)
         # for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
         #     self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
