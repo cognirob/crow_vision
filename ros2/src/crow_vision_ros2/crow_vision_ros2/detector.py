@@ -131,7 +131,6 @@ class CrowVision(Node):
         print('Hi from crow_vision_ros2.')
 
     def input_callback(self, msg, topic):
-        print(topic)
         """
         @param msg - ROS msg (Image data) to be processed. From camera
         @param topic - str, from camera/input on given topic.

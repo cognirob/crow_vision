@@ -14,6 +14,7 @@ from crow_vision_ros2.filters import ParticleFilter
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
+from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
 from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud
 from crow_ontology.crowracle_client import CrowtologyClient
@@ -57,7 +58,8 @@ class ParticleFilterNode(Node):
         self.get_logger().info("Created subscriber for segmented_pcl '/detections/segmented_pointcloud'")
         # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
         sub = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
-        self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
+        self.cache = message_filters.Cache(sub, 15, allow_headerless=False)
+        self.pubPCLdebug = self.create_publisher(PointCloud2, "/detections/segmented_pointcloud_debug", qos_profile=qos)
             # self.cache.registerCallback(self.cache_cb)
         # for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
         #     self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
@@ -97,7 +99,7 @@ class ParticleFilterNode(Node):
             except StopIteration as e:
                 class_id = -1
 
-            pcl, _, _ = ftl_pcl2numpy(pcl_msg.pcl)
+            pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
             self.particle_filter.add_measurement((pcl, class_id, score))
 
         now = self.get_clock().now()
@@ -169,10 +171,11 @@ class ParticleFilterNode(Node):
             pcls = []
             for i, np_pcl in enumerate(aggregate_pcl):
                 if len(np_pcl) > 0:
-                    pcls.append(ftl_numpy2pcl(np_pcl.T, pcl_msg.header))
+                    pcls.append(ftl_numpy2pcl(np_pcl.astype(np.float32).T, pcl_msg.header))
                 else:
                     pcl_uuids.pop(i)
             if len(pcl_uuids) > 0:
+                # self.pubPCLdebug.publish(pcls[-1])
                 pcl_msg.uuid = pcl_uuids
                 pcl_msg.pcl = pcls
                 self.pcl_publisher.publish(pcl_msg)
