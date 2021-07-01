@@ -146,7 +146,7 @@ class Visualizator(Node):
                                                 qos_profile=qos) #the listener QoS has to be =1, "keep last only".
             self.get_logger().info('Input listeners created on topic: "action_rec", "action_rec_pa"')
             
-            with open("./src/action_recognition/action_recognition/category_crow_33actions.txt") as f:
+            with open("./src/action_recognition/action_recognition/categories10.txt") as f:
                 self.categories = f.read().splitlines()
             self.categories.insert(0, '0 Nothing')
             self.f_w_results = []

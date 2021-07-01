@@ -1,4 +1,11 @@
 {
     "python.pythonPath": "/usr/bin/python3",
-    "git.ignoreLimitWarning": true
+    "git.ignoreLimitWarning": true,
+    "ros.distro": "eloquent",
+    "python.autoComplete.extraPaths": [
+        "/opt/ros/eloquent/lib/python3.6/site-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/opt/ros/eloquent/lib/python3.6/site-packages"
+    ]
 }

@@ -252,39 +252,51 @@ class ActionCollector(Node):
             self.save_data()
         
         elif key == ord("1"):  # action class
-            self.actionclass = 175
-            self.actionlabel = 'hammering'
+            self.actionclass = 201
+            self.actionlabel = 'attach'
         
         elif key == ord("2"):  # action class
-            self.actionclass = 176
-            self.actionlabel = 'inserting'
+            self.actionclass = 202
+            self.actionlabel = 'handscrew'
     
         elif key == ord("3"):  # action class
-            self.actionclass = 177
-            self.actionlabel = 'screwing'
+            self.actionclass = 203
+            self.actionlabel = 'wrench'
 
         elif key == ord("4"):  # action class
-            self.actionclass = 178
-            self.actionlabel = 'pulling'
+            self.actionclass = 204
+            self.actionlabel = 'pull'
         
         elif key == ord("5"):  # action class
-            self.actionclass = 179
-            self.actionlabel = 'taking_out'
+            self.actionclass = 205
+            self.actionlabel = 'hammer'
         
         elif key == ord("6"):  # action class
-            self.actionclass = 180
-            self.actionlabel = 'holding'
+            self.actionclass = 206
+            self.actionlabel = 'screw'
         
         elif key == ord("7"):  # action class
-            self.actionclass = 181
-            self.actionlabel = 'wrenching'
+            self.actionclass = 207
+            self.actionlabel = 'insert'
         
         elif key == ord("8"):  # action class
-            self.actionclass = 182
-            self.actionlabel = 'handscrewing'
+            self.actionclass = 208
+            self.actionlabel = 'hold'
+        
+        elif key == ord("9"):  # action class
+            self.actionclass = 209
+            self.actionlabel = 'take'
+
+        elif key == ord("0"):  # action class
+            self.actionclass = 210
+            self.actionlabel = 'move'
+
+        elif key == ord("p"):  # action class
+            self.actionclass = 211
+            self.actionlabel = 'nothing'
 
         elif key == ord("."):  # dir name change
-            self.dircounter += 1
+            self.dircounter += 100
         
         elif key == ord(","):  # dir name change
             self.dircounter -= 1
@@ -326,8 +338,8 @@ class ActionCollector(Node):
         Save data for every camera
         """
         # Create folder for this recording session
-        os.makedirs('./dataset', exist_ok=True)
-        os.chdir('./dataset')
+        os.makedirs('/home/michal/code/crowdataset', exist_ok=True)
+        os.chdir('/home/michal/code/crowdataset')
         
         txtfile = open("dataset.txt","a")
         for cam in self.cameras:  # for every camera
