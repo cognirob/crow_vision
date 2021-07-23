@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'detector = crow_vision_ros2.detector:main',
+            'detector_edge = crow_vision_ros2.detector_edge:main',
             'calibrator = crow_vision_ros2.calibrator:main',
             'locator = crow_vision_ros2.locator:main',
             'matcher = crow_vision_ros2.match3d:main',
