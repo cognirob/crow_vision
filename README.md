@@ -59,6 +59,9 @@ python eval.py --trained_model=weights/yolact_base_54_800000.pth --score_thresho
 python eval.py --trained_model=weights/<custom weights>.pth --score_threshold=0.15 --top_k=15 --config=<custom config matching the new weights> --image=my_image.jpeg
 ```
 
+### Training
+
+More details in the crow_simulation [README](https://gitlab.ciirc.cvut.cz/imitrob/project_crow/crow_simulation/-/blob/master/README.md).
 
 
 ### ROS2
