@@ -225,6 +225,13 @@ class ParticleFilter():
         # update classes @TODO: include score information
         cls_estimate = mode(self.model_class_history, axis=1, nan_policy="propagate")[0]
         cls_estimate[np.isnan(cls_estimate)] = -1
+
+        ########################################################################
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 2/3 ###############
+        cls_estimate[np.isnan(cls_estimate)] = 0
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 2/3 ###############
+        ########################################################################
+
         self.model_classes = cls_estimate.ravel()
         self.model_class_names = [self.object_properties[class_key]["name"] if class_key in self.object_properties else "unknown" for class_key in self.model_classes]
 
@@ -316,6 +323,14 @@ class ParticleFilter():
             # compute PCLs mean
             center = np.median(pcl_centers, axis=0)
             # sigma from model (add sigma from pcl? <- np.std(pcls, axis=0))
+
+            ########################################################################
+            ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 3/3 ###############
+            if int(self.model_classes[idx]) == -1:
+                self.model_classes[idx] = 0
+            ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 3/3 ###############
+            ########################################################################
+
             sigma = self.object_properties[self.model_classes[idx]]["sigma"]
             # resample
             resamp_particles, resamp_weights = self._weigh_resample_particles(particles, center, sigma, self.PARTICLES_PER_MODEL)
@@ -386,6 +401,16 @@ class ParticleFilter():
             pcl_dimension = (np.max(pcl, axis=0) - np.min(pcl, axis=0)).reshape(1, 3)
 
         n_pcl = pcl.shape[0]
+
+        ########################################################################
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 1/3 ###############
+        # print(f"****** class_est: {class_est}, score: {score}")
+        # print(f"****** self.object_properties: {self.object_properties}")
+        if int(class_est) == -1:
+            class_est = 0
+        # print(f"****** self.object_properties[class_est]: {self.object_properties[class_est]}")
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS ###################
+        ########################################################################
 
         sigma = self.object_properties[class_est]["sigma"]
         # generate particles
