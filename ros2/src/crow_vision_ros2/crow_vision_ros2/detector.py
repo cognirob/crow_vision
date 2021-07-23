@@ -20,6 +20,8 @@ import time
 import copy
 from crow_control.utils.profiling import StatTimer
 
+import sys
+import os
 
 print(f"Running PyTorch:")
 print(f"\tver: {torch.__version__}")
@@ -54,7 +56,7 @@ class CrowVision(Node):
         if self.config["type"] == "YOLACT":
             # import CNN - YOLACT
             YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
-            import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
+            sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
             from inference_tool import InfTool
             from yolact import Yolact
             from data import set_cfg
