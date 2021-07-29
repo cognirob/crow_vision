@@ -18,6 +18,7 @@ from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
 from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud
 from crow_ontology.crowracle_client import CrowtologyClient
+from crow_control.utils.profiling import StatTimer
 
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
@@ -78,6 +79,7 @@ class ParticleFilterNode(Node):
         self.filtered_publisher = self.create_publisher(FilteredPose, "/filtered_poses", qos)
         self.pcl_publisher = self.create_publisher(ObjectPointcloud, "/filtered_pcls", qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
+        StatTimer.init()
 
     def add_and_process(self, messages):
         if type(messages) is not list:
@@ -115,6 +117,7 @@ class ParticleFilterNode(Node):
             self.lastFilterUpdate = self.get_clock().now()
 
         if self.particle_filter.n_models > 0:
+            StatTimer.enter("Filter publishing")
             estimates = self.particle_filter.getEstimates()
             #self.get_logger().info(str(estimates))
             poses = []
@@ -154,10 +157,12 @@ class ParticleFilterNode(Node):
                     data = np.frombuffer(model_particles.tobytes(),'float32')
                     model_particles_msg.data = data.tolist()
                     particles_msg.append(model_particles_msg)
+
                 pose_array_msg.particles = particles_msg
 
             self.filtered_publisher.publish(pose_array_msg)
 
+            StatTimer.enter("Filter PCL publish")
             pcl_uuids, pcl_points = self.particle_filter.getPclsEstimates()
             pcl_msg = ObjectPointcloud()
             pcl_msg.header.stamp = self.get_clock().now().to_msg()
@@ -179,6 +184,8 @@ class ParticleFilterNode(Node):
                 pcl_msg.uuid = pcl_uuids
                 pcl_msg.pcl = pcls
                 self.pcl_publisher.publish(pcl_msg)
+                StatTimer.exit("Filter PCL publish")
+            StatTimer.exit("Filter publishing")
 
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
