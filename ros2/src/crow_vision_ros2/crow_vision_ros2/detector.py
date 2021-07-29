@@ -1,5 +1,6 @@
 import rclpy #add to package.xml deps
 from rclpy.node import Node
+from rcl_interfaces.srv import GetParameters
 from ros2param.api import call_get_parameters
 
 import sensor_msgs
@@ -67,6 +68,9 @@ class CrowVision(Node):
 
         ## handle multiple inputs (cameras).
         # store the ROS Listeners,Publishers in a dict{}, keys by topic.
+        calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
+        self.get_logger().info("Waiting for calibrator to setup cameras")
+        calib_client.wait_for_service()
         self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
         while len(self.cameras) == 0:
             self.get_logger().warn("Waiting for any cameras!")
