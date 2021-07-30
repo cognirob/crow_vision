@@ -1,6 +1,8 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 from rcl_interfaces.msg import ParameterType
+from rcl_interfaces.srv import GetParameters
 from ros2param.api import call_get_parameters
 import message_filters
 
@@ -19,9 +21,7 @@ import cv2
 import cv_bridge
 
 import pkg_resources
-#import open3d as o3d #we don't use o3d, as it's too slow
 import time
-from ctypes import * # convert float to uint32
 import tf2_py as tf
 import tf2_ros
 import transforms3d as tf3
@@ -60,6 +60,11 @@ class Locator(Node):
             outside this range are dropped. Sometimes camera fails to measure depth and inputs 0.0m as depth, this is to filter out those values.
         """
         super().__init__(node_name)
+        # Wait for calibrator
+        calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
+        self.get_logger().info("Waiting for calibrator to setup cameras")
+        calib_client.wait_for_service()
+        # Retreive camera information
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
             self.get_logger().warn("No cams detected, waiting 2s.")
@@ -67,7 +72,7 @@ class Locator(Node):
             self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
 
         self.global_frame_id = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["global_frame_id"]).values[0].string_value
-
+        # Set camera parameters and topics
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.camera_extrinsics = [json.loads(cextr) for cextr in self.camera_extrinsics]
         self.mask_topics = [cam + "/detections/masks" for cam in self.cameras] #input masks from 2D rgb (from our detector.py)
@@ -76,27 +81,21 @@ class Locator(Node):
         self.depth_min, self.depth_max = depth_range
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
-        # create output topic and publisher dynamically for each cam
+        # create publisher for located objects (segmented PCLs)
         qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
-        # self.pubPCL = {} #output: segmented pcl sent as SegmentedPointcloud, separate publisher for each camera, indexed by 'cam', topic: "<cam>/detections/segmented_pointcloud"
-        for cam in self.cameras:
-            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud"
-            # out_pcl_publisher = self.create_publisher(SegmentedPointcloud, out_pcl_topic, qos_profile=qos)
-            # self.pubPCL[cam] = out_pcl_publisher
-            self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
         self.cvb = cv_bridge.CvBridge()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
-        #create listeners (synchronized)
+        #create listeners, synchronized for each camera (Mask + PCL)
         for i, (cam, pclTopic, maskTopic, camera_instrinsics, camera_extrinsics) in enumerate(zip(self.cameras, self.pcl_topics, self.mask_topics, self.camera_instrinsics, self.camera_extrinsics)):
             # convert camera data to numpy
             self.camera_instrinsics[i]["camera_matrix"] = np.array(camera_instrinsics["camera_matrix"], dtype=np.float32)
             self.camera_instrinsics[i]["distortion_coefficients"] = np.array(camera_instrinsics["distortion_coefficients"], dtype=np.float32)
 
-            self.camera_extrinsics[i]["dtc_tf"] = np.array(camera_extrinsics["dtc_tf"], dtype=np.float32)
-            self.camera_extrinsics[i]["ctg_tf"] = np.array(camera_extrinsics["ctg_tf"], dtype=np.float32)
+            self.camera_extrinsics[i]["dtc_tf"] = np.array(camera_extrinsics["dtc_tf"], dtype=np.float32)  # dtc = depth to color sensor transform
+            self.camera_extrinsics[i]["ctg_tf"] = np.array(camera_extrinsics["ctg_tf"], dtype=np.float32)  # ctg = color/camera to global coord system transform
 
             # create approx syncro callbacks
             cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
@@ -128,7 +127,6 @@ class Locator(Node):
         return wheres
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
-        # print(self.getCameraData(camera))
         if not mask_msg.masks:
             self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
@@ -171,13 +169,9 @@ class Locator(Node):
                     "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
-            # create segmented pcl
-            # self.get_logger().error(f"{camera} ({class_name}) RAW : {point_cloud[:, where].mean(axis=1)}")
-
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
             seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
             seg_color = rgb_raw[where]
-            # self.get_logger().error(f"{camera} ({class_name}) TRANSFORMED : {seg_pcd.mean(axis=1)}")
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
@@ -193,7 +187,7 @@ class Locator(Node):
 
             self.pubPCL.publish(seg_pcl_msg)
 
-    # def compareMaskPCL(self, mask_array, projected_points):
+    # def compareMaskPCL(self, mask_array, projected_points):  # OLD, SLOW version
     #     a = mask_array.T.astype(np.int32).copy()
     #     b = projected_points.T.copy()
     #     self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
@@ -206,7 +200,6 @@ class Locator(Node):
             "camera": camera,
             "image_topic": self.image_topics[idx],
             "camera_matrix": self.camera_instrinsics[idx]["camera_matrix"],
-            # "camera_matrix": np.array([383.591, 0, 318.739, 0, 383.591, 237.591, 0, 0, 1]).reshape(3, 3),
             "distortion_coefficients": self.camera_instrinsics[idx]["distortion_coefficients"],
             "dtc_tf": self.camera_extrinsics[idx]["dtc_tf"],
             # "ctg_tf": self.camera_extrinsics[idx]["ctg_tf"],
@@ -220,13 +213,15 @@ class Locator(Node):
 
 def main():
     rclpy.init()
-
     locator = Locator()
-    n_threads = len(locator.cameras)
-    mte = rclpy.executors.MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
-    rclpy.spin(locator, executor=mte)
-    # rclpy.spin(locator)
-    locator.destroy_node()
+    try:
+        n_threads = len(locator.cameras)
+        mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        rclpy.spin(locator, executor=mte)
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
+    finally:
+        locator.destroy_node()
 
 
 if __name__ == "__main__":
