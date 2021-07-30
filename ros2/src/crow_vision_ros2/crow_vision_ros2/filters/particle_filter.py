@@ -1,3 +1,4 @@
+from sys import flags
 import numpy as np
 from numpy.random import random
 import torch
@@ -10,6 +11,8 @@ from numba import jit
 
 
 class Position():
+    """Class to hold the XYZ position of a model
+    """
 
     def __init__(self, x, y, z):
         self.x = x
@@ -18,6 +21,8 @@ class Position():
 
 
 class Orientation():
+    """Class to hold the orientation of a model
+    """
 
     @classmethod
     def fromQuaternion(cls, *, quat=None, x=0.0, y=0.0, z=0.0, w=0.0):
@@ -117,6 +122,12 @@ class ParticleFilter():
         return self.model_states.numpy()
 
     def update(self):
+        """Main filter function.
+            - removes old models
+            - predicts (PF step 1)
+            - processes measurements (PF step 2)
+            - computes position estimates
+        """
         if self.n_models == 0:
             if len(self.observations) > 0:
                 self._processMeasurements()
@@ -171,9 +182,17 @@ class ParticleFilter():
         return ests
 
     def add_measurement(self, z):
+        """This simply appends the measurement into a list. The processing takes place during self.update
+
+        Args:
+            z (np.array): A single observation/measurement of an object.
+                A measurement is a 3-tuple: (pcl, class, score)
+        """
         self.observations.append(z)
 
     def get_model_particles(self):
+        """Returns model particles.
+        """
         model_particles = self.model_particles.clone()
         if type(model_particles) == torch.Tensor:
             return model_particles.numpy()
@@ -186,7 +205,6 @@ class ParticleFilter():
         * spread particles
         * add uniformly random particles
         """
-        # return  # FIXME remove to start updating speed
         time_tensor = tensor([time_delta, time_delta**2], dtype=torch.float32).unsqueeze(0)  # (1x2)
         self._update_velocities = time_tensor.matmul(self.model_params)  # model_params : (Qx2x3) -> Qx1x3
         # TODO: update velocity and acceleration?

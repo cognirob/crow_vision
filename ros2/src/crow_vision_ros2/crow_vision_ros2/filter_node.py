@@ -1,16 +1,13 @@
 import rclpy
+from rclpy import executors
 from rclpy.node import Node
-from rcl_interfaces.msg import ParameterType
-from ros2param.api import call_get_parameters
+from rclpy.time import Duration, Time
 import message_filters
 
-#PointCloud2
 from crow_msgs.msg import SegmentedPointcloud
-import open3d as o3d
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 from crow_vision_ros2.filters import ParticleFilter
 
-#TF
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
@@ -20,64 +17,48 @@ from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud
 from crow_ontology.crowracle_client import CrowtologyClient
 from crow_control.utils.profiling import StatTimer
 
-from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 
 import numpy as np
 
-import pkg_resources
-import time
-
 
 class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.05
-    VISUALIZE_PARTICLES = True
+    UPDATE_WINDOW_DURATION = 0.05  # Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
+    VISUALIZE_PARTICLES = True  # whether to publish filter particles via ROS message
+    SEGMENTED_PCL_TOPIC = "/detections/segmented_pointcloud"
+    FILTERED_POSES_TOPIC = "/filtered_poses"
+    FILTERED_PCL_TOPIC = "/filtered_pcls"
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
+        # get a dictionary with object properties from onto
         self.crowracle = CrowtologyClient(node=self)
-        # Get existing cameras from and topics from the calibrator
-        self.cameras = []
-        while(len(self.cameras) == 0):
-            try:
-                self.cameras , self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
-            except:
-                self.get_logger().error("getting cameras failed. Retrying in 2s")
-                time.sleep(2)
-        assert len(self.cameras) > 0
-        # create necessary topics to get detected PCLs
-        self.seg_pcl_topics = [cam + "/" + "detections/segmented_pointcloud" for cam in self.cameras] #input segmented pcl data
-
-        #time.sleep(5)
         self.object_properties = self.crowracle.get_filter_object_properties()
+        # create an instance of PF
         self.particle_filter = ParticleFilter(self.object_properties)  # the main component
 
+        # create message cache for segmented PCLs
         qos = QoSProfile(
             depth=20,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
-        self.get_logger().info("Created subscriber for segmented_pcl '/detections/segmented_pointcloud'")
-        # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
-        sub = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
+        self.get_logger().info("Created subscriber for segmented_pcl '{self.SEGMENTED_PCL_TOPIC}'")
+        sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos)
         self.cache = message_filters.Cache(sub, 15, allow_headerless=False)
-        self.pubPCLdebug = self.create_publisher(PointCloud2, "/detections/segmented_pointcloud_debug", qos_profile=qos)
-            # self.cache.registerCallback(self.cache_cb)
-        # for i, (cam, pclTopic) in enumerate(zip(self.cameras, self.seg_pcl_topics)):
-        #     self.get_logger().info("Created subscriber for segmented_pcl \"{}\"".format(pclTopic))
-        #     # self.create_subscription(SegmentedPointcloud, pclTopic, self.detection_cb, qos_profile=qos)
-        #     sub = message_filters.Subscriber(self, SegmentedPointcloud, pclTopic, qos_profile=qos)
-        #     self.cache = message_filters.Cache(sub, 15, allow_headerless=True)
-        #     # self.cache.registerCallback(self.cache_cb)
+        # self.pubPCLdebug = self.create_publisher(PointCloud2, self.SEGMENTED_PCL_TOPIC + "_debug", qos_profile=qos)  # not used currently
 
+        # setup time variables
         self.lastFilterUpdate = self.get_clock().now()  # when was the filter last update (called pf.update())
         self.lastMeasurement = self.get_clock().now()  # timestamp of the last measurement (last segmented PCL message processed)
-        self.updateWindowDuration = rclpy.time.Duration(seconds=0.05)
-        self.timeSlipWindow = rclpy.time.Duration(seconds=1.5)
-        self.measurementTolerance = rclpy.time.Duration(seconds=0.00001)
-        self.lastUpdateMeasurementDDiff = rclpy.time.Duration(seconds=2)
+        self.updateWindowDuration = Duration(seconds=self.UPDATE_WINDOW_DURATION)
+        self.timeSlipWindow = Duration(seconds=1.5)
+        self.measurementTolerance = Duration(seconds=0.00001)
+        self.lastUpdateMeasurementDDiff = Duration(seconds=2)
+
         # Publisher for the output of the filter
-        self.filtered_publisher = self.create_publisher(FilteredPose, "/filtered_poses", qos)
-        self.pcl_publisher = self.create_publisher(ObjectPointcloud, "/filtered_pcls", qos)
+        self.filtered_publisher = self.create_publisher(FilteredPose, self.FILTERED_POSES_TOPIC, qos)
+        self.pcl_publisher = self.create_publisher(ObjectPointcloud, self.FILTERED_PCL_TOPIC, qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
         StatTimer.init()
 
@@ -92,8 +73,8 @@ class ParticleFilterNode(Node):
         latest = self.lastMeasurement
         for pcl_msg in messages:
             self.frame_id = pcl_msg.header.frame_id
-            if latest < rclpy.time.Time.from_msg(pcl_msg.header.stamp):
-                latest = rclpy.time.Time.from_msg(pcl_msg.header.stamp)
+            if latest < Time.from_msg(pcl_msg.header.stamp):
+                latest = Time.from_msg(pcl_msg.header.stamp)
             label = pcl_msg.label
             score = pcl_msg.confidence
             try:
@@ -218,28 +199,14 @@ class ParticleFilterNode(Node):
         else:
             self.update()
 
-    def cache_cb(self, *args):
-        pass
-
-    def detection_cb(self, pcl_msg):
-        self.get_logger().info("got some pcl")
-        print(pcl_msg.label)
-        self.frame_id = pcl_msg.header.frame_id
-        label = pcl_msg.label
-        try:
-            class_id = next((k for k, v in self.object_properties.items() if label in v["name"]))
-        except StopIteration as e:
-            class_id = -1
-
-        pcl, _, _ = ftl_pcl2numpy(pcl_msg.pcl)
-        self.particle_filter.add_measurement((pcl, class_id, score))
-
 
 def main():
     rclpy.init()
+    pfilter = ParticleFilterNode()
     try:
-        pfilter = ParticleFilterNode()
         rclpy.spin(pfilter)
+    except KeyboardInterrupt:
+        print("User requested shutdown")
     finally:
         pfilter.destroy_node()
 
