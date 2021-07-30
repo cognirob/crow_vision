@@ -19,7 +19,10 @@ import commentjson as json
 import pkg_resources
 import time
 import copy
+#import os, sys
 from crow_control.utils.profiling import StatTimer
+
+from yolact_edge.inference_tool import InfTool
 
 
 print(f"Running PyTorch:")
@@ -53,12 +56,12 @@ class CrowVision(Node):
 
         # specific imports based on YOLACT / Detectron2
         if self.config["type"] == "YOLACT":
-            # import CNN - YOLACT
-            YOLACT_REPO='~/yolact_edge/' #use your existing yolact setup
-            import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser(YOLACT_REPO)))
-            from inference_tool import InfTool
-            #from yolact import Yolact
-            #from data import set_cfg
+        #     # import CNN - YOLACT
+            YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
+            import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser('~/yolact_edge/yolact_edge')))
+        #     from inference_tool import InfTool
+        #     #from yolact import Yolact
+        #     #from data import set_cfg
         elif self.config["type"] == "Detectron2":
             import detectron2
         else:
