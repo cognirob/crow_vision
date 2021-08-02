@@ -10,6 +10,9 @@ import open3d as o3d
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 from crow_vision_ros2.filters import ParticleFilter
 
+# Tracker
+from crow_vision_ros2.tracker import Tracker
+
 #TF
 import tf2_py as tf
 import tf2_ros
@@ -79,6 +82,9 @@ class ParticleFilterNode(Node):
         self.pcl_publisher = self.create_publisher(ObjectPointcloud, "/filtered_pcls", qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
 
+        # Tracker initialization
+        self.tracker = Tracker()
+
     def add_and_process(self, messages):
         if type(messages) is not list:
             messages = [messages]
@@ -116,6 +122,24 @@ class ParticleFilterNode(Node):
 
         if self.particle_filter.n_models > 0:
             estimates = self.particle_filter.getEstimates()
+
+            ####
+            # - repair objects internally in the filter
+            # - update
+            # - on return "0" delete object on that position
+            # Format input data
+            poses_formatted, class_names_formatted, dimensions_formatted, uuids_formatted = ([],[],[],[])
+            for pose, label, dims, uuid in estimates:
+                poses_formatted.append(pose.tolist())
+                class_names_formatted.append(label)
+                dimensions_formatted.append(dims)
+                uuids_formatted.append(uuid)
+
+            last_uuid, latest_uuid = self.tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
+
+            print(f"*** last_uuid: {last_uuid}")
+            print(f"*** latest_uuid: {latest_uuid}")
+
             #self.get_logger().info(str(estimates))
             poses = []
             dimensions = []
@@ -225,6 +249,8 @@ class ParticleFilterNode(Node):
             class_id = -1
 
         pcl, _, _ = ftl_pcl2numpy(pcl_msg.pcl)
+
+        print(f"*** pcl: {pcl}")
         self.particle_filter.add_measurement((pcl, class_id, score))
 
 

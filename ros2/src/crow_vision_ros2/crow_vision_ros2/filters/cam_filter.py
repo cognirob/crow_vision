@@ -217,4 +217,3 @@ class CameraParticleFilter():
 
     def __addNoise(self, particles):
         pass
-
