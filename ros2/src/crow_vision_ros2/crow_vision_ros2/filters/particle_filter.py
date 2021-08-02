@@ -136,6 +136,8 @@ class ParticleFilter():
         time_delta = self.timer.getTimeDiff()
         time_now = self.timer.lastTime
 
+        # FIXME: model removal should probably be after measurement processing!
+        # FIXME: otherwise, the model might be "old" because the currently appended update was not processed, yet!
         # remove stale models
         toBeDeleted = np.where((time_now - self.model_last_update) > self.DELETION_TIME_LIMIT)[0].tolist()
         if len(toBeDeleted) > 0:
@@ -156,7 +158,7 @@ class ParticleFilter():
         self._estimate(time_delta)
 
     def getPclsEstimates(self):
-        """Return a dict of uuids and corresponding point clouds (aggreagated form several last pcls)
+        """Return a dict of uuids and corresponding point clouds (aggregated form several last pcls)
         """
         if self.n_models == 0:
             return {}
