@@ -68,7 +68,7 @@ class ParticleFilter():
     CLASS_HISTORY_LEN = 10
     PARTICLES_PER_MODEL = 500
     TIMER_CLASS = Timer
-    DELETION_TIME_LIMIT = 5  # 10 seconds
+    DELETION_TIME_LIMIT = 2  # 10 seconds
     MAX_SHIFT_ITERS = 20
     STATIC_NOISE = 0.01  # 5 cm
     GLOBAL_DISTANCE_LIMIT = 0.1  # limit for a model to be considered "close" to new observation
@@ -80,9 +80,9 @@ class ParticleFilter():
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
     ACCELERATION_LIMIT = 0.0005  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
     SPEED_LIMIT = 0.05  # 1m/s is assumed as max speed (higher values are clipped)
-    NEW_MODEL_MIN_UPDATES = 10  # minimum number of measurements required for new model to be reported
+    NEW_MODEL_MIN_UPDATES = 5  # minimum number of measurements required for new model to be reported
     NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
-    REPORT_FRESH_MODELS_ONLY = False  # if True, reports only models that had updates lately
+    REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
     NUM_STORED_PCLS = 3 # number of latest pcls to aggregate and send in the pcl message
 
@@ -117,6 +117,9 @@ class ParticleFilter():
         return self.model_states.numpy()
 
     def update(self):
+
+        print(f"* Currently having self.n_models: {self.n_models}") #################################################3
+
         if self.n_models == 0:
             if len(self.observations) > 0:
                 self._processMeasurements()
@@ -135,7 +138,7 @@ class ParticleFilter():
         # diffuse
         self.model_particles.add_(torch.randn_like(self.model_particles) * self.STATIC_NOISE * time_delta)
 
-        # add measurements
+        # filtered measurements
         if len(self.observations) > 0:
             self._processMeasurements()
             # estimate classes
@@ -165,9 +168,11 @@ class ParticleFilter():
         for i in range(self.n_models):
             n_updates = self.model_n_updates[i]
             time_diff = self.timer.now - self.model_first_update[i]
+
             if (n_updates >= self.NEW_MODEL_MIN_UPDATES) and (time_diff >= self.NEW_MODEL_TTL):
                 if (self.REPORT_FRESH_MODELS_ONLY==False) or (self.last_filter_update <= self.model_last_update[i]):
                     ests.append((self.model_states[i].numpy(), self.model_class_names[i], self.model_pcl_dimensions[i], self.model_uuid[i]))
+
         return ests
 
     def add_measurement(self, z):
@@ -469,7 +474,6 @@ class ParticleFilter():
 
     def _delete_model(self, model_number):
         mask = torch.arange(0, self.n_models) != model_number
-
         self.model_particles = self.model_particles[mask, ...]
         self.particle_weights = self.particle_weights[mask, ...]
         self.model_params = self.model_params[mask, ...]
@@ -506,3 +510,11 @@ class ParticleFilter():
             return np.average(samples, axis=0, weights=weights)
         else:
             return mode
+
+    def _correct_model_uuids(self, last_uuids, latest_uuids):
+        # Use the new uuids to find newer objects and give them the older uuids
+        for last_uuids_i in range(len(last_uuids)):
+            if latest_uuids[last_uuids_i] != last_uuids[last_uuids_i]:
+                if last_uuids[last_uuids_i] in self.model_uuid:
+                    self.model_uuid[np.where(self.model_uuid == last_uuids[last_uuids_i])[0][0]  ] = latest_uuids[last_uuids_i]
+        return

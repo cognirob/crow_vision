@@ -194,6 +194,10 @@ particle_filter = ParticleFilter(object_properties=object_properties)
 generator_position = Position(x=0,y=0,z=0)
 pcl_generator = PclGenerator(position=generator_position, class_id=0, score=1, pcl_count=300, delta=Position(x=0.1,y=0.1,z=0.1))
 
+generator_position2 = Position(x=0,y=100,z=0)
+pcl_generator2 = PclGenerator(position=generator_position2, class_id=1, score=1, pcl_count=300, delta=Position(x=0.1,y=0.1,z=0.1))
+
+
 tracker = Tracker()
 
 i = 0
@@ -206,12 +210,20 @@ while True:
         new_generator_position = Position(x=100,y=3,z=3)
         pcl_generator.position = new_generator_position
 
+    if i == 1050:
+        # Change position
+        new_generator_position = Position(x=0,y=3,z=200)
+        pcl_generator2.position = new_generator_position
+
     pcl, class_id, score = pcl_generator.get_particle_input_add_measurement()
     particle_filter.add_measurement((pcl,class_id, score))
+    pcl2, class_id2, score2 = pcl_generator2.get_particle_input_add_measurement()
+    particle_filter.add_measurement((pcl2,class_id2, score2))
     particle_filter.update()
+
+    # particle_filter.update()
+
     estimates = particle_filter.getEstimates()
-
-
 
     poses_formatted, class_names_formatted, dimensions_formatted, uuids_formatted = ([],[],[],[])
     for pose, label, dims, uuid in estimates:
@@ -223,8 +235,13 @@ while True:
         dimensions_formatted.append(dims)
         uuids_formatted.append(uuid)
 
+    print(f"*-* Poses formated: {poses_formatted}")
+
     last_uuid, latest_uuid = tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
 
     print("Returned from tracker: ")
     print(f"last_uuid: {last_uuid}")
     print(f"latest_uuid: {latest_uuid}")
+
+    # Update by uuids
+    particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)

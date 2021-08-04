@@ -1,5 +1,4 @@
 import math, random, string
-import datetime
 
 # Returns length of a vector, arguments: vector tuple (x,y,z)
 def get_vector_length(vector):
@@ -40,8 +39,6 @@ class Position:
         self.x = x
         self.y = y
         self.z = z
-
-        self.origin_date = datetime.datetime.now()
 
     def get_tuple(self):
         return (self.x, self.y, self.z)

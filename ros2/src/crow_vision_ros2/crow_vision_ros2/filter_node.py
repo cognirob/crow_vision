@@ -135,10 +135,12 @@ class ParticleFilterNode(Node):
                 dimensions_formatted.append(dims)
                 uuids_formatted.append(uuid)
 
-            last_uuid, latest_uuid = self.tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
 
+            last_uuid, latest_uuid = self.tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
             print(f"*** last_uuid: {last_uuid}")
             print(f"*** latest_uuid: {latest_uuid}")
+            self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
+
 
             #self.get_logger().info(str(estimates))
             poses = []
