@@ -195,7 +195,7 @@ generator_position = Position(x=0,y=0,z=0)
 pcl_generator = PclGenerator(position=generator_position, class_id=0, score=1, pcl_count=300, delta=Position(x=0.1,y=0.1,z=0.1))
 
 generator_position2 = Position(x=0,y=100,z=0)
-pcl_generator2 = PclGenerator(position=generator_position2, class_id=1, score=1, pcl_count=300, delta=Position(x=0.1,y=0.1,z=0.1))
+pcl_generator2 = PclGenerator(position=generator_position2, class_id=0, score=1, pcl_count=300, delta=Position(x=0.1,y=0.1,z=0.1))
 
 
 tracker = Tracker()
