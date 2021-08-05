@@ -33,12 +33,12 @@ global_2_robot = np.array(
      0, 0, 0, 1]
 ).reshape(4, 4)
 robot_2_global = np.linalg.inv(global_2_robot)
-realsense_2_robot = np.array(
-    [6.168323755264282227e-01, 3.375786840915679932e-01, -7.110263705253601074e-01, 1.405695068359375000,
-     7.858521938323974609e-01, -3.148722648620605469e-01, 5.322515964508056641e-01, -0.3209410400390625000,
-     -4.420567303895950317e-02, -8.870716691017150879e-01, -4.595103561878204346e-01, 0.6574929809570312500,
-     0, 0, 0, 1]
-).reshape(4, 4)
+realsense_2_robot = np.array(  # new from 16.7. 2021
+    [5.2478784e-01,  4.7426718e-01, -7.0687222e-01,  1.3974695,
+     8.4990799e-01, -3.3824810e-01,  4.0403539e-01, -0.32303824,
+    -4.7477469e-02, -8.1280923e-01, -5.8059198e-01,  0.65096106,
+    0,  0,  0,  1]
+ ).reshape(4, 4)
 
 
 class MarkerDetector(Node):
@@ -109,14 +109,14 @@ class MarkerDetector(Node):
             color_K = np.asarray(intrinsic['camera_matrix'])
             distCoeffs = np.asarray(intrinsic['distortion_coefficients'])
             ctg_tf_mat = (robot_2_global @ realsense_2_robot @ extrinsic["ctg_tf"]).astype(np.float32)
-            
+
             markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.aruco_dict, cameraMatrix=color_K)
             markerCornersKeep = []
             if len(markerCorners) > 0:
                 for (mrkCrn, mrkId) in zip(markerCorners, markerIds):
                     if mrkId in self.marker_group_ids:
                         markerCornersKeep.append(mrkCrn)
-            
+
             # filter for stabilization - not tested, but not needed now
             # cameraMarkers = CameraPoser(cam)
             # if len(markerCorners) > 0:
@@ -132,7 +132,7 @@ class MarkerDetector(Node):
                         img_out1 = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
                         cv2.imshow(f'marker detections {cam}', img_out1)
                         cv2.waitKey(1)
-                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(markerCornersKeep, (-1, 4, 2)), self.square_length, color_K, distCoeffs)                    
+                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(markerCornersKeep, (-1, 4, 2)), self.square_length, color_K, distCoeffs)
                     rmat = [cv2.Rodrigues(rvec_i)[0] for rvec_i in rvec]
                     mtc_tf_mat = [tf3.affines.compose(tvec_i[0], rmat_i, np.ones(3)) for (tvec_i, rmat_i) in zip(tvec, rmat)]
                     for mtc_tf_mat_i in mtc_tf_mat:
@@ -142,7 +142,7 @@ class MarkerDetector(Node):
                         for i in range(len(rvec)):
                             img_out2 = cv2.aruco.drawAxis(image, color_K, distCoeffs, rvec[i], tvec[i], 0.1)
                         cv2.imshow(f'group marker poses, {cam}', img_out2)
-                        cv2.waitKey(1)                    
+                        cv2.waitKey(1)
                 except Exception as e:
                     print(e)
                     # pass
@@ -189,7 +189,7 @@ class MarkerDetector(Node):
 
         self.crowracle.add_position(name, centroid)
         self.pclient.robot_done = True
-    
+
     def get_plane_from_points(self, points):
         """Fit plane equation ax + by + cz = d to measured points and find normal vector
         Args:
@@ -283,14 +283,14 @@ class MarkerDetector(Node):
         #corners = self.sort_polygon(corners)
         n = len(corners)
         area = []
-        for i in range(1,n-1):    
+        for i in range(1,n-1):
             area.append(0.5 * np.cross(corners[i] - corners[0], corners[(i+1)%n] - corners[0]))
         area = np.asarray(area).sum(axis = 0)
         area = np.linalg.norm(area)
         return area
 
     def sort_polygon(self, corners):
-        """Sort corners (2d points) of polygon to be in ccw order 
+        """Sort corners (2d points) of polygon to be in ccw order
         Args:
             corners (list of lists): 2d points
         Returns:
@@ -307,7 +307,7 @@ class MarkerDetector(Node):
         return [np.asarray(corner[:-1]) for corner in cornersWithAngles]
 
     def get_area2d(self, corners):
-        """Get area of given corners (2d points) using shoelace formula 
+        """Get area of given corners (2d points) using shoelace formula
         Args:
             corners (list of lists): 2d points
         Returns:
@@ -338,7 +338,7 @@ def main():
     rclpy.init()
     time.sleep(1)
     marker_detector = MarkerDetector()
-    
+
     rclpy.spin(marker_detector)
     marker_detector.destroy_node()
 
