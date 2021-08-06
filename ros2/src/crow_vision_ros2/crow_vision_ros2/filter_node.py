@@ -100,13 +100,30 @@ class ParticleFilterNode(Node):
                 latest = rclpy.time.Time.from_msg(pcl_msg.header.stamp)
             label = pcl_msg.label
             score = pcl_msg.confidence
-            try:
-                class_id = next((k for k, v in self.object_properties.items() if label == v["name"]))
-            except StopIteration as e:
-                class_id = -1
 
-            pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
-            self.particle_filter.add_measurement((pcl, class_id, score))
+
+            ########################### VYTVOR SUBSCRIBERA NA TOPIC ,CALLBACK PREBER
+            # Z INYCH SKRIPTOV....
+
+            hand_objects = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder"]
+            if label in hand_objects:
+                # self.tracker.upate_hands()
+                pass
+            else:
+                ###########################################################################################################################
+                ###########################################################################################################################
+                ### FIX UNKNOWN OBJECTS - l/r...Wrist, l/r...Shoulder, l/r...Elbow, head ###
+                try:
+                    class_id = next((k for k, v in self.object_properties.items() if label == v["name"]))
+                except StopIteration as e:
+                    class_id = -1
+                ############################################################################
+
+                pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
+
+                self.particle_filter.add_measurement((pcl, class_id, score))
+
+
 
         now = self.get_clock().now()
         self.lastMeasurement = latest

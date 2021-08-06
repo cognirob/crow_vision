@@ -86,6 +86,13 @@ class Locator(Node):
             # self.pubPCL[cam] = out_pcl_publisher
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
+        # For now, every camera published segmented hand data PCL.
+        self.pubPCL_hand = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_hand', qos_profile=qos)
+        for cam in self.cameras:
+            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud_hand"
+            self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
+
+
         self.cvb = cv_bridge.CvBridge()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
@@ -183,7 +190,14 @@ class Locator(Node):
             seg_pcl_msg.object_id = object_id
             seg_pcl_msg.label = str(class_name)
             seg_pcl_msg.confidence = float(score)
-            self.pubPCL.publish(seg_pcl_msg)
+
+            # Data about hand position is published on different topic
+            hand_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder"]
+            if class_name in hand_data_classes:
+                self.pubPCL_hand.publish(seg_pcl_msg)
+            else:
+                self.pubPCL.publish(seg_pcl_msg)
+
     # def compareMaskPCL(self, mask_array, projected_points):
     #     a = mask_array.T.astype(np.int32).copy()
     #     b = projected_points.T.copy()
