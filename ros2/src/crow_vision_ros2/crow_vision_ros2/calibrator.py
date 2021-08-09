@@ -112,10 +112,12 @@ class Calibrator(Node):
                 optical_frame = f"{camera_ns[1:]}_color_optical_frame"
                 self.optical_frames[camera_ns] = optical_frame
         else:  # the novel way: periodically check if cameras are online and add cameras one by one
-            sleep(2)
+            sleep(7)
             self.timer = self.create_timer(2, self.timer_cb)
 
     def timer_cb(self):
+        # print("aaaa")
+    
         online_cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
 
         missing_cameras = [c for c in online_cameras if c not in self.cameras]
@@ -156,6 +158,7 @@ class Calibrator(Node):
             #     future.add_done_callback(lambda future, camera_ns=namespace: self.found_ctg_transform_cb(future, camera_ns))
             # else:
             #     self.tf_color_to_global[namespace] = np.eye(4)  # if TF is not defined, use identity
+        # print("bbbbb")
 
     def trans_quat2tf_mat(self, trans, quat) -> np.ndarray:
         return tf3.affines.compose(trans, tf3.quaternions.quat2mat(quat[-1:] + quat[:-1]), np.ones(3))

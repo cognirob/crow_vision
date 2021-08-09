@@ -14,20 +14,20 @@ import transforms3d as tf3
 from ament_index_python import get_package_share_directory
 
 
-INPUT_IN_MILIMETERS = True
-base_src_folder = get_package_share_directory('crow_vision_ros2')
-
-
-def get_transform(buff, serial):
+def get_transform(buff, serial, input_in_mm=True):
     tf_mat = np.float64(buff).reshape(4, 4)
-    if INPUT_IN_MILIMETERS:
-        tf_mat[:, 3] /= 1000
+    if True:
+        tf_mat[:3, 3] /= 1000
     return {
         "serial": serial,
         "tf_mat": tf_mat
         }
 
 def main():
+    INPUT_IN_MILIMETERS = True
+    APPLY_INVERT = True
+    base_src_folder = get_package_share_directory('crow_vision_ros2')
+
     input_data = os.path.join(base_src_folder, "config", "calibration_input.txt")
     output_filename = os.path.join(base_src_folder, "config", "camera_transformation_data.yaml")
 
@@ -62,7 +62,7 @@ def main():
                     raise Exception(f"The collected matrix does not have the currect number of elements! It has {len(buff)}, expected 16. (at line {i})")
                 if current_serial == '':
                     raise Exception(f"No serial detected! (at line {i})")
-                transforms.append(get_transform(buff, current_serial))
+                transforms.append(get_transform(buff, current_serial, INPUT_IN_MILIMETERS))
                 # reset variables
                 buff = []
                 current_serial = ''
@@ -71,21 +71,26 @@ def main():
             buff = []
             current_serial = ''
 
-    transforms.append(get_transform(buff,current_serial))
-    # if len(transforms) != 5:
-    #     exit(-1)
+    transforms.append(get_transform(buff,current_serial, INPUT_IN_MILIMETERS))
 
     with open(output_filename, "w") as f:
         for i, tf in enumerate(transforms):
             serial = tf['serial']
             tf_mat = tf["tf_mat"]
-            # if 'global' not in serial:
-            #     tf_mat = np.linalg.pinv(tf_mat)
+            # print("*********")
+            # print(tf_mat)
+            # print("*********")
+            # print(np.linalg.inv(tf_mat))
+            # print("*********")
+            if APPLY_INVERT and 'global' not in serial:
+                tf_mat = np.linalg.inv(tf_mat)
+                print("inverting")
             t, r, _, _ = tf3.affines.decompose(tf_mat)
             wrong_quat = tf3.quaternions.mat2quat(r).tolist()
             quat = wrong_quat[1:] + wrong_quat[:1]
 
             f.write(f"'{serial}': {' '.join(t.astype(str).tolist())} {' '.join([str(q) for q in quat])}\n")
+            print(f"Appending camera transform:\n'{serial}': {' '.join(t.astype(str).tolist())} {' '.join([str(q) for q in quat])}\n")
 
     print(f"All done. Written {len(transforms)} transformations\nfrom {input_data}\nto {output_filename}")
 
