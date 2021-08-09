@@ -44,7 +44,8 @@ class TrackedObject:
         # Reset memory loss
         self.detection_memory_loss = datetime.datetime.now()
         # Ros2 particle filter
-        self.last_uuid = object.latest_uuid
+        self.last_uuid = self.latest_uuid
+        self.latest_uuid = object.latest_uuid
         return
 
     # Used for output sorting
@@ -206,7 +207,10 @@ class Tracker:
                     difference_seconds = (time - tracked_object.detection_memory_loss).total_seconds()
                     if difference_seconds > MEMORY_LOSS_SECONDS:
                         # Forget the object ~ remove from the list
+                        print(f"*** Removing object: {class_name}")
                         self.tracked_objects[class_name].remove(tracked_object)
+                    else:
+                        print(f"*** Not yet crossed MEMORY_LOSS_SECONDS limit-> difference_seconds: {difference_seconds}")
 
     # This function evaluates existence based just on the class (works with list of objects),
     # results can later be evaluated in the next step as we know the object history

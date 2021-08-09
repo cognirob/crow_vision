@@ -87,9 +87,9 @@ class Locator(Node):
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
         # For now, every camera published segmented hand data PCL.
-        self.pubPCL_hand = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_hand', qos_profile=qos)
+        self.pubPCL_avatar = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
         for cam in self.cameras:
-            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud_hand"
+            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud_avatar"
             self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
 
 
@@ -192,9 +192,9 @@ class Locator(Node):
             seg_pcl_msg.confidence = float(score)
 
             # Data about hand position is published on different topic
-            hand_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder"]
-            if class_name in hand_data_classes:
-                self.pubPCL_hand.publish(seg_pcl_msg)
+            avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+            if class_name in avatar_data_classes:
+                self.pubPCL_avatar.publish(seg_pcl_msg)
             else:
                 self.pubPCL.publish(seg_pcl_msg)
 

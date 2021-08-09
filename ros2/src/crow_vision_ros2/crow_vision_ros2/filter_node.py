@@ -84,6 +84,12 @@ class ParticleFilterNode(Node):
 
         # Tracker initialization
         self.tracker = Tracker()
+        self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+        # create approx syncro callbacks
+        cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
+        subSPcl = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
+        sync = message_filters.ApproximateTimeSynchronizer([subSPcl], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+        sync.registerCallback(lambda spcl_msg: self.avatar_callback(spcl_msg))
 
     def add_and_process(self, messages):
         if type(messages) is not list:
@@ -101,15 +107,7 @@ class ParticleFilterNode(Node):
             label = pcl_msg.label
             score = pcl_msg.confidence
 
-
-            ########################### VYTVOR SUBSCRIBERA NA TOPIC ,CALLBACK PREBER
-            # Z INYCH SKRIPTOV....
-
-            hand_objects = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder"]
-            if label in hand_objects:
-                # self.tracker.upate_hands()
-                pass
-            else:
+            if label not in self.avatar_data_classes:
                 ###########################################################################################################################
                 ###########################################################################################################################
                 ### FIX UNKNOWN OBJECTS - l/r...Wrist, l/r...Shoulder, l/r...Elbow, head ###
@@ -272,6 +270,34 @@ class ParticleFilterNode(Node):
         print(f"*** pcl: {pcl}")
         self.particle_filter.add_measurement((pcl, class_id, score))
 
+    # Get Avatar PCL and update his parts
+    def avatar_callback(self, spcl_msg):
+        # print(self.getCameraData(camera))
+        if not spcl_msg.pcl:
+            self.get_logger().info("no avatar data. Quitting early.")
+            return  # no mask detections (for some reason)
+
+        header = spcl_msg.header
+        np_pcl, _, c = ftl_pcl2numpy(spcl_msg.pcl)
+        object_id = spcl_msg.object_id
+        label = str(spcl_msg.label)
+        confidence = float(spcl_msg.confidence)
+
+        np_pcl_center = np.median(np_pcl, axis=0).reshape(1, 3)
+        np_pcl_dimension = (np.max(np_pcl, axis=0) - np.min(np_pcl, axis=0)).reshape(1, 3)
+
+        # print(f"self.tracked_objects: {self.tracker.tracked_objects}")
+        # print(f"self.tracker.avatar: {self.tracker.avatar}")
+        self.tracker.avatar.update_avatar_object(avatar_object_name=label, np_position=np_pcl_center, np_dimensions=np_pcl_dimension)
+        self.tracker.avatar.dump_info()
+        # print("")
+        print(f"~~~~~~~ header: {header}")
+        # print(f"~~~~~~~ np_pcl: {np_pcl}")
+        print(f"~~~~~~~ np_pcl_center: {np_pcl_center}")
+        print(f"~~~~~~~ np_pcl_dimension: {np_pcl_dimension}")
+        print(f"~~~~~~~ object_id: {object_id}")
+        print(f"~~~~~~~ label: {label}")
+        print(f"~~~~~~~ confidence: {confidence}")
 
 def main():
     rclpy.init()
