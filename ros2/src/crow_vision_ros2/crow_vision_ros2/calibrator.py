@@ -1,44 +1,45 @@
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import ParameterType
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import CameraInfo
 import numpy as np
 import cv2
-import cv_bridge
 import tf2_ros
 from geometry_msgs.msg import TransformStamped
 from crow_vision_ros2.utils import make_vector3, make_quaternion, getTransformFromTF
-from crow_vision_ros2.filters import CameraPoser
+from ament_index_python import get_package_share_directory
 from time import sleep
 import transforms3d as tf3
 import json
 import argparse
 import sys
+import os
+from crow_vision_ros2.utils.get_camera_transformation import CameraGlobalTFGetter
 
 
 class Calibrator(Node):
     GLOBAL_FRAME_NAME = "workspace_frame"
 
-    markerLength = 0.050  # mm
-    squareLength = 0.060  # mm
-    squareMarkerLengthRate = squareLength / markerLength
-    try:
-      dictionary = cv2.aruco.Dictionary_create(48, 4, 65536)
-    except:
-      dictionary = cv2.aruco.Dictionary_create(48, 4) #TODO hack for (old?) cv2 version, fallback to API with 2 args only
-
-    # distCoeffs = np.r_[0, 0, 0, 0, 0]
-
     def __init__(self, node_name="calibrator"):
         super().__init__(node_name)
 
-        self.bridge = cv_bridge.CvBridge()
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.tf_static_broadcaster = tf2_ros.StaticTransformBroadcaster(self)
 
+        # get robot 2 global transform from config
+        config_file = os.path.join(
+            get_package_share_directory('crow_vision_ros2'),
+            'config',
+            'camera_transformation_data.yaml'
+        )
+        cgtfg = CameraGlobalTFGetter(config_file)
+        g2r_tf = np.array(cgtfg.get_camera_transformation("global_2_robot").split()).astype(np.float64).tolist()
+        t_global, q_global = g2r_tf[:3], g2r_tf[3:]
+        g2r_mat = self.trans_quat2tf_mat(t_global, q_global)
+        r2g_mat = np.linalg.inv(g2r_mat)
+        self.get_logger().info(f"robot_frame (camera_global) to global_frame transform:\n{str(r2g_mat)}")
+
         # DECLARE PARAMS
-        haltCalibrationDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_BOOL, description='If True, node will not run camera pose estimation')
-        self.declare_parameter("halt_calibration", value=False, descriptor=haltCalibrationDesc)
         imageTopicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available image topics')
         self.declare_parameter("image_topics", value=[], descriptor=imageTopicsParamDesc)
         infoTopicsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera_info topics for the available cameras')
@@ -55,6 +56,8 @@ class Calibrator(Node):
         self.declare_parameter("camera_frames", value=[], descriptor=cameraFramesParamDesc)
         globalFrameParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING, description='The global workspace frame name.')
         self.declare_parameter("global_frame_id", value=self.GLOBAL_FRAME_NAME, descriptor=globalFrameParamDesc)
+        globalTFParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE_ARRAY, description='Transformation from robot to global frame.')
+        self.declare_parameter("robot2global_tf", value=r2g_mat.ravel().tolist(), descriptor=globalTFParamDesc)
 
         # parse args
         parser = argparse.ArgumentParser()
@@ -91,7 +94,7 @@ class Calibrator(Node):
 
         if len(self.camera_namespaces) == 0:  # the old way: wait a little and try to detect all cameras
             self.get_logger().info(f"Sleeping to allow the cameras to come online.")
-            sleep(15)
+            sleep(1)
             self.cameras = [(name, namespace) for name, namespace in self.get_node_names_and_namespaces() if "camera" in name]
             topic_list = [(self.get_publisher_names_and_types_by_node(node_name, namespace), namespace) for node_name, namespace in self.cameras]
             self.cam_info_topics = [(topic_name, namespace) for sublist, namespace in topic_list for topic_name, topic_type in sublist if ("/color/" in topic_name and "sensor_msgs/msg/CameraInfo" in topic_type[0])]
@@ -154,11 +157,13 @@ class Calibrator(Node):
             # else:
             #     self.tf_color_to_global[namespace] = np.eye(4)  # if TF is not defined, use identity
 
+    def trans_quat2tf_mat(self, trans, quat) -> np.ndarray:
+        return tf3.affines.compose(trans, tf3.quaternions.quat2mat(quat[-1:] + quat[:-1]), np.ones(3))
+
     def makeTransformMatrix(self, transform_msg):
         translation = [getattr(transform_msg.transform.translation, a) for a in "xyz"]
         quat = [getattr(transform_msg.transform.rotation, a) for a in "xyzw"]
-        tf_mat = tf3.affines.compose(translation, tf3.quaternions.quat2mat(quat[-1:] + quat[:-1]), np.ones(3))
-        return tf_mat
+        return self.trans_quat2tf_mat(translation, quat)
 
     def found_dtc_transform_cb(self, future, camera_ns):  # depth to color
         if not future.result():
@@ -232,10 +237,6 @@ class Calibrator(Node):
         image_topic = self.color_image_topics[camera_ns]
         optical_frame = self.optical_frames[camera_ns]
 
-        # create subscription
-        self.create_subscription(Image, image_topic, lambda msg, cam_frame=f"{camera_ns[1:]}_link", opt_frame=optical_frame: self.image_cb(msg, cam_frame, opt_frame), 1)
-        self.camMarkers[optical_frame] = CameraPoser(optical_frame)
-
         self.get_logger().info(f"Connected to '{image_topic}' image topic for camera '{camera_ns}' and '{optical_frame}' frame.")
 
         # Image topics parameter
@@ -308,78 +309,6 @@ class Calibrator(Node):
         ])
         self.destroy_subscription(next(subscrip for subscrip in self.subscriptions if camera_ns in subscrip.topic))
         self.get_logger().info(f"Parameters for camera {camera_ns} are set.")
-
-    def image_cb(self, msg, camera_frame, optical_frame):
-        if self.get_parameter("halt_calibration").get_parameter_value().bool_value:
-            return
-
-        # TODO: get optical_frame -> base link transform and set the output position to world -> base_link
-        image = self.bridge.imgmsg_to_cv2(msg)
-        start = self.get_clock().now()
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        color_K = self.intrinsics[optical_frame]
-        distCoeffs = self.distCoeffs[optical_frame]
-        markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.dictionary, cameraMatrix=color_K)
-
-        cameraMarkers = self.camMarkers[optical_frame]
-        # print(np.shape(markerCorners))
-
-        if len(markerCorners) > 0:
-            for m_idx, (markerId, mrkCorners) in enumerate(zip(markerIds, markerCorners)):
-                cameraMarkers.updateMarker(markerId, mrkCorners)
-
-            markerCorners, markerIds = cameraMarkers.getMarkers()
-
-        if len(markerCorners) > 3 and cameraMarkers.markersReady:
-            try:
-                # print(np.shape(markerCorners))
-                diamondCorners, diamondIds = cv2.aruco.detectCharucoDiamond(image, markerCorners, markerIds, self.squareMarkerLengthRate, cameraMatrix=color_K)
-                markerImage = cv2.aruco.drawDetectedDiamonds(image, diamondCorners, diamondIds)
-                # cv2.imshow("computed markers", markerImage)
-                # cv2.waitKey(1)
-                # print(diamondIds)
-                # print(diamondCorners)
-
-                if diamondIds is not None and len(diamondIds) > 0:
-                    img_out = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)
-                    img_out = cv2.aruco.drawDetectedDiamonds(img_out, diamondCorners, diamondIds)
-                    rvec, tvec, objPoints = cv2.aruco.estimatePoseSingleMarkers(np.reshape(diamondCorners, (-1, 4, 2)), self.squareLength, color_K, distCoeffs)
-                    rmat = cv2.Rodrigues(rvec)[0]
-                    # transform = tf3.affines.compose(tvec.ravel(), rmat, [1, 1, 1])
-                    # transform_inv = np.linalg.inv(transform)
-                    # quat = tf3.quaternions.mat2quat(transform_inv[:3, :3])
-                    # tvec = transform_inv[:3, 3]
-                    quat = tf3.quaternions.mat2quat(rmat)
-
-                    end = self.get_clock().now()
-                    self.get_logger().info(f"TF computed in {(end - start).nanoseconds / 1e9} seconds.")
-
-                    tf_msg = TransformStamped()
-                    tf_msg.header.stamp = self.get_clock().now().to_msg()
-                    tf_msg.header.frame_id = "world"
-                    tf_msg.child_frame_id = optical_frame
-                    tf_msg.transform.translation = make_vector3(tvec)
-                    tf_msg.transform.rotation = make_quaternion(quat, order="wxyz")
-                    # print(tf_msg)
-
-                    self.tf_static_broadcaster.sendTransform(tf_msg)
-                    self.get_logger().info("TF published")
-
-                    self.set_parameters([
-                        rclpy.parameter.Parameter(
-                            "halt_calibration",
-                            rclpy.Parameter.Type.BOOL,
-                            True
-                        )
-                    ])
-
-                    # cv2.imshow("out", img_out)
-                    # cv2.waitKey(1)
-                    # cv2.waitKey(1000)
-            except Exception as e:
-                print(e)
-                # pass
-
 
 
 def main(args=[]):
