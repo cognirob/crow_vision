@@ -30,27 +30,6 @@ from ctypes import *  # convert float to uint32
 from numba import jit
 
 
-global_2_robot = np.array(
-    [0.7071068, 0.7071068, 0, 0,
-     -0.7071068, 0.7071068, 0, 0,
-     0, 0, 1, 0.233,
-     0, 0, 0, 1]
-).reshape(4, 4)
-robot_2_global = np.linalg.inv(global_2_robot)
-realsense_2_robot = np.array(  # new from 16.7. 2021
-    [5.2478784e-01,  4.7426718e-01, -7.0687222e-01,  1.3974695,
-     8.4990799e-01, -3.3824810e-01,  4.0403539e-01, -0.32303824,
-    -4.7477469e-02, -8.1280923e-01, -5.8059198e-01,  0.65096106,
-    0,  0,  0,  1]
- ).reshape(4, 4)
-
-# realsense_2_robot = np.array(  # old transform
-#     [6.168323755264282227e-01, 3.375786840915679932e-01, -7.110263705253601074e-01, 1.405695068359375000,
-#      7.858521938323974609e-01, -3.148722648620605469e-01, 5.322515964508056641e-01, -0.3209410400390625000,
-#      -4.420567303895950317e-02, -8.870716691017150879e-01, -4.595103561878204346e-01, 0.6574929809570312500,
-#      0, 0, 0, 1]
-# ).reshape(4, 4)
-
 class Locator(Node):
 
     def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 1.6)):
@@ -71,7 +50,10 @@ class Locator(Node):
             time.sleep(2)
             self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
 
+        # get global transform
+        self.robot2global_tf = np.reshape([p.double_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["robot2global_tf"]).values], (4, 4))
         self.global_frame_id = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["global_frame_id"]).values[0].string_value
+
         # Set camera parameters and topics
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.camera_extrinsics = [json.loads(cextr) for cextr in self.camera_extrinsics]
@@ -203,7 +185,8 @@ class Locator(Node):
             "distortion_coefficients": self.camera_instrinsics[idx]["distortion_coefficients"],
             "dtc_tf": self.camera_extrinsics[idx]["dtc_tf"],
             # "ctg_tf": self.camera_extrinsics[idx]["ctg_tf"],
-            "ctg_tf": (robot_2_global @ realsense_2_robot @ self.camera_extrinsics[idx]["ctg_tf"]).astype(np.float32),
+            # "ctg_tf": (robot_2_global @ realsense_2_robot @ self.camera_extrinsics[idx]["ctg_tf"]).astype(np.float32),
+            "ctg_tf": (self.robot2global_tf @ self.camera_extrinsics[idx]["ctg_tf"]).astype(np.float32),
             "optical_frame": self.camera_frames[idx],
             "mask_topic": self.mask_topics[idx],
             "pcl_topic": self.pcl_topics[idx],

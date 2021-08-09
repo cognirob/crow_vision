@@ -26,20 +26,6 @@ import subprocess
 
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
-global_2_robot = np.array(
-    [0.7071068, 0.7071068, 0, 0,
-     -0.7071068, 0.7071068, 0, 0,
-     0, 0, 1, 0.233,
-     0, 0, 0, 1]
-).reshape(4, 4)
-robot_2_global = np.linalg.inv(global_2_robot)
-realsense_2_robot = np.array(  # new from 16.7. 2021
-    [5.2478784e-01,  4.7426718e-01, -7.0687222e-01,  1.3974695,
-     8.4990799e-01, -3.3824810e-01,  4.0403539e-01, -0.32303824,
-    -4.7477469e-02, -8.1280923e-01, -5.8059198e-01,  0.65096106,
-    0,  0,  0,  1]
- ).reshape(4, 4)
-
 
 class MarkerDetector(Node):
     """
@@ -50,7 +36,7 @@ class MarkerDetector(Node):
     VISUALIZE = False
 
     def __init__(self, node_name='marker_detector'):
-        super().__init__('marker_detector')
+        super().__init__(node_name)
         self.crowracle = CrowtologyClient(node=self)
         self.pclient = ParamClient()
         self.pclient.declare("robot_done", True)
@@ -59,6 +45,10 @@ class MarkerDetector(Node):
             self.get_logger().warn("No cams detected, waiting 2s.")
             time.sleep(2)
             self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
+
+        # get global transform
+        self.robot2global_tf = np.reshape([p.double_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["robot2global_tf"]).values], (4, 4))
+
         self.detect_markers_flag = {}
         self.define_flag = None
         for (topic, cam, intrinsic, extrinsic) in zip(self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics):
@@ -108,7 +98,7 @@ class MarkerDetector(Node):
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             color_K = np.asarray(intrinsic['camera_matrix'])
             distCoeffs = np.asarray(intrinsic['distortion_coefficients'])
-            ctg_tf_mat = (robot_2_global @ realsense_2_robot @ extrinsic["ctg_tf"]).astype(np.float32)
+            ctg_tf_mat = (self.robot2global_tf @ extrinsic["ctg_tf"]).astype(np.float32)
 
             markerCorners, markerIds, rejectedPts = cv2.aruco.detectMarkers(image, self.aruco_dict, cameraMatrix=color_K)
             markerCornersKeep = []
