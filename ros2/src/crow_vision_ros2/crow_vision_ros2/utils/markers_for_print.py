@@ -2,7 +2,7 @@ import cv2
 import png
 import numpy as np
 
-def print_markers(random_seed, marker_ids, markers_dict_num=54, markers_size=4, marker_size_mm=30, dpi=300):
+def print_markers(random_seed, marker_ids, markers_dict_num=54, markers_size=4, marker_size_mm=60, dpi=300):
     if markers_dict_num <= max(marker_ids):
         print('Error: The amount of markers in the dict is smaller than some of the requested ids!')
         return
@@ -34,4 +34,4 @@ def print_markers(random_seed, marker_ids, markers_dict_num=54, markers_size=4, 
         writer.write(file, [row for row in image])
     print('done')
 
-print_markers(66, np.arange(54))
+print_markers(66, np.arange(10))
