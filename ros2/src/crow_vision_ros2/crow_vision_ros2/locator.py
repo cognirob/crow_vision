@@ -67,6 +67,13 @@ class Locator(Node):
         qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
 
+        # For now, every camera published segmented hand data PCL.
+        self.pubPCL_avatar = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
+        for cam in self.cameras:
+            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud_avatar"
+            self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
+
+
         self.cvb = cv_bridge.CvBridge()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
 
@@ -115,16 +122,13 @@ class Locator(Node):
 
         cameraData = self.getCameraData(camera)
         masks = np.array([self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks])
-        class_names, scores = mask_msg.class_names, mask_msg.scores
-
+        object_ids, class_names, scores = mask_msg.object_ids, mask_msg.class_names, mask_msg.scores
         point_cloud, point_rgb, rgb_raw = ftl_pcl2numpy(pcl_msg)
         point_cloud = point_cloud.T
-
         # tf_mat = tf3.affines.compose(t, tf3.quaternions.quat2mat(q[-1:] + q[:-1]), np.ones(3))
         tf_mat = cameraData["dtc_tf"]
         point_cloud = np.dot(tf_mat, np.pad(point_cloud, ((0, 1), (0, 0)), mode="constant", constant_values=1))[:3, :]
         point_cloud = point_cloud.astype(np.float32)  # secret hack to make sure this works...
-
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
         imspace = self.project(cameraData["camera_matrix"], point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
@@ -135,15 +139,13 @@ class Locator(Node):
         imspace[:, bad_points] = -1
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
-
         mshape = masks[0].shape
         imspace[:, (imspace[0] < 0) | (imspace[1] < 0) | (
             imspace[1] >= mshape[0]) | (imspace[0] >= mshape[1])] = 0
 
         wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
-
         ctg_tf_mat = cameraData["ctg_tf"]
-        for where, class_name, score in zip(wheres, class_names, scores):
+        for where, object_id, class_name, score in zip(wheres, object_ids, class_names, scores):
             # 2. segment PCL & compute median
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
@@ -159,15 +161,20 @@ class Locator(Node):
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
             segmented_pcl.header.frame_id = self.global_frame_id
             segmented_pcl.header.stamp = mask_msg.header.stamp
-
             # wrap together PointCloud2 + label + score => SegmentedPointcloud
             seg_pcl_msg = SegmentedPointcloud()
             seg_pcl_msg.header = segmented_pcl.header
             seg_pcl_msg.pcl = segmented_pcl
+            seg_pcl_msg.object_id = object_id
             seg_pcl_msg.label = str(class_name)
             seg_pcl_msg.confidence = float(score)
 
-            self.pubPCL.publish(seg_pcl_msg)
+            # Data about hand position is published on different topic
+            avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+            if class_name in avatar_data_classes:
+                self.pubPCL_avatar.publish(seg_pcl_msg)
+            else:
+                self.pubPCL.publish(seg_pcl_msg)
 
     # def compareMaskPCL(self, mask_array, projected_points):  # OLD, SLOW version
     #     a = mask_array.T.astype(np.int32).copy()
@@ -191,8 +198,6 @@ class Locator(Node):
             "mask_topic": self.mask_topics[idx],
             "pcl_topic": self.pcl_topics[idx],
         }
-
-
 
 def main():
     rclpy.init()

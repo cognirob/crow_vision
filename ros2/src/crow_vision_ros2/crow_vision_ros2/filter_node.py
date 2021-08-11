@@ -8,6 +8,13 @@ from crow_msgs.msg import SegmentedPointcloud
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 from crow_vision_ros2.filters import ParticleFilter
 
+<<<<<<< HEAD
+=======
+# Tracker
+from crow_vision_ros2.tracker import Tracker
+
+#TF
+>>>>>>> origin/posenet_integration_wip
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
@@ -62,6 +69,15 @@ class ParticleFilterNode(Node):
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
         StatTimer.init()
 
+        # Tracker initialization
+        self.tracker = Tracker()
+        self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+        # create approx syncro callbacks
+        cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
+        subSPcl = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
+        sync = message_filters.ApproximateTimeSynchronizer([subSPcl], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+        sync.registerCallback(lambda spcl_msg: self.avatar_callback(spcl_msg))
+
     def add_and_process(self, messages):
         if type(messages) is not list:
             messages = [messages]
@@ -77,13 +93,22 @@ class ParticleFilterNode(Node):
                 latest = Time.from_msg(pcl_msg.header.stamp)
             label = pcl_msg.label
             score = pcl_msg.confidence
-            try:
-                class_id = next((k for k, v in self.object_properties.items() if label == v["name"]))
-            except StopIteration as e:
-                class_id = -1
 
-            pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
-            self.particle_filter.add_measurement((pcl, class_id, score))
+            if label not in self.avatar_data_classes:
+                ###########################################################################################################################
+                ###########################################################################################################################
+                ### FIX UNKNOWN OBJECTS - l/r...Wrist, l/r...Shoulder, l/r...Elbow, head ###
+                try:
+                    class_id = next((k for k, v in self.object_properties.items() if label == v["name"]))
+                except StopIteration as e:
+                    class_id = -1
+                ############################################################################
+
+                pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
+
+                self.particle_filter.add_measurement((pcl, class_id, score))
+
+
 
         now = self.get_clock().now()
         self.lastMeasurement = latest
@@ -100,6 +125,26 @@ class ParticleFilterNode(Node):
         if self.particle_filter.n_models > 0:
             StatTimer.enter("Filter publishing")
             estimates = self.particle_filter.getEstimates()
+
+            ####
+            # - repair objects internally in the filter
+            # - update
+            # - on return "0" delete object on that position
+            # Format input data
+            poses_formatted, class_names_formatted, dimensions_formatted, uuids_formatted = ([],[],[],[])
+            for pose, label, dims, uuid in estimates:
+                poses_formatted.append(pose.tolist())
+                class_names_formatted.append(label)
+                dimensions_formatted.append(dims)
+                uuids_formatted.append(uuid)
+
+
+            last_uuid, latest_uuid = self.tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
+            print(f"*** last_uuid: {last_uuid}")
+            print(f"*** latest_uuid: {latest_uuid}")
+            self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
+
+
             #self.get_logger().info(str(estimates))
             poses = []
             dimensions = []
@@ -199,6 +244,34 @@ class ParticleFilterNode(Node):
         else:
             self.update()
 
+    # Get Avatar PCL and update his parts
+    def avatar_callback(self, spcl_msg):
+        # print(self.getCameraData(camera))
+        if not spcl_msg.pcl:
+            self.get_logger().info("no avatar data. Quitting early.")
+            return  # no mask detections (for some reason)
+
+        header = spcl_msg.header
+        np_pcl, _, c = ftl_pcl2numpy(spcl_msg.pcl)
+        object_id = spcl_msg.object_id
+        label = str(spcl_msg.label)
+        confidence = float(spcl_msg.confidence)
+
+        np_pcl_center = np.median(np_pcl, axis=0).reshape(1, 3)
+        np_pcl_dimension = (np.max(np_pcl, axis=0) - np.min(np_pcl, axis=0)).reshape(1, 3)
+
+        # print(f"self.tracked_objects: {self.tracker.tracked_objects}")
+        # print(f"self.tracker.avatar: {self.tracker.avatar}")
+        self.tracker.avatar.update_avatar_object(avatar_object_name=label, np_position=np_pcl_center, np_dimensions=np_pcl_dimension)
+        self.tracker.avatar.dump_info()
+        # print("")
+        print(f"~~~~~~~ header: {header}")
+        # print(f"~~~~~~~ np_pcl: {np_pcl}")
+        print(f"~~~~~~~ np_pcl_center: {np_pcl_center}")
+        print(f"~~~~~~~ np_pcl_dimension: {np_pcl_dimension}")
+        print(f"~~~~~~~ object_id: {object_id}")
+        print(f"~~~~~~~ label: {label}")
+        print(f"~~~~~~~ confidence: {confidence}")
 
 def main():
     rclpy.init()
