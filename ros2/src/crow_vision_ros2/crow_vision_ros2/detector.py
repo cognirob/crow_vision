@@ -19,14 +19,6 @@ import pkg_resources
 import time
 import copy
 
-# Posenet imports
-import sys, os
-# Import hand detection - POSENET
-POSENET_REPO='~/crow_vision_posenet/' # Existing POSENET
-POSENET_REPO_full = '~/crow2/src/crow_vision_posenet/'
-sys.path.append(os.path.abspath(os.path.expanduser(POSENET_REPO_full)))
-from posenet_tool import Posenet
-
 print(f"Running PyTorch:")
 print(f"\tver: {torch.__version__}")
 print(f"\tfile: {torch.__file__}")
@@ -102,12 +94,6 @@ class CrowVision(Node):
                 topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
                 self.get_logger().info('Output publisher created for topic: "%s"' % topic)
                 self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=qos) #publishes the processed (annotated,detected) masks
-
-                # Posenet masks
-                topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["masks"]
-                self.get_logger().info('Output publisher created for topic: "%s"' % topic)
-                self.ros[camera_topic]["pub_masks"] = self.create_publisher(DetectionMask, topic, qos_profile=qos) #publishes the processed (annotated,detected) pose
-
             if self.config["outputs"]["bboxes"]:
                 topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
                 self.get_logger().info('Output publisher created for topic: "%s"' % topic)
@@ -139,14 +125,6 @@ class CrowVision(Node):
         )
         assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
         self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"], config=cfg)
-
-        ## Posenet setup
-        self.declare_parameter("posenet_model", self.config["posenet_model"])
-        model = self.get_parameter("posenet_model").get_parameter_value().string_value
-        model_abs = os.path.join(os.path.abspath(os.path.expanduser(POSENET_REPO_full)),str(model))
-        assert os.path.exists(model_abs), "Provided path to posenet model weights does not exist! {}".format(model_abs)
-        self.posenet = Posenet(model_abs_path=model_abs)
-
         print('Hi from crow_vision_ros2.')
 
     def input_callback(self, msg, topic):
@@ -230,31 +208,6 @@ class CrowVision(Node):
                 msg_bbox.scores = scores
                 # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_bboxes"].publish(msg_bbox)
-
-        # Pose mask
-        if "pub_masks" in self.ros[topic]:
-            object_ids, classes, class_names, scores, masks = self.posenet.inference(img=img_raw)
-            classes = list(map(int, classes))
-            scores = list(map(float, scores)) # Remove this -> get errors
-            if len(classes) == 0:
-                self.get_logger().info("No poses detected, skipping.")
-                return
-            msg_mask = DetectionMask()
-            m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-            msg_mask.masks = []
-            for mask in masks:
-                new_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, m_kernel)
-                new_smth = self.cvb_.cv2_to_imgmsg(new_mask, encoding="mono8")
-                msg_mask.masks.append(new_smth)
-            msg_mask.header.stamp = msg.header.stamp
-            for mask in msg_mask.masks:
-                mask.header.stamp = msg.header.stamp
-            msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
-            msg_mask.object_ids = object_ids
-            msg_mask.classes = classes
-            msg_mask.class_names = class_names
-            msg_mask.scores = scores
-            self.ros[topic]["pub_masks"].publish(msg_mask)
 
 def main(args=None):
     rclpy.init(args=args)

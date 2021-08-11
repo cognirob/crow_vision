@@ -104,10 +104,6 @@ class CrowVisionPose(Node):
             self.get_logger().info("Image received from camera! (will not report on next image callbacks)")
             self.noMessagesYet = False
 
-        # self.get_logger().info("I heard: {} for topic {}".format(str(msg.height), topic))
-        # self.get_logger().error(str(dir(self.ros[topic]["pub_masks"])))
-        # assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
-
         img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
         #img_raw = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 

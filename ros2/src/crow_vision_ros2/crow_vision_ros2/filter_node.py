@@ -270,7 +270,7 @@ class ParticleFilterNode(Node):
         print(f"*** pcl: {pcl}")
         self.particle_filter.add_measurement((pcl, class_id, score))
 
-    # Get Avatar PCL and update his parts
+    # Get Avatar PCL and update his parts in <class:Tracker>
     def avatar_callback(self, spcl_msg):
         # print(self.getCameraData(camera))
         if not spcl_msg.pcl:
