@@ -8,13 +8,10 @@ from crow_msgs.msg import SegmentedPointcloud
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 from crow_vision_ros2.filters import ParticleFilter
 
-<<<<<<< HEAD
-=======
 # Tracker
 from crow_vision_ros2.tracker import Tracker
 
 #TF
->>>>>>> origin/posenet_integration_wip
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
