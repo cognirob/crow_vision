@@ -13,7 +13,8 @@ def generate_launch_description():
     #2. detector (2D vision)
     detector_node = launch_ros.actions.Node(
         package='crow_vision_ros2',
-        node_executable='detector',
+        node_executable='detector_edge',
+        # node_executable='detector',
         output='screen',
         node_name="detector_crow",
         parameters=[{
