@@ -151,11 +151,14 @@ class ParticleFilterNode(Node):
                 uuids_formatted.append(uuid)
 
 
-            last_uuid, latest_uuid = self.tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
+            print(f"<filter_node>: Before tracker")
+
+            last_uuid, latest_uuid = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
             print(f"*** last_uuid: {last_uuid}")
             print(f"*** latest_uuid: {latest_uuid}")
             self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
 
+            self.tracker.dump_tracked_objects_info()
 
             #self.get_logger().info(str(estimates))
             poses = []
@@ -290,14 +293,6 @@ class ParticleFilterNode(Node):
         # print(f"self.tracker.avatar: {self.tracker.avatar}")
         self.tracker.avatar.update_avatar_object(avatar_object_name=label, np_position=np_pcl_center, np_dimensions=np_pcl_dimension)
         self.tracker.avatar.dump_info()
-        # print("")
-        print(f"~~~~~~~ header: {header}")
-        # print(f"~~~~~~~ np_pcl: {np_pcl}")
-        print(f"~~~~~~~ np_pcl_center: {np_pcl_center}")
-        print(f"~~~~~~~ np_pcl_dimension: {np_pcl_dimension}")
-        print(f"~~~~~~~ object_id: {object_id}")
-        print(f"~~~~~~~ label: {label}")
-        print(f"~~~~~~~ confidence: {confidence}")
 
 def main():
     rclpy.init()

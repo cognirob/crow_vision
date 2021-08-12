@@ -148,6 +148,8 @@ class CrowVision(Node):
         if preds[0]["detection"] is None:
             return  # do not publish if nothing was detected
 
+
+
         #the input callback triggers the publishers here.
         if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
             img_labeled = self.cnn.label_image(img_raw, copy.deepcopy(preds), copy.deepcopy(frame))
@@ -196,7 +198,10 @@ class CrowVision(Node):
                 msg_mask.class_names = class_names
                 msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
+
                 self.ros[topic]["pub_masks"].publish(msg_mask)
+
+
             if "pub_bboxes" in self.ros[topic]:
                 msg_bbox = DetectionBBox()
                 msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes]

@@ -1,5 +1,6 @@
 import math, random, string
 import datetime
+import numpy as np
 
 # Returns length of a vector, arguments: vector tuple (x,y,z)
 def get_vector_length(vector):
@@ -34,6 +35,8 @@ class Dimensions:
                 axis_to_return.append(self.y)
             elif ax == "Z":
                 axis_to_return.append(self.z)
+    def get_numpy_array(self):
+        return np.array([[self.x, self.y, self.z]   ])
 
 class Position:
     def __init__(self, x=0, y=0, z=0):
@@ -53,6 +56,8 @@ class Position:
         other_tuple = other_position.get_tuple()
         my_other_vector = tuple(map(lambda i, j: i - j,other_tuple, my_tuple))
         return get_vector_length(vector=my_other_vector)
+    def get_numpy_array(self):
+        return np.array([[self.x, self.y, self.z]])
 
 class Color:
     def __init__(self, R=255, G=255, B=255):
@@ -64,6 +69,8 @@ class Color:
         return (self.R, self.G, self.B)
     def get_list(self):
         return [self.x, self.y, self.z]
+    def get_numpy_array(self):
+        return np.array([[self.R, self.G, self.B]])
 
 class ObjectsDistancePair:
     def __init__(self, tracked_object, new_object):
