@@ -72,14 +72,18 @@ class CrowVision(Node):
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
         self.get_logger().info("Waiting for calibrator to setup cameras")
         calib_client.wait_for_service()
-        self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
+        self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
         while len(self.cameras) == 0:
             self.get_logger().warn("Waiting for any cameras!")
             time.sleep(2)
-            self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
+            self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
 
         self.ros = {}
-        for cam in self.cameras:
+        object_cams = self.config["object_camera_serials"]
+        pose_cam = self.config["pose_camera_serial"]
+        for cam, serial in zip(self.cameras, self.camera_serials):
+            if serial not in object_cams or serial in pose_cam:
+                self.get_logger().warn(f"Skipping camera {cam} with serial {serial} - not configured as object camera.")
             camera_topic=cam+"/color/image_raw"
             # create INput listener with raw images
             listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
