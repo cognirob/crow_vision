@@ -8,7 +8,7 @@ def get_triangles(mesh):
     return np.asarray(mesh.triangles)
 
 def get_vertices(mesh):
-    return np.asarray(mesh.vertices)      
+    return np.asarray(mesh.vertices)
 
 def get_mesh_from_points(points):
     alpha = 0.8
@@ -30,7 +30,7 @@ def get_bbox_from_points(points):
 
 def test_in_hull(p, points):
     """Test if point p is in hull defined by points, using Delaunay triangulation
-    Args: 
+    Args:
         p (list): tested point, 3d
         points (list of lists): polyhedron points, 3d
     Returns:
@@ -42,7 +42,7 @@ def test_in_hull(p, points):
 
 def test_in_mesh(p, points):
     """Test if point is in mesh defined by triangles and vertices
-    Args: 
+    Args:
         p (list): tested point, 3d
         points (list of lists): polyhedron points, 3d
     Returns:
@@ -52,7 +52,7 @@ def test_in_mesh(p, points):
     #bbox = get_bbox_from_points(polyhedron)
     triangles = get_triangles(mesh)
     vertices = get_vertices(mesh)
-    
+
     tetrahedron = Polyhedron(vertex_positions=np.asarray(vertices),triangles=np.asarray(triangles))
     answer = tetrahedron.winding_number(np.asarray(p))
     return answer
