@@ -516,5 +516,13 @@ class ParticleFilter():
         for last_uuids_i in range(len(last_uuids)):
             if latest_uuids[last_uuids_i] != last_uuids[last_uuids_i]:
                 if last_uuids[last_uuids_i] in self.model_uuid:
-                    self.model_uuid[np.where(self.model_uuid == last_uuids[last_uuids_i])[0][0]  ] = latest_uuids[last_uuids_i]
+                    if latest_uuids[last_uuids_i] != -1:
+
+                        ret_a = (np.where(self.model_uuid == latest_uuids[last_uuids_i])[0])
+                        if len(ret_a):
+                            self._delete_model(ret_a[0])
+
+                        ret_b = (np.where(self.model_uuid == last_uuids[last_uuids_i])[0])
+                        if len(ret_b):
+                            self.model_uuid[ ret_b[0]  ] = latest_uuids[last_uuids_i]
         return

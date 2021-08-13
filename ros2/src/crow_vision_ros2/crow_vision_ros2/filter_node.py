@@ -83,7 +83,7 @@ class ParticleFilterNode(Node):
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
 
         # Tracker initialization
-        self.tracker = Tracker()
+        self.tracker = Tracker(crowracle=self.crowracle)
         self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
         # create approx syncro callbacks
         cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
@@ -163,6 +163,7 @@ class ParticleFilterNode(Node):
             #self.get_logger().info(str(estimates))
             poses = []
             dimensions = []
+            tracked = []
             labels = []
             uuids = []
             for pose, label, dims, uuid in estimates:
@@ -176,6 +177,14 @@ class ParticleFilterNode(Node):
             self.get_logger().info('Publishing objects:' + str(labels))
             pose_array_msg = FilteredPose(poses=poses)
             pose_array_msg.size = dimensions
+            # Differentiate between tracked and non-tracked objects
+            if (len(last_uuid) != 0) and (len(latest_uuid) != 0):
+                for idx in range(len(latest_uuid)):
+                    if latest_uuid[idx] == -1:
+                        tracked.append(False)
+                    else:
+                        tracked.append(True)
+            pose_array_msg.tracked = tracked
             pose_array_msg.label = labels
             pose_array_msg.uuid = uuids
             pose_array_msg.header.stamp = self.get_clock().now().to_msg()

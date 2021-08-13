@@ -11,12 +11,12 @@ import random
 AZA = False
 # ROS2
 from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
-from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRACKER_STAY_IN_PLACE_SECONDS, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, OBJECT_CLOSE_TO_HAND_TRACKER_STAY_IN_PLACE_SECONDS, DETECTIONS_FOR_SETUP_NEEDED, PERCENTAGE_NEEDED_TO_BE_APPROVED, TRACKER_ITERATION_HASH_LENGTH
+from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRACKER_STAY_IN_PLACE_SECONDS, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, PERCENTAGE_NEEDED_TO_BE_APPROVED, TRACKER_ITERATION_HASH_LENGTH
 from crow_vision_ros2.tracker.tracker_avatar import Avatar, AvatarObject
 from crow_vision_ros2.tracker.tracker_trajectory import Trajectory
 # TESTING
 # from tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
-# from tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRACKER_STAY_IN_PLACE_SECONDS, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, OBJECT_CLOSE_TO_HAND_TRACKER_STAY_IN_PLACE_SECONDS, DETECTIONS_FOR_SETUP_NEEDED, TRACKER_ITERATION_HASH_LENGTH
+# from tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRACKER_STAY_IN_PLACE_SECONDS, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, TRACKER_ITERATION_HASH_LENGTH
 # from tracker_avatar import Avatar, AvatarObject
 # from tracker_trajectory import Trajectory
 
@@ -90,7 +90,7 @@ class TrackedObject:
         return self.original_order_index < other.original_order_index
 
 class Tracker:
-    def __init__(self):
+    def __init__(self, crowracle=None):
         # Current setup detection count
         self.setup_detection_count = 0
         # List of dictionaries - accesible through {"centroid_positions": [...], "dimensions": [...],
@@ -100,6 +100,9 @@ class Tracker:
         self.tracked_objects = {}
         # Avatar implementation
         self.avatar = Avatar()
+
+        # Database client passed as agument from filter node
+        self.crowracle = crowracle
 
         # For the tracker to be able to distinguish different iterations
         # we can use hashes - will be changed every iteration
@@ -314,7 +317,9 @@ class Tracker:
 
         for class_name in parsed_objects_dict:
             for obj in parsed_objects_dict[class_name]:
-                self.add_tracked_object_logic(class_name=class_name, parsed_object=obj)
+                # Check if the object is in the workspace - if so - ignore it
+                if not self.crowracle.check_position_in_workspace_area(xyz_list=obj.centroid_position.get_list()):
+                    self.add_tracked_object_logic(class_name=class_name, parsed_object=obj)
         return
 
     # Reset setup. Use this function when you want to start setting up your
@@ -354,6 +359,8 @@ class Tracker:
         self.check_inactive_objects_hand_logic()
 
         print("<tracker>: D")
+
+
         # Return id's with original order, if some detection are disregarded - return -1
         # Dump all object instances into 1 list
         objects_list = self.dump_list_of_objects()
@@ -376,7 +383,7 @@ class Tracker:
                     idx_ended = idx + 1
                     break
             if not appended:
-                last_uuid.append(-1)
+                last_uuid.append(uuids[idx])
                 latest_uuid.append(-1)
 
         return (last_uuid, latest_uuid)
@@ -390,12 +397,15 @@ class Tracker:
             parsed_objects[class_name] = []
         # Add objects to the dictionary
         for class_name_i in range(len(class_names)):
-            class_name = class_names[class_name_i]
             centroid_position = Position(x=centroid_positions[class_name_i][0], y=centroid_positions[class_name_i][1], z=centroid_positions[class_name_i][2])
-            dimension = Dimensions(x=dimensions[class_name_i][0], y=dimensions[class_name_i][1], z=dimensions[class_name_i][2])
 
-            tracked_obj = TrackedObject(class_name=class_name, centroid_position=centroid_position, dimensions=dimension, original_order_index=class_name_i, last_uuid=uuids[class_name_i] ,latest_uuid=uuids[class_name_i])
-            parsed_objects[class_name].append(tracked_obj)
+            # Check if the position is in the workspace
+            if not self.crowracle.check_position_in_workspace_area(xyz_list=centroid_position.get_list()):
+                class_name = class_names[class_name_i]
+                dimension = Dimensions(x=dimensions[class_name_i][0], y=dimensions[class_name_i][1], z=dimensions[class_name_i][2])
+
+                tracked_obj = TrackedObject(class_name=class_name, centroid_position=centroid_position, dimensions=dimension, original_order_index=class_name_i, last_uuid=uuids[class_name_i] ,latest_uuid=uuids[class_name_i])
+                parsed_objects[class_name].append(tracked_obj)
         return parsed_objects
 
     def check_inactive_objects_hand_logic(self):
@@ -420,6 +430,7 @@ class Tracker:
                         print(f"*****")
                         if not tracked_object.hand_was_near and (tracked_object.active_last_iteration_hash == self.last_iteration_hash):
                             distance, wrist_obj = self.get_closest_hand(object=tracked_object)
+                            print(f"!!! <tracker>: distance to hand: {distance}")
                             if distance < WRIST_OBJECT_CLIP_DISTANCE_LIMIT:
                                 # Mark tracked object as hand_was_near
                                 tracked_object.hand_was_near = True
@@ -431,12 +442,16 @@ class Tracker:
                                 print(f"<tracker>: Object: {tracked_object.class_name} was too close to the hand before disappearing")
 
                 if not tracked_object.active and tracked_object.hand_was_near:
-                    # FOREVER CHECK IF THE HAND ENTERED THE WORKSPACE #
-                    # IF THE HAND ENTERED - FLAG OBJECT AS FROZEN AND SET THE POSITION
-                    # TO THE WORKSPACE CENTROID - CREATE TRIPLET
-                    pass
-                    ############################################################################################################
-                    ############################################################################################################
+                    # Check last position of the hand object saved in the tracked object
+                    # if it was in the 'workspace' environment.
+
+                    last_hand_pos_list = tracked_object.close_hand_obj_memory.centroid_position.get_list()
+                    print(f"!!! Last_hand_pos_list: {last_hand_pos_list}")
+                    if self.crowracle.check_position_in_workspace_area(xyz_list=last_hand_pos_list):
+                        # Move object to the workspace (position of the hand in the workspace) and
+                        # freeze it there
+                        self.move_and_freeze(xyz_list=last_hand_pos_list, uuid=tracked_object.last_uuid)
+
 
     # This function returns the distance and an wrist-object to which our "object"
     # -argument- is closest to (if there is at least 1 wrist object of course)
