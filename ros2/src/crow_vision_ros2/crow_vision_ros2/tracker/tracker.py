@@ -252,38 +252,6 @@ class Tracker:
             # know <tracked object> <- DISTANCE -> <newly detected>,
             # closest distances with are updated first
             self.distance_ordering_algorithm(class_name=class_name, parsed_objects=parsed_objects_cleaned)
-
-            ## Hand logic
-            # Check all inactive objects and check their distance to the trajectories
-            # of wrists and check if the distance is smaller than the distance
-            # WRIST_OBJECT_CLIP_DISTANCE_LIMIT, if so-> make the object non-deletable,
-            # -save the hand to the object - start its timer - if timer crosses
-            # max trajectory time - calculate average point in 3D space for hand
-            for tracked_object in self.tracked_objects[class_name]:
-                if not tracked_object.freezed:
-                    if not tracked_object.active:
-                        # Check if he is already flagged as being "close to hand" and check
-                        # that the object was active last iteration
-                        if not tracked_object.hand_was_near and (tracked_object.active_last_iteration_hash == self.last_iteration_hash):
-                            distance, wrist_obj = self.get_closest_hand(object=tracked_object)
-                            if distance < WRIST_OBJECT_CLIP_DISTANCE_LIMIT:
-                                # Mark tracked object as hand_was_near
-                                tracked_object.hand_was_near = True
-                                # Save avatar object ot the object
-                                tracked_object.close_hand_obj_memory = wrist_obj
-                                # Start the time in the object
-                                tracked_object.close_hand_timer = datetime.datetime.now()
-
-                                print(f"<tracker>: Object: {tracked_object.class_name} was too close to the hand before disappearing")
-
-                    if not tracked_object.active and tracked_object.hand_was_near:
-                        # FOREVER CHECK IF THE HAND ENTERED THE WORKSPACE #
-                        # IF THE HAND ENTERED - FLAG OBJECT AS FROZEN AND SET THE POSITION
-                        # TO THE WORKSPACE CENTROID - CREATE TRIPLET
-                        pass
-                        ############################################################################################################
-                        ############################################################################################################
-
         return
 
 
@@ -383,6 +351,9 @@ class Tracker:
 
         print("<tracker>: C")
 
+        self.check_inactive_objects_hand_logic()
+
+        print("<tracker>: D")
         # Return id's with original order, if some detection are disregarded - return -1
         # Dump all object instances into 1 list
         objects_list = self.dump_list_of_objects()
@@ -408,8 +379,6 @@ class Tracker:
                 last_uuid.append(-1)
                 latest_uuid.append(-1)
 
-        self.reset_setup()
-
         return (last_uuid, latest_uuid)
 
     # This function returns dictionary of classes with their objects
@@ -428,6 +397,46 @@ class Tracker:
             tracked_obj = TrackedObject(class_name=class_name, centroid_position=centroid_position, dimensions=dimension, original_order_index=class_name_i, last_uuid=uuids[class_name_i] ,latest_uuid=uuids[class_name_i])
             parsed_objects[class_name].append(tracked_obj)
         return parsed_objects
+
+    def check_inactive_objects_hand_logic(self):
+        ## Hand logic
+        # Check all inactive objects and check their distance to the trajectories
+        # of wrists and check if the distance is smaller than the distance
+        # WRIST_OBJECT_CLIP_DISTANCE_LIMIT, if so-> make the object non-deletable,
+        # -save the hand to the object - start its timer - if timer crosses
+        # max trajectory time - calculate average point in 3D space for hand
+        print(f"*TRACKER**** before loop")
+        for class_name in self.tracked_objects:
+            for tracked_object in self.tracked_objects[class_name]:
+                print(f"*TRACKER**** before check freeze")
+                if not tracked_object.freezed:
+                    print(f"*TRACKER**** NOT FREEZED loop")
+                    print(f"*TRACKER**** tracked_object.active: {tracked_object.active}, {tracked_object.class_name}")
+                    if not tracked_object.active:
+                        # Check if he is already flagged as being "close to hand" and check
+                        # that the object was active last iteration
+                        print(f"*****")
+                        print(f"<tracker> tracked_object.active_last_iteration_hash == self.last_iteration_hash: {tracked_object.active_last_iteration_hash} == {self.last_iteration_hash}")
+                        print(f"*****")
+                        if not tracked_object.hand_was_near and (tracked_object.active_last_iteration_hash == self.last_iteration_hash):
+                            distance, wrist_obj = self.get_closest_hand(object=tracked_object)
+                            if distance < WRIST_OBJECT_CLIP_DISTANCE_LIMIT:
+                                # Mark tracked object as hand_was_near
+                                tracked_object.hand_was_near = True
+                                # Save avatar object ot the object
+                                tracked_object.close_hand_obj_memory = wrist_obj
+                                # Start the time in the object
+                                tracked_object.close_hand_timer = datetime.datetime.now()
+
+                                print(f"<tracker>: Object: {tracked_object.class_name} was too close to the hand before disappearing")
+
+                if not tracked_object.active and tracked_object.hand_was_near:
+                    # FOREVER CHECK IF THE HAND ENTERED THE WORKSPACE #
+                    # IF THE HAND ENTERED - FLAG OBJECT AS FROZEN AND SET THE POSITION
+                    # TO THE WORKSPACE CENTROID - CREATE TRIPLET
+                    pass
+                    ############################################################################################################
+                    ############################################################################################################
 
     # This function returns the distance and an wrist-object to which our "object"
     # -argument- is closest to (if there is at least 1 wrist object of course)
@@ -451,7 +460,7 @@ class Tracker:
         for class_name in self.tracked_objects:
             for tracked_object in self.tracked_objects[class_name]:
                 count_objects += 1
-                print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}")
+                print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}, active: {tracked_object.active}, hand_was_near: {tracked_object.hand_was_near} freezed: {tracked_object.freezed}")
         print(f"<tracker>: All tracked objects count {count_objects}")
 
     # Returns object with this uuid
@@ -474,7 +483,7 @@ class Tracker:
 
     def freeze_object(self, tracked_object):
         tracked_object.active = False
-        tracked_object.freezed = True.
+        tracked_object.freezed = True
 
         ### CHECK IF HE IS IN THE WORKSPACE IF YES, FLAG IT and
         # add it to the workspace
@@ -545,6 +554,10 @@ class Tracker:
 
         for class_name in parsed_objects_dict:
             self.evaluate_class_logic(class_name=class_name, parsed_objects=parsed_objects_dict[class_name])
+
+        self.check_inactive_objects_hand_logic()
+
+        print("<tracker>: D")
 
         # Return id's with original order, if some detection is disregarded,
         # return -1
