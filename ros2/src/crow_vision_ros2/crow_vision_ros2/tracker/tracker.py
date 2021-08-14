@@ -8,19 +8,25 @@ from mpl_toolkits.mplot3d import Axes3D
 import queue as pyqueue
 import random
 
-AZA = False
 # ROS2
 from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
 from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRACKER_STAY_IN_PLACE_SECONDS, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, PERCENTAGE_NEEDED_TO_BE_APPROVED, TRACKER_ITERATION_HASH_LENGTH
 from crow_vision_ros2.tracker.tracker_avatar import Avatar, AvatarObject
 from crow_vision_ros2.tracker.tracker_trajectory import Trajectory
-# TESTING
-# from tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
-# from tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRACKER_STAY_IN_PLACE_SECONDS, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, TRACKER_ITERATION_HASH_LENGTH
-# from tracker_avatar import Avatar, AvatarObject
-# from tracker_trajectory import Trajectory
 
 class TrackedObject:
+    """
+    Every scene object which we are trying to track and is being recognized
+    is stored in this class.
+    ARGS:
+    - class_name: <string>
+    - centroid_position: <Class:Position>
+    - dimensions: <Class:Dimensions>
+    - original_order_index: <int> Position in the input array for tracking
+    - last_uuid: <string>
+    - latest_uuid: <string>
+    """
+
     def __init__(self, class_name, centroid_position, dimensions, original_order_index, last_uuid, latest_uuid):
         self.class_name = class_name
         self.object_id = random_alpha_numeric(len=DEFAULT_ALPHA_NUMERIC_LENGTH)
@@ -30,23 +36,17 @@ class TrackedObject:
         # Remembering original order for the return message to filter node
         self.original_order_index = original_order_index
 
-        ## Tracking logic variables
-        self.active = True # Is the object currently in the "frame"
+        ### Tracking logic variables
+        self.active = True # Do we have detection for this object
         # If object stops being active - this hash will represent the iteration when it was still active
         self.active_last_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
         self.just_updated = False
         self.position_history = [centroid_position] # List of past positions
-        # Variable used in the duplication filter at the beginning
+        # Variable used in the duplication filter
         self.duplicate = False
         # Variable used in the intersection filter
         self.intersects = False
         self.used_for_update = False
-
-        # If there is a glitch detection (or item stopped existing),
-        # tracker will forget/throw out the object after couple of frames
-        self.detection_memory_loss = datetime.datetime.now()
-        self.TRACKER_STAY_IN_PLACE_SECONDS = TRACKER_STAY_IN_PLACE_SECONDS
-
         # Ros2 integration for uuid correction
         self.last_uuid = last_uuid
         self.latest_uuid = latest_uuid
@@ -90,6 +90,13 @@ class TrackedObject:
         return self.original_order_index < other.original_order_index
 
 class Tracker:
+    """
+    Main class which takes care of tracking and hold all the
+    <Class:TrackedObjects>
+    ARGS:
+    - crowracle: <Class:CrowtologyClient> filter_node passes database client
+    """
+
     def __init__(self, crowracle=None):
         # Current setup detection count
         self.setup_detection_count = 0
@@ -109,9 +116,12 @@ class Tracker:
         self.current_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
         self.last_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
 
-    # This function flags all the existing objects as not already updated and
-    # used in the tracking loop
     def reset_flags(self):
+        """
+        Flags all objects of the tracker as 'fresh' i.e. not updated, not
+        duplicate etc...
+        """
+
         for class_name in self.tracked_objects:
             for object in self.tracked_objects[class_name]:
                 object.active = False
@@ -119,18 +129,27 @@ class Tracker:
                 object.duplicate = False
                 object.intersects = False
 
-    # Get all objects in 1 list
     def dump_list_of_objects(self):
+        """
+        Returns all objects of tracker in 1 list
+        """
+
         dump_list = []
         for class_name in self.tracked_objects:
             for object in self.tracked_objects[class_name]:
                 dump_list.append(object)
         return dump_list
 
-    # Filters out the objects which have distance between centroid points smaller
-    # than the length of their smallest dimension.
-    # F.E. as well -> "bigger object (smallest dimension is bigger) eats the smaller object" -> smaller removed
     def class_duplication_filter(self, parsed_objects):
+        """
+        Filters out the objects which have distance between centroid points
+        smaller than the length of their smallest dimension.
+        -> "bigger object (smallest dimension is bigger) eats the smaller object"
+        -> smaller removed
+        ARGS:
+        - parse_objects: <list:Class:TrackedObject>
+        """
+
         smallest_dimensions = [] # Index-order sensitive with the class_state_dictionary lists
         for object in parsed_objects:
             smallest_dimensions.append(min(object.dimensions.get_tuple()))
@@ -159,6 +178,13 @@ class Tracker:
         return parsed_objects_cleaned
 
     def add_tracked_object_logic(self, class_name, parsed_object):
+        """
+        Add new tracked object to the tracker.
+        ARGS:
+        - class_name: <string>
+        - parsed_object: <Class:TrackedObject>
+        """
+
         print(f"<tracker> ! Creating new object")
         parsed_object.just_updated = True
         if not class_name in self.tracked_objects:
@@ -167,48 +193,33 @@ class Tracker:
             self.tracked_objects[class_name].append(parsed_object)
 
     def add_tracked_object_base(self, centroid_position, dimension, class_name, uuid):
+        """
+        Create and add new tracked object to the tracker.
+        ARGS:
+        - centroid_position: <Class:Position>
+        - dimension: <Class:Dimensions>
+        - class_name: <string>
+        - uuid: <string>
+        """
+
         new_obj = TrackedObject(class_name=class_name, centroid_position=centroid_position, dimensions=dimension, original_order_index=-1, last_uuid=uuid, latest_uuid=uuid)
         self.add_tracked_object_logic(class_name=class_name, parsed_object=new_obj)
 
-    # # Checks intersection with existing and new and update them if neccessary,
-    # # returns objects which have not been yet assigned
-    # def intersection_filter(self, class_name, parsed_objects):
-    #     smallest_dimensions = [] # Index-order sensitive
-    #     # print(f"len(self.tracked_objects[class_name]): {len(self.tracked_objects[class_name])}")
-    #     for tracked_object in self.tracked_objects[class_name]:
-    #         # print(f"tracked_object.dimensions.get_tuple(): {tracked_object.dimensions.get_tuple()}")
-    #         smallest_dimensions.append(tracked_object.dimensions.get_xy_min())
-    #         # print(f"smallest_dimensions: {smallest_dimensions}")
-    #
-    #     for tracked_object in self.tracked_objects[class_name]:
-    #         closest_intersecting_with = None
-    #         closest_intersecting_distance = float('inf')
-    #         tracked_obj_pos = tracked_object.centroid_position
-    #         for parsed_object in parsed_objects:
-    #             parsed_object_pos = parsed_object.centroid_position
-    #             # Check intersection ->(distance < smallest dimension)
-    #             objects_distance = tracked_obj_pos.get_distance_to(other_position=parsed_object_pos)
-    #             if objects_distance < smallest_dimensions[self.tracked_objects[class_name].index(tracked_object)]:
-    #                 if not parsed_object.intersects:
-    #                     if objects_distance < closest_intersecting_distance:
-    #                         closest_intersecting_distance = objects_distance
-    #                         closest_intersecting_with = parsed_object
-    #
-    #         # Update tracked object with closest intersecting object
-    #         if closest_intersecting_with != None:
-    #             tracked_object.update_by_object(object=closest_intersecting_with, iteration_hash=self.current_iteration_hash)
-    #             print(f"<intersection filter>: UPDATING DISTANCE")
-    #             # print(f"tracked_object.just_updated: {tracked_object.just_updated}")
-    #             closest_intersecting_with.intersects = True
-    #     return
 
-    # Distance ordering and pairing - For objects which haven't already
-    # been updated with new detections -> do an algorithm which orders
-    # all possible distances within class and new detection so that we
-    # know <tracked object> <- DISTANCE -> <newly detected>,
-    # closest distances with are updated first, made faster with linear sum assignment
-    # optimization
+
     def distance_ordering_algorithm(self, class_name, parsed_objects):
+        """
+        For objects which haven't already been updated with new detections ->
+        do an algorithm which orders all possible distances within tracked
+        objects and new detections so that we know
+        <tracked object> <- DISTANCE -> <newly detected>,
+        closest distances with are updated first, made faster with linear
+        sum assignment optimization.
+        ARGS:
+        - class_name: <string>
+        - parse_objects: <list:Class:TrackedObject>
+        """
+
         # Create 2D list of distance pairs where every row is its own tracked object and
         # every column is the new detected object (1 cell is the "distance pair/distance" between them)
         distance_pairs_2d = []
@@ -239,30 +250,34 @@ class Tracker:
                 distance_pair.tracked_object.update_by_object(object=distance_pair.new_object, iteration_hash=self.current_iteration_hash)
         return
 
-    # This function evaluates existence based just on the class (works with list of objects),
-    # results can later be evaluated in the next step as we know the object history
-    # "which one is new"
+
     def evaluate_class_logic(self, class_name, parsed_objects):
+        """
+        Evaluates tracking for different classes separately.
+        """
+
         # Remove smaller items which are in THIS FRAME overlapping with bigger items of same class
         parsed_objects_cleaned = self.class_duplication_filter(parsed_objects=parsed_objects)
 
         if not class_name in self.tracked_objects:
             return
         else:
-            # Distance ordering and pairing - For objects which haven't already
-            # been updated with new detections -> do an algorithm which orders
-            # all possible distances within class and new detection so that we
-            # know <tracked object> <- DISTANCE -> <newly detected>,
-            # closest distances with are updated first
             self.distance_ordering_algorithm(class_name=class_name, parsed_objects=parsed_objects_cleaned)
         return
 
-
-    # This function should be called at the beginning to load all the items in the scene
-    # to the tracker, or when you want to reset scene objects and all are visible
-    # Returns True when you can continue and start tracking - else False and you
-    # will have to wait
     def setup_scene_objects(self, centroid_positions, dimensions, class_names, uuids):
+        """
+        This function should be called at the beginning to load all the items in
+        the scene to the tracker, or when you want to reset scene objects and
+        all are visible. Returns True when you can continue and start tracking
+        else False and you will have to wait for all iterations.
+        ARGS:
+        - centroid_positions: <list:[x,y,z]:[float:float:float]>
+        - dimensions: <list:[x,y,z]:[float:float:float]>
+        - class_names: <list:string>
+        - uuids: <list:string>
+        """
+
         if self.setup_detection_count < DETECTIONS_FOR_SETUP_NEEDED:
             self.setup_detection_count += 1
             # Save current data to dictionary
@@ -282,9 +297,14 @@ class Tracker:
             return False
         else:
             return True
+
     def load_setup_objects(self):
-        # Count uuid's and load objects with occurence more thna 50% (filter takes care of uuids)
-        # Each new uuid will have its own key in dicionary and its data as well as counter
+        """
+        Count uuid's and load objects with occurence more thna x% (see config)
+        (filter takes care of uuids). Each new uuid will have its own key in
+        dicionary and its data as well as counter.
+        """
+
         loader_dict = {}
         for history_i in range(len(self.setup_detection_history)):
             # Check if key (i.e. uuid) exists
@@ -322,17 +342,28 @@ class Tracker:
                     self.add_tracked_object_logic(class_name=class_name, parsed_object=obj)
         return
 
-    # Reset setup. Use this function when you want to start setting up your
-    # objects - this also deletes all objects
     def reset_setup(self):
+        """
+        Reset scene objects setup. Use this function when you want to start
+        setting up your objects - this also deletes all objects
+        """
+
         # Reset the setup data
         self.tracked_objects = {}
         self.setup_detection_count = 0
         self.setup_detection_history = []
 
-    # Returns index-sensitive mapping of old uuids to new uuids ([a,b, ...],[c,b, ...])
-    # 'b' should be 'a', 'c' should be 'a'
     def track_and_get_uuids(self, centroid_positions, dimensions, class_names, uuids):
+        """
+        Returns index-sensitive mapping of old uuids to new uuids ([a,b, ...],[c,b, ...])
+        'b' should be 'a', 'c' should be 'a' ...
+        ARGS:
+        - centroid_positions: <list:[x,y,z]:[float:float:float]>
+        - dimensions: <list:[x,y,z]:[float:float:float]>
+        - class_names: <list:string>
+        - uuids: <list:string>
+        """
+
         # Flag all existing objects as not (updated) this frame
         print("<tracker>: 0")
 
@@ -388,9 +419,19 @@ class Tracker:
 
         return (last_uuid, latest_uuid)
 
-    # This function returns dictionary of classes with their objects
-    # parsed_objects = {"cube": [<obj1>, <obj2>], "ball": [<>...], ....}
+
     def parse_objects(self, centroid_positions, dimensions, class_names, uuids):
+        """
+        This function returns dictionary of classes with their objects
+        parsed_objects = {"cube": [<TrackedObject>, <TrackedObject>],
+        "ball": [<>...], ....}
+        ARGS:
+        - centroid_positions: <list:[x,y,z]:[float:float:float]>
+        - dimensions: <list:[x,y,z]:[float:float:float]>
+        - class_names: <list:string>
+        - uuids: <list:string>
+        """
+
         parsed_objects = {}
         # Initialize empty dicitonaries of unique class_names
         for class_name in class_names:
@@ -409,28 +450,22 @@ class Tracker:
         return parsed_objects
 
     def check_inactive_objects_hand_logic(self):
-        ## Hand logic
-        # Check all inactive objects and check their distance to the trajectories
-        # of wrists and check if the distance is smaller than the distance
-        # WRIST_OBJECT_CLIP_DISTANCE_LIMIT, if so-> make the object non-deletable,
-        # -save the hand to the object - start its timer - if timer crosses
-        # max trajectory time - calculate average point in 3D space for hand
-        print(f"*TRACKER**** before loop")
+        """
+        Check all inactive objects and check their distance to the trajectories
+        of wrists and check if the distance is smaller than the distance
+        WRIST_OBJECT_CLIP_DISTANCE_LIMIT - flag it - save the wrist object -
+        if the wrist object crosses workspace -> move and freeze the object
+        to the workspace
+        """
+
         for class_name in self.tracked_objects:
             for tracked_object in self.tracked_objects[class_name]:
-                print(f"*TRACKER**** before check freeze")
                 if not tracked_object.freezed:
-                    print(f"*TRACKER**** NOT FREEZED loop")
-                    print(f"*TRACKER**** tracked_object.active: {tracked_object.active}, {tracked_object.class_name}")
                     if not tracked_object.active:
                         # Check if he is already flagged as being "close to hand" and check
                         # that the object was active last iteration
-                        print(f"*****")
-                        print(f"<tracker> tracked_object.active_last_iteration_hash == self.last_iteration_hash: {tracked_object.active_last_iteration_hash} == {self.last_iteration_hash}")
-                        print(f"*****")
                         if not tracked_object.hand_was_near and (tracked_object.active_last_iteration_hash == self.last_iteration_hash):
                             distance, wrist_obj = self.get_closest_hand(object=tracked_object)
-                            print(f"!!! <tracker>: distance to hand: {distance}")
                             if distance < WRIST_OBJECT_CLIP_DISTANCE_LIMIT:
                                 # Mark tracked object as hand_was_near
                                 tracked_object.hand_was_near = True
@@ -446,16 +481,21 @@ class Tracker:
                     # if it was in the 'workspace' environment.
 
                     last_hand_pos_list = tracked_object.close_hand_obj_memory.centroid_position.get_list()
-                    print(f"!!! Last_hand_pos_list: {last_hand_pos_list}")
                     if self.crowracle.check_position_in_workspace_area(xyz_list=last_hand_pos_list):
                         # Move object to the workspace (position of the hand in the workspace) and
                         # freeze it there
                         self.move_and_freeze(xyz_list=last_hand_pos_list, uuid=tracked_object.last_uuid)
 
-
-    # This function returns the distance and an wrist-object to which our "object"
-    # -argument- is closest to (if there is at least 1 wrist object of course)
     def get_closest_hand(self, object):
+        """
+        This function returns the distance and an wrist-object to which our
+        "object" -argument- is closest to (if ther
+        e is at least 1 wrist object
+        of course), else returns (float('inf'), None)
+        ARGS:
+        - object: <Class:TrackedObject>
+        """
+
         closest_wrist_object = None
         distance = float('inf')
 
@@ -468,8 +508,11 @@ class Tracker:
 
         return distance, closest_wrist_object
 
-    # Print info about all the tracked objects
     def dump_tracked_objects_info(self):
+        """
+        Print info about all the tracked objects
+        """
+
         print("<tracked>: next lines - all tracked objects")
         count_objects = 0
         for class_name in self.tracked_objects:
@@ -478,15 +521,28 @@ class Tracker:
                 print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}, active: {tracked_object.active}, hand_was_near: {tracked_object.hand_was_near} freezed: {tracked_object.freezed}")
         print(f"<tracker>: All tracked objects count {count_objects}")
 
-    # Returns object with this uuid
+    #
     def get_object_uuid(self, uuid):
+        """
+        Returns <class:TrackedObject> with this uuid which is saved in the
+        tracker.
+        ARGS:
+        - uuid: <string>
+        """
+
         for class_name in self.tracked_objects:
             for tracked_object in self.tracked_objects[class_name]:
                 if tracked_object.last_uuid == uuid:
                     return tracked_object
 
-    # Delete object from the self.tracked_object
+    #
     def delete_object_uuid(self, uuid):
+        """
+        Delete object from the self.tracked_object
+        ARGS:
+        - uuid: <string>
+        """
+
         # Iterate all classes and all objects and find the one - then delete it
         # from the list
         for class_name in self.tracked_objects:
@@ -500,17 +556,17 @@ class Tracker:
         tracked_object.active = False
         tracked_object.freezed = True
 
-        ### CHECK IF HE IS IN THE WORKSPACE IF YES, FLAG IT and
-        # add it to the workspace
-        #####
-        #
-        #
-
-    # This function moves existing object to a certain position and freezes it,
-    # which means that from now on, the object will still be saved but it will
-    # be ignored when iterating tracking (wont be updated) - robot function
-    # ARGS: xyz_list (list of xyz coordinates to move object to [1.1, 2, 3])
     def move_and_freeze(self, xyz_list, uuid):
+        """
+        This function moves existing object to a certain position and freezes
+        it, which means that from now on, the object will still be saved but it
+        will be ignored when iterating tracking (wont be updated) - robot
+        function. Freezing an object is majorly a synonym with "being in
+        workspace".
+        ARGS:
+        - xyz_list: <list:[x,y,z]:[float,float,float]>
+        """
+
         object = self.get_object_uuid(uuid=uuid)
         new_centroid_position = Position(x=xyz_list[0], y=xyz_list[1], z=xyz_list[2])
 
@@ -518,14 +574,16 @@ class Tracker:
         self.freeze_object(tracked_object=object)
         return
 
-
-    # Create tracked object and freeze it into the position xyz_list
-    # ARGS:
-    # - xyz_list: list of x,y,z coordinates [x,y,z]
-    # - xyz_dimensions: list of x,y,z dimensions [x,y,z]
-    # - class_name: name of the object
-    # - uuid: uuid
     def add_tracked_object_and_freeze(self, xyz_list, xyz_dimension, class_name, uuid):
+        """
+        Create tracked object and freeze it into the position xyz_list.
+        ARGS:
+        - xyz_list: <list:[x,y,z]:[float,float,float]>
+        - xyz_dimensions: <list:[x,y,z]:[float,float,float]>
+        - class_name: <string>
+        - uuid: <string>
+        """
+
         new_position = Position(x=xyz_list[0], y=xyz_list[1], z=xyz_list[2])
         new_dimension = Dimensions(x=xyz_dimension[0], y=xyz_dimension[1], z=xyz_dimension[2])
 
@@ -533,117 +591,41 @@ class Tracker:
         self.freeze_object(tracked_object=new_obj)
         self.add_tracked_object_logic(class_name=class_name, parsed_object=new_obj)
 
-
-
-
-
-
-    ############################################################################
-    ############################################################################
-    ### TESTING ENVIRONEMNT ONLY - REMOVE FROM ROS2 INTEGRATION ################
-    # This function should be called at the beginning to load all the items in the scene
-    # to the tracker, or when you want to reset scene objects and all are visible
-    # Returns True when you can continue and start tracking - else False and you
-    # will have to wait
-    def setup_scene_objects_sim(self, centroid_positions, dimensions, class_names):
-        if self.setup_detection_count == 0:
-            self.setup_detection_count += 1
-            # Create new objects
-            parsed_objects_dict = self.parse_objects_sim(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names)
-            for class_name in parsed_objects_dict:
-                for obj in parsed_objects_dict[class_name]:
-                    self.add_tracked_object_logic(class_name=class_name, parsed_object=obj)
-            return False
-        else:
-            return True
-
-    def track_and_get_ids(self, centroid_positions, dimensions, class_names):
-        # Flag all existing objects as not (updated) this frame
-        self.reset_flags()
-
-        # Setup scene objects - after 'DETECTIONS_FOR_SETUP_NEEDED' it will return True
-        if not self.setup_scene_objects_sim(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names):
-            return False
-        else:
-            parsed_objects_dict = self.parse_objects_sim(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names)
-
-        for class_name in parsed_objects_dict:
-            self.evaluate_class_logic(class_name=class_name, parsed_objects=parsed_objects_dict[class_name])
-
-        self.check_inactive_objects_hand_logic()
-
-        print("<tracker>: D")
-
-        # Return id's with original order, if some detection is disregarded,
-        # return -1
-        # Dump all object instances into 1 list
-        objects_list = self.dump_list_of_objects()
-        # Sort it by initial index order
-        objects_list.sort()
-        # for object in objects_list:
-            # print(f"object idx: {object.original_order_index}, object_name: {object.class_name}, object_id: {object.object_id}, just_updated: {object.just_updated}")
-        # Create new output list with the same length as original
-        output_list_of_ids = []
-        for idx in range(len(centroid_positions)):
-            # print(f"idx: {idx}")
-            # Find first valid (just updated object) index and return its id
-            appended = False
-            for object in objects_list:
-                # print(f"object.original_order_index: {object.original_order_index}")
-                if object.just_updated and object.original_order_index == idx:
-                    output_list_of_ids.append(object.object_id)
-                    # print(f"appending object.object_id: {object.object_id}")
-                    appended = True
-                    break
-            if not appended:
-                output_list_of_ids.append(-1)
-        return output_list_of_ids
-
-    # This function returns dictionary of classes with their objects
-    # parsed_objects = {"cube": [<obj1>, <obj2>], "ball": [<>...], ....}
-    def parse_objects_sim(self, centroid_positions, dimensions, class_names):
-        parsed_objects = {}
-        # Initialize empty dicitonaries of unique class_names
-        for class_name in class_names:
-            parsed_objects[class_name] = []
-        # Add objects to the dictionary
-        for class_name_i in range(len(class_names)):
-            class_name = class_names[class_name_i]
-            centroid_position = Position(x=centroid_positions[class_name_i][0], y=centroid_positions[class_name_i][1], z=centroid_positions[class_name_i][2])
-            dimension = Dimensions(x=dimensions[class_name_i][0], y=dimensions[class_name_i][1], z=dimensions[class_name_i][2])
-
-            random_uuid = random_alpha_numeric(16)
-            if class_name == "leftWrist" or class_name == "rightWrist":
-                self.avatar.update_avatar_object(avatar_object_name=class_name, np_position=centroid_position.get_numpy_array(), np_dimensions=dimension.get_numpy_array())
-            else:
-                tracked_obj = TrackedObject(class_name=class_name, centroid_position=centroid_position, dimensions=dimension, original_order_index=class_name_i, last_uuid=random_uuid ,latest_uuid=random_uuid)
-                parsed_objects[class_name].append(tracked_obj)
-        return parsed_objects
-
-    # Return list of lists, where single element is a <Position> and new row
-    # is a new trajectory
-    def get_hand_trajectories(self):
-        trajectories = []
-        trajectory_objects = [self.avatar.avatar_objects["leftWrist"], self.avatar.avatar_objects["rightWrist"] ]
-        for trajectory_object in trajectory_objects:
-            print(f"** CREATING NEW TRAJECTORY FOR: {trajectory_object.object_name}")
-            trajectories.append( trajectory_object.trajectory_memory.get_chronological_position_list() )
-        return trajectories
-
-    # Return list of lists, where single element is a <Position> and new row
-    # is a new trajectory
-    def get_spline_trajectories_positions(self):
-        trajectories = []
-
-        trajectory_objects = []
-        for key in self.avatar.avatar_objects:
-            trajectory_objects.append(self.avatar.avatar_objects[key])
-
-        for trajectory_object in trajectory_objects:
-            if (trajectory_object.trajectory_memory.queue.qsize() > 4):
-                print(f"** CREATING NEW TRAJECTORY FOR: {trajectory_object.object_name}")
-                trajectories.append( trajectory_object.trajectory_memory.get_spline_trajectory_positions() )
-        return trajectories
-
-    ############################################################################
-    ############################################################################
+    # def intersection_filter(self, class_name, parsed_objects):
+    #     """
+    #     Checks intersection between existing tracked objects and new detection.
+    #     * this function seems to be unnecesarry. Distance ordering seems to be
+    #     enough.
+    #     ARGS:
+    #     - class_name: <string>
+    #     - parsed_objects: <list:Class:TrackedObject>
+    #     """
+    #
+    #     smallest_dimensions = [] # Index-order sensitive
+    #     # print(f"len(self.tracked_objects[class_name]): {len(self.tracked_objects[class_name])}")
+    #     for tracked_object in self.tracked_objects[class_name]:
+    #         # print(f"tracked_object.dimensions.get_tuple(): {tracked_object.dimensions.get_tuple()}")
+    #         smallest_dimensions.append(tracked_object.dimensions.get_xy_min())
+    #         # print(f"smallest_dimensions: {smallest_dimensions}")
+    #
+    #     for tracked_object in self.tracked_objects[class_name]:
+    #         closest_intersecting_with = None
+    #         closest_intersecting_distance = float('inf')
+    #         tracked_obj_pos = tracked_object.centroid_position
+    #         for parsed_object in parsed_objects:
+    #             parsed_object_pos = parsed_object.centroid_position
+    #             # Check intersection ->(distance < smallest dimension)
+    #             objects_distance = tracked_obj_pos.get_distance_to(other_position=parsed_object_pos)
+    #             if objects_distance < smallest_dimensions[self.tracked_objects[class_name].index(tracked_object)]:
+    #                 if not parsed_object.intersects:
+    #                     if objects_distance < closest_intersecting_distance:
+    #                         closest_intersecting_distance = objects_distance
+    #                         closest_intersecting_with = parsed_object
+    #
+    #         # Update tracked object with closest intersecting object
+    #         if closest_intersecting_with != None:
+    #             tracked_object.update_by_object(object=closest_intersecting_with, iteration_hash=self.current_iteration_hash)
+    #             print(f"<intersection filter>: UPDATING DISTANCE")
+    #             # print(f"tracked_object.just_updated: {tracked_object.just_updated}")
+    #             closest_intersecting_with.intersects = True
+    #     return

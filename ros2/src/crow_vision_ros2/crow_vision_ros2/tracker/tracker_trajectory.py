@@ -7,17 +7,23 @@ import numpy as np
 # ROS2
 from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
 from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT
-# Simulation
-# from tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
-# from tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT
 
-# Memory type for storing information about trajectory of an object
 class Trajectory:
+    """
+    Class for storing information about trajectory of an object (AvatarObject)
+    ARGS:
+    - trajectory_memory_size_seconds: <float> How long should the trajectory be
+    """
+
     def __init__(self, trajectory_memory_size_seconds):
         self.queue = pyqueue.Queue()
         self.trajectory_memory_size_seconds = trajectory_memory_size_seconds
 
     def pop_old_points(self):
+        """
+        Remove trajectory point older than self.trajectory_memory_size_seconds
+        """
+
         time_now = datetime.datetime.now()
 
         while True:
@@ -31,16 +37,32 @@ class Trajectory:
                 break
 
     def add_trajectory_point(self, position):
+        """
+        Add new position to the trajectory.
+        ARGS:
+        - position: <Class:Position>
+        """
+
         self.pop_old_points()
         self.queue.put(position)
         return
 
-    # Return list of positions as they were added in time
     def get_chronological_position_list(self):
+        """
+        Get trajectory points with respect of time, older first?
+        RETURN:
+        - <list:Position>
+        """
+
         return list(self.queue.queue)
 
-    # Return average 3D position from trajectory
     def get_average_trajectory_position(self):
+        """
+        Return average 3D position from trajectory.
+        RETURN:
+        - <list:Position>
+        """
+
         position_data = self.get_chronological_position_list()
         num_pts = len(position_data)
         x_true, y_true, z_true = ([],[],[])
@@ -52,7 +74,12 @@ class Trajectory:
         return Position(x=(sum(x_true)/len(x_true)), y=(sum(y_true)/len(y_true)), z=(sum(z_true)/len(z_true)) )
 
     def distance_3d(self, xyz_tup, x0y0z0_tup):
-        """ 3d distance from point and a line """
+        """
+        3D distance from point and a line
+        RETURN:
+        - <float>
+        """
+
         dx = xyz_tup[0] - x0y0z0_tup[0]
         dy = xyz_tup[1] - x0y0z0_tup[1]
         dz = xyz_tup[2] - x0y0z0_tup[2]
@@ -60,14 +87,19 @@ class Trajectory:
         return d
 
     def min_distance(self, x, y, z, P, precision=5):
-        """ Compute minimum/a distance/s between
+        """
+        Compute minimum/a distance/s between
         a point P[x0,y0,z0] and a curve (x,y,z)
         rounded at `precision`.
         ARGS:
-            x, y, z   (array)
-            P         (3dtuple)
-            precision (integer)
-        Returns min indexes and distances array. """
+        - x: <list:float>
+        - y: <list:float>
+        - z: <list:float>
+        - P: <tuple:[float,float,float]>
+        - precision: <int>
+        RETURN:
+        - (<int>,<float>) min indexes and distances array.
+        """
         # compute distance
         d = self.distance_3d( xyz_tup=(x, y, z), x0y0z0_tup=(P[0], P[1], P[2]))
         d = np.round(d, precision)
@@ -76,6 +108,11 @@ class Trajectory:
         return glob_min_idxs, d
 
     def get_spline_xyz_data(self):
+        """
+        RETURN:
+        - (<list:float>,<list:float>,<list:float>)
+        """
+
         position_data = self.get_chronological_position_list()
         num_pts = len(position_data)
         x_true, y_true, z_true = ([],[],[])
@@ -90,9 +127,14 @@ class Trajectory:
         x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
         return (x_fine,y_fine,z_fine)
 
-    # Argument is an object <TrackedObject> and this function get its postion
-    # and calculates + plots its distance
     def plot_trajectory_minimal_distance(self, object):
+        """
+        Get the position of an object and plot its distance to the trajectory
+        spline.
+        ARGS:
+        - object: <Class:TrackedObject>
+        """
+
         x_fine, y_fine, z_fine = self.get_spline_xyz_data()
         # a point to calculate distance to
         P = object.centroid_position.get_tuple()
@@ -117,8 +159,16 @@ class Trajectory:
         plt.close()
         print("distance:", d[min_idx])
 
-    # Argument is an object <TrackedObject> and this function get its postion
     def get_trajectory_minimal_distance(self, avatar_object, object):
+        """
+        Return minimal distance from trajectory to the object.
+        ARGS:
+        - avatar_object: <Class:AvatarObject>
+        - object: <Class:TrackedObject>
+        RETURN:
+        - <float>
+        """
+
         if self.queue.qsize() > 3:
             x_fine, y_fine, z_fine = self.get_spline_xyz_data()
             # a point to calculate distance to
@@ -129,8 +179,14 @@ class Trajectory:
         else:
             return self.distance_3d(xyz_tup=avatar_object.centroid_position.get_tuple() , x0y0z0_tup=object.centroid_position.get_tuple())
 
-    # Return list of positions for interpolated trajectory
+    #
     def get_spline_trajectory_positions(self):
+        """
+        Return list of positions for interpolated trajectory.
+        RETURN:
+        - <list:Class:Postion>
+        """
+
         x_fine, y_fine, z_fine = self.get_spline_xyz_data()
         points = []
         for i in range(len(x_fine)):
