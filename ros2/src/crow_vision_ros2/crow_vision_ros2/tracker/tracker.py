@@ -524,7 +524,7 @@ class Tracker:
                     distance, wrist_obj = self.get_closest_hand(object=tracked_object)
                     if distance < WRIST_OBJECT_CLIP_DISTANCE_LIMIT:
                         print(f"** Object: {tracked_object.class_name} was too close to the hand, before disappearing, lengthening memory loss")
-                        self.tracked_object.MEMORY_LOSS_SECONDS = OBJECT_CLOSE_TO_HAND_MEMORY_LOSS_SECONDS
+                        tracked_object.MEMORY_LOSS_SECONDS = OBJECT_CLOSE_TO_HAND_MEMORY_LOSS_SECONDS
         return
 
 
