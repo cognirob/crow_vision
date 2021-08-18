@@ -539,6 +539,8 @@ class ParticleFilter():
                     if latest_uuids[last_uuids_i] != -1:
 
                         where_a = (np.where(self.model_uuid == latest_uuids[last_uuids_i])[0])
+                        n_updates = self.NEW_MODEL_MIN_UPDATES + 1
+                        last_update = self.last_filter_update
                         if len(where_a):
                             where_a = where_a[0]
                             n_updates = self.model_n_updates[where_a]
