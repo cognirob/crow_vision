@@ -64,7 +64,7 @@ class Locator(Node):
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
         # create publisher for located objects (segmented PCLs)
-        qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
+        qos = QoSProfile(depth=50, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
 
         # For now, every camera published segmented hand data PCL.
@@ -90,7 +90,7 @@ class Locator(Node):
             cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos, callback_group=cb_group) #listener for pointcloud data from RealSense camera
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos, callback_group=cb_group) #listener for masks from detector node
-            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 80, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
@@ -117,7 +117,7 @@ class Locator(Node):
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
         if not mask_msg.masks:
-            self.get_logger().info("no masks, no party. Quitting early.")
+            # self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
         cameraData = self.getCameraData(camera)
@@ -149,8 +149,8 @@ class Locator(Node):
             # 2. segment PCL & compute median
             # skip pointclouds with too few datapoints to be useful
             if len(where) < self.min_points_pcl:
-                self.get_logger().info(
-                    "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
+            #     self.get_logger().info(
+            #         "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
@@ -174,6 +174,7 @@ class Locator(Node):
             if class_name in avatar_data_classes:
                 self.pubPCL_avatar.publish(seg_pcl_msg)
             else:
+                self.get_logger().error("###########################")
                 self.pubPCL.publish(seg_pcl_msg)
 
     # def compareMaskPCL(self, mask_array, projected_points):  # OLD, SLOW version
