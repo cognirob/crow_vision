@@ -156,7 +156,6 @@ class ParticleFilterNode(Node):
                 dimensions.append(dim_msg)
                 labels.append(label)
                 uuids.append(uuid)
-            self.get_logger().info('Publishing objects:' + str(labels))
             pose_array_msg = FilteredPose(poses=poses)
             pose_array_msg.size = dimensions
             pose_array_msg.label = labels
@@ -184,6 +183,7 @@ class ParticleFilterNode(Node):
 
                 pose_array_msg.particles = particles_msg
 
+            self.get_logger().info('Publishing objects:' + str(labels))
             self.filtered_publisher.publish(pose_array_msg)
 
             StatTimer.enter("Filter PCL publish")
