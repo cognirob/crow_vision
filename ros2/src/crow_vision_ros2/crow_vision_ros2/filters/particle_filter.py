@@ -536,5 +536,8 @@ class ParticleFilter():
         for last_uuids_i in range(len(last_uuids)):
             if latest_uuids[last_uuids_i] != last_uuids[last_uuids_i]:
                 if last_uuids[last_uuids_i] in self.model_uuid:
-                    self.model_uuid[np.where(self.model_uuid == last_uuids[last_uuids_i])[0][0]  ] = latest_uuids[last_uuids_i]
+                    where = np.where(self.model_uuid == last_uuids[last_uuids_i])[0][0]
+                    self.model_uuid[where] = latest_uuids[last_uuids_i]
+                    self.model_n_updates[where] = self.NEW_MODEL_MIN_UPDATES + 1  # FIXME: maybe a better solution - without this, corrected model is ignored.
+                    self.model_last_update[where] = self.last_filter_update  # FIXME: maybe a better solution - without this, corrected model is ignored.
         return
