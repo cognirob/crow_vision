@@ -123,6 +123,7 @@ class Locator(Node):
         cameraData = self.getCameraData(camera)
         masks = np.array([self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks])
         object_ids, class_names, scores = mask_msg.object_ids, mask_msg.class_names, mask_msg.scores
+
         point_cloud, point_rgb, rgb_raw = ftl_pcl2numpy(pcl_msg)
         point_cloud = point_cloud.T
         # tf_mat = tf3.affines.compose(t, tf3.quaternions.quat2mat(q[-1:] + q[:-1]), np.ones(3))

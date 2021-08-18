@@ -162,6 +162,8 @@ class CrowVision(Node):
         if preds[0]["detection"] is None:
             return  # do not publish if nothing was detected
 
+
+
         #the input callback triggers the publishers here.
         if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
             StatTimer.enter("annotate")
@@ -217,6 +219,7 @@ class CrowVision(Node):
                 msg_mask.class_names = class_names
                 msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
+
                 self.ros[topic]["pub_masks"].publish(msg_mask)
                 StatTimer.exit("process & pub masks")
             if "pub_bboxes" in self.ros[topic]:
