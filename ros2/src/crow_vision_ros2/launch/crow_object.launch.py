@@ -13,9 +13,21 @@ def generate_launch_description():
     #2. detector (2D vision)
     detector_node = launch_ros.actions.Node(
         package='crow_vision_ros2',
-        node_executable='detector',
+        node_executable='detector_pose',
         output='screen',
-        node_name="detector_crow",
+        node_name="detector_pose",
+        # parameters=[{
+        #             "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
+        #             "config": "data/yolact/weights/weights_yolact_kuka_30/config_train.obj"
+        #             }]
+    )
+    launchConfigs.append(detector_node)
+
+    detector_node = launch_ros.actions.Node(
+        package='crow_vision_ros2',
+        node_executable='detector_edge',
+        output='screen',
+        node_name="detector_edge",
         parameters=[{
                     "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
                     "config": "data/yolact/weights/weights_yolact_kuka_30/config_train.obj"
