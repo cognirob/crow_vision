@@ -49,7 +49,7 @@ class ParticleFilterNode(Node):
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.get_logger().info("Created subscriber for segmented_pcl '{self.SEGMENTED_PCL_TOPIC}'")
         sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos)
-        self.cache = message_filters.Cache(sub, 15, allow_headerless=False)
+        self.cache = message_filters.Cache(sub, 50, allow_headerless=False)
         # self.pubPCLdebug = self.create_publisher(PointCloud2, self.SEGMENTED_PCL_TOPIC + "_debug", qos_profile=qos)  # not used currently
 
         # setup time variables
@@ -74,6 +74,7 @@ class ParticleFilterNode(Node):
         subSPcl = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
         sync = message_filters.ApproximateTimeSynchronizer([subSPcl], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
         sync.registerCallback(lambda spcl_msg: self.avatar_callback(spcl_msg))
+        self.get_logger().info("Filter is up")
 
     def add_and_process(self, messages):
         if type(messages) is not list:
