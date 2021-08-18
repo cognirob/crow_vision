@@ -85,8 +85,8 @@ class ParticleFilter():
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
     ACCELERATION_LIMIT = 0.0005  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
     SPEED_LIMIT = 0.05  # 1m/s is assumed as max speed (higher values are clipped)
-    NEW_MODEL_MIN_UPDATES = 5  # minimum number of measurements required for new model to be reported
-    NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
+    NEW_MODEL_MIN_UPDATES = 2  # minimum number of measurements required for new model to be reported
+    NEW_MODEL_TTL = 0.5  # minimum time in seconds required for new model to be reported
     REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
     NUM_STORED_PCLS = 3 # number of latest pcls to aggregate and send in the pcl message
