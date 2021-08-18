@@ -116,9 +116,9 @@ class CrowVisionPose(Node):
             object_ids, classes, class_names, scores, masks = self.posenet.inference(img=img_raw)
             classes = list(map(int, classes))
             scores = list(map(float, scores)) # Remove this -> get errors
-            if len(classes) == 0:
-                self.get_logger().info("No poses detected, skipping.")
-                return
+            # if len(classes) == 0:
+            #     self.get_logger().info("No poses detected, skipping.")
+            #     return
             msg_mask = DetectionMask()
             m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
             msg_mask.masks = []

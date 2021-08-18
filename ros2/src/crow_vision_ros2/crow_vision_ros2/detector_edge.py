@@ -196,7 +196,6 @@ class CrowVision(Node):
             classes = classes.astype(int).tolist()
             scores = scores.astype(float).tolist()
             if len(classes) == 0:
-                self.get_logger().info("No objects detected, skipping.")
                 return
 
             if "pub_masks" in self.ros[topic]:
@@ -212,6 +211,7 @@ class CrowVision(Node):
                 msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
                 msg_mask.classes = classes
                 msg_mask.class_names = class_names
+                msg_mask.object_ids = [0] * len(classes)
                 msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_masks"].publish(msg_mask)
