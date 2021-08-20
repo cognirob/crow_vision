@@ -65,7 +65,7 @@ class MarkerDetector(Node):
             listener = self.create_subscription(msg_type=MarkerMsg,
                                                 topic=topic,
                                                 # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
-                                                callback=lambda msg: self.control_callback(msg, topic),
+                                                callback=lambda msg, topic=topic: self.control_callback(msg, topic),
                                                 qos_profile=1) #the listener QoS has to be =1, "keep last only".
             self.get_logger().info('Input listener created on topic: "%s"' % topic)
         self.bridge = cv_bridge.CvBridge()
@@ -146,7 +146,7 @@ class MarkerDetector(Node):
 
     def merge_markers(self, poses):
         #poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
-        if self.define_flag == 'storage' and len(marker_poses) > 2:
+        if self.define_flag == 'storage' and len(poses) > 2:
             poses_linkage = linkage(poses, method='complete', metric='euclidean')
             clusters = fcluster(poses_linkage, self.square_length, criterion='distance')
             marker_poses = []
