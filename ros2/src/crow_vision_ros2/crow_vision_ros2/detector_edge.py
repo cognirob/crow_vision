@@ -46,7 +46,7 @@ class CrowVision(Node):
     - "/detections/confidences", etc. TODO
     """
     def __init__(self, config='config.json'):
-        super().__init__('crow_detector')
+        super().__init__('crow_detector_edge')
 
         #parse config
         CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
@@ -77,12 +77,14 @@ class CrowVision(Node):
             self.get_logger().warn("Waiting for any cameras!")
             time.sleep(2)
             self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
-
+        
+        self.m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        
         self.ros = {}
         object_cams = self.config["object_camera_serials"]
         pose_cam = self.config["pose_camera_serial"]
         for cam, serial in zip(self.cameras, self.camera_serials):
-            if serial not in object_cams or serial in pose_cam:
+            if serial not in object_cams and serial in pose_cam:
                 self.get_logger().warn(f"Skipping camera {cam} with serial {serial} - not configured as object camera.")
             camera_topic=cam+"/color/image_raw"
             # create INput listener with raw images
@@ -159,9 +161,7 @@ class CrowVision(Node):
         # assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
         StatTimer.enter("full detection")
-        StatTimer.enter("imgmsg_to_cv2")
         img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
-        StatTimer.exit("imgmsg_to_cv2")
         #img_raw = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 
         StatTimer.enter("infer")
@@ -169,6 +169,44 @@ class CrowVision(Node):
         StatTimer.exit("infer")
         if preds[0] is None:
             return  # do not publish if nothing was detected
+
+        if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
+            StatTimer.enter("compute masks")
+            classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds, frame)
+            StatTimer.exit("compute masks")
+            classes = classes.astype(int).tolist()
+            scores = scores.astype(float).tolist()
+            if len(classes) == 0:
+                return
+
+            if "pub_masks" in self.ros[topic]:
+                # StatTimer.enter("process & pu0b masks")
+                msg_mask = DetectionMask()
+                msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
+                #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)
+                # parse time from incoming msg, pass to outgoing msg
+                msg_mask.header.stamp = msg.header.stamp
+                for mask in msg_mask.masks:
+                    mask.header.stamp = msg.header.stamp
+                msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+                msg_mask.classes = classes
+                msg_mask.class_names = class_names
+                msg_mask.object_ids = [0] * len(classes)
+                msg_mask.scores = scores
+                #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
+                self.ros[topic]["pub_masks"].publish(msg_mask)
+                # StatTimer.exit("process & pub masks")
+            if "pub_bboxes" in self.ros[topic]:
+                msg_bbox = DetectionBBox()
+                msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes]
+                # parse time from incoming msg, pass to outgoing msg
+                msg_bbox.header.stamp = msg.header.stamp
+                msg_bbox.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+                msg_bbox.classes = classes
+                msg_bbox.class_names = class_names
+                msg_bbox.scores = scores
+                # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
+                self.ros[topic]["pub_bboxes"].publish(msg_bbox)
 
         #the input callback triggers the publishers here.
         if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
@@ -189,48 +227,8 @@ class CrowVision(Node):
             msg_img.header.stamp = msg.header.stamp #we always inherit timestamp from the original "time taken", ie stamp from camera topic
             msg_img.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
             #   self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
-            StatTimer.enter("pub annot img")
             self.ros[topic]["pub_img"].publish(msg_img)
-            StatTimer.exit("pub annot img")
 
-        if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
-            StatTimer.enter("compute masks")
-            classes, class_names, scores, bboxes, masks, centroids = self.cnn.raw_inference(img_raw, preds, frame)
-            StatTimer.exit("compute masks")
-            classes = classes.astype(int).tolist()
-            scores = scores.astype(float).tolist()
-            if len(classes) == 0:
-                return
-
-            if "pub_masks" in self.ros[topic]:
-                StatTimer.enter("process & pub masks")
-                msg_mask = DetectionMask()
-                m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-                msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
-                #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)
-                # parse time from incoming msg, pass to outgoing msg
-                msg_mask.header.stamp = msg.header.stamp
-                for mask in msg_mask.masks:
-                    mask.header.stamp = msg.header.stamp
-                msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
-                msg_mask.classes = classes
-                msg_mask.class_names = class_names
-                msg_mask.object_ids = [0] * len(classes)
-                msg_mask.scores = scores
-                #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
-                self.ros[topic]["pub_masks"].publish(msg_mask)
-                StatTimer.exit("process & pub masks")
-            if "pub_bboxes" in self.ros[topic]:
-                msg_bbox = DetectionBBox()
-                msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes]
-                # parse time from incoming msg, pass to outgoing msg
-                msg_bbox.header.stamp = msg.header.stamp
-                msg_bbox.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
-                msg_bbox.classes = classes
-                msg_bbox.class_names = class_names
-                msg_bbox.scores = scores
-                # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
-                self.ros[topic]["pub_bboxes"].publish(msg_bbox)
         StatTimer.try_exit("full detection")
 
 
@@ -243,6 +241,8 @@ def main(args=None):
         rclpy.spin(cnn, executor=mte)
         # rclpy.spin(cnn)
         cnn.destroy_node()
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
     finally:
         cv2.destroyAllWindows()
         rclpy.shutdown()

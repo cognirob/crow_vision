@@ -44,7 +44,7 @@ class CrowVisionPose(Node):
     - "/detections/masks"
     """
     def __init__(self, config='config.json'):
-        super().__init__('crow_detector')
+        super().__init__('pose_detector')
         #parse config
         CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
         with open(CONFIG_DEFAULT) as configFile:
@@ -58,6 +58,8 @@ class CrowVisionPose(Node):
             self.get_logger().warn("Waiting for any cameras!")
             time.sleep(2)
             self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
+
+        self.m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
 
         self.ros = {}
         # object_cams = self.config["object_camera_serials"]
@@ -112,29 +114,28 @@ class CrowVisionPose(Node):
         #img_raw = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 
         # Pose mask
-        if "pub_masks" in self.ros[topic]:
-            object_ids, classes, class_names, scores, masks = self.posenet.inference(img=img_raw)
-            classes = list(map(int, classes))
-            scores = list(map(float, scores)) # Remove this -> get errors
-            # if len(classes) == 0:
-            #     self.get_logger().info("No poses detected, skipping.")
-            #     return
-            msg_mask = DetectionMask()
-            m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-            msg_mask.masks = []
-            for mask in masks:
-                new_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, m_kernel)
-                new_smth = self.cvb_.cv2_to_imgmsg(new_mask, encoding="mono8")
-                msg_mask.masks.append(new_smth)
-            msg_mask.header.stamp = msg.header.stamp
-            for mask in msg_mask.masks:
-                mask.header.stamp = msg.header.stamp
-            msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
-            msg_mask.object_ids = object_ids
-            msg_mask.classes = classes
-            msg_mask.class_names = class_names
-            msg_mask.scores = scores
-            self.ros[topic]["pub_masks"].publish(msg_mask)
+        object_ids, classes, class_names, scores, masks = self.posenet.inference(img=img_raw)
+        classes = list(map(int, classes))
+        scores = list(map(float, scores)) # Remove this -> get errors
+        if len(classes) == 0:
+        #     self.get_logger().info("No poses detected, skipping.")
+            return
+        msg_mask = DetectionMask()
+        msg_mask.masks = []
+        # cv2.imshow("masks", np.max(masks, 0) * 255)
+        # cv2.waitKey(50)
+        for mask in masks:
+            new_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel)
+            new_smth = self.cvb_.cv2_to_imgmsg(new_mask, encoding="mono8")
+            new_smth.header.stamp = msg.header.stamp
+            msg_mask.masks.append(new_smth)
+        msg_mask.header.stamp = msg.header.stamp
+        msg_mask.header.frame_id = msg.header.frame_id
+        msg_mask.object_ids = object_ids
+        msg_mask.classes = classes
+        msg_mask.class_names = class_names
+        msg_mask.scores = scores
+        self.ros[topic]["pub_masks"].publish(msg_mask)
 
 def main(args=None):
     rclpy.init(args=args)
@@ -145,6 +146,8 @@ def main(args=None):
         rclpy.spin(cnn, executor=mte)
         # rclpy.spin(cnn)
         cnn.destroy_node()
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
     finally:
         cv2.destroyAllWindows()
         rclpy.shutdown()
