@@ -85,8 +85,8 @@ class ParticleFilter():
     MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
     ACCELERATION_LIMIT = 0.0005  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
     SPEED_LIMIT = 0.05  # 1m/s is assumed as max speed (higher values are clipped)
-    NEW_MODEL_MIN_UPDATES = 5  # minimum number of measurements required for new model to be reported
-    NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
+    NEW_MODEL_MIN_UPDATES = 2  # minimum number of measurements required for new model to be reported
+    NEW_MODEL_TTL = 0.5  # minimum time in seconds required for new model to be reported
     REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
     NUM_STORED_PCLS = 3 # number of latest pcls to aggregate and send in the pcl message
@@ -536,5 +536,21 @@ class ParticleFilter():
         for last_uuids_i in range(len(last_uuids)):
             if latest_uuids[last_uuids_i] != last_uuids[last_uuids_i]:
                 if last_uuids[last_uuids_i] in self.model_uuid:
-                    self.model_uuid[np.where(self.model_uuid == last_uuids[last_uuids_i])[0][0]  ] = latest_uuids[last_uuids_i]
+                    if latest_uuids[last_uuids_i] != -1:
+
+                        where_a = (np.where(self.model_uuid == latest_uuids[last_uuids_i])[0])
+                        n_updates = self.NEW_MODEL_MIN_UPDATES + 1
+                        last_update = self.last_filter_update
+                        if len(where_a):
+                            where_a = where_a[0]
+                            n_updates = self.model_n_updates[where_a]
+                            last_update = self.model_last_update[where_a]
+                            self._delete_model(where_a)
+
+                        where_b = (np.where(self.model_uuid == last_uuids[last_uuids_i])[0])
+                        if len(where_b):
+                            where_b = where_b[0]
+                            self.model_uuid[where_b] = latest_uuids[last_uuids_i]
+                            self.model_n_updates[where_b] = n_updates + 1  # FIXME: maybe a better solution - without this, corrected model is ignored.
+                            self.model_last_update[where_b] = last_update  # FIXME: maybe a better solution - without this, corrected model is ignored.
         return

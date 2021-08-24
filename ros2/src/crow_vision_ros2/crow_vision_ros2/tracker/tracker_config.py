@@ -1,13 +1,15 @@
+# Not important for ROS2 but used for development simulation
 DEFAULT_ALPHA_NUMERIC_LENGTH = 4
-# If there is a glitch detection, it will delete it after some time/frames
-# so the space doesn't become crowded with glitches
-MEMORY_LOSS_SECONDS = 6 # After how many seconds should tracker delete
-# its inactive objects
 
-TRAJECTORY_MEMORY_SIZE_SECONDS = 4
+# Size in seconds as to how long should the trajectory
+TRAJECTORY_MEMORY_SIZE_SECONDS = 3
 
 # If our object is closer to the wrist than this distance (before disappearing),
 # set the dissipation memory of that object to
-WRIST_OBJECT_CLIP_DISTANCE_LIMIT = 500
-OBJECT_CLOSE_TO_HAND_MEMORY_LOSS_SECONDS = 60
-HAND_OBJECT_MEMORY_LOSS = 120
+WRIST_OBJECT_CLIP_DISTANCE_LIMIT = 0.11
+
+# How many detection needed for setting up the scene objects
+DETECTIONS_FOR_SETUP_NEEDED = 50
+PERCENTAGE_NEEDED_TO_BE_APPROVED = 0.3
+
+TRACKER_ITERATION_HASH_LENGTH = 64

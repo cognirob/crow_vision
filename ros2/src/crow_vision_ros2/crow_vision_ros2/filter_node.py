@@ -49,7 +49,7 @@ class ParticleFilterNode(Node):
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.get_logger().info("Created subscriber for segmented_pcl '{self.SEGMENTED_PCL_TOPIC}'")
         sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos)
-        self.cache = message_filters.Cache(sub, 15, allow_headerless=False)
+        self.cache = message_filters.Cache(sub, 50, allow_headerless=False)
         # self.pubPCLdebug = self.create_publisher(PointCloud2, self.SEGMENTED_PCL_TOPIC + "_debug", qos_profile=qos)  # not used currently
 
         # setup time variables
@@ -67,13 +67,14 @@ class ParticleFilterNode(Node):
         StatTimer.init()
 
         # Tracker initialization
-        self.tracker = Tracker()
+        self.tracker = Tracker(crowracle=self.crowracle)
         self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
         # create approx syncro callbacks
         cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
         subSPcl = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
         sync = message_filters.ApproximateTimeSynchronizer([subSPcl], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
         sync.registerCallback(lambda spcl_msg: self.avatar_callback(spcl_msg))
+        self.get_logger().info("Filter is up")
 
     def add_and_process(self, messages):
         if type(messages) is not list:
@@ -136,15 +137,19 @@ class ParticleFilterNode(Node):
                 uuids_formatted.append(uuid)
 
 
-            last_uuid, latest_uuid = self.tracker.track_and_get_uuids( centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
+            print(f"<filter_node>: Before tracker")
+
+            last_uuid, latest_uuid = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
             print(f"*** last_uuid: {last_uuid}")
             print(f"*** latest_uuid: {latest_uuid}")
             self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
 
+            self.tracker.dump_tracked_objects_info()
 
             #self.get_logger().info(str(estimates))
             poses = []
             dimensions = []
+            tracked = []
             labels = []
             uuids = []
             for pose, label, dims, uuid in estimates:
@@ -155,9 +160,16 @@ class ParticleFilterNode(Node):
                 dimensions.append(dim_msg)
                 labels.append(label)
                 uuids.append(uuid)
-            self.get_logger().info('Publishing objects:' + str(labels))
             pose_array_msg = FilteredPose(poses=poses)
             pose_array_msg.size = dimensions
+            # Differentiate between tracked and non-tracked objects
+            if (len(last_uuid) != 0) and (len(latest_uuid) != 0):
+                for idx in range(len(latest_uuid)):
+                    if latest_uuid[idx] == -1:
+                        tracked.append(False)
+                    else:
+                        tracked.append(True)
+            pose_array_msg.tracked = tracked
             pose_array_msg.label = labels
             pose_array_msg.uuid = uuids
             pose_array_msg.header.stamp = self.get_clock().now().to_msg()
@@ -183,6 +195,7 @@ class ParticleFilterNode(Node):
 
                 pose_array_msg.particles = particles_msg
 
+            self.get_logger().info('Publishing objects:' + str(labels))
             self.filtered_publisher.publish(pose_array_msg)
 
             StatTimer.enter("Filter PCL publish")
@@ -264,14 +277,6 @@ class ParticleFilterNode(Node):
         # print(f"self.tracker.avatar: {self.tracker.avatar}")
         self.tracker.avatar.update_avatar_object(avatar_object_name=label, np_position=np_pcl_center, np_dimensions=np_pcl_dimension)
         self.tracker.avatar.dump_info()
-        # print("")
-        print(f"~~~~~~~ header: {header}")
-        # print(f"~~~~~~~ np_pcl: {np_pcl}")
-        print(f"~~~~~~~ np_pcl_center: {np_pcl_center}")
-        print(f"~~~~~~~ np_pcl_dimension: {np_pcl_dimension}")
-        print(f"~~~~~~~ object_id: {object_id}")
-        print(f"~~~~~~~ label: {label}")
-        print(f"~~~~~~~ confidence: {confidence}")
 
 def main():
     rclpy.init()

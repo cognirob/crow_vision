@@ -32,7 +32,7 @@ from numba import jit
 
 class Locator(Node):
 
-    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 1.6)):
+    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 3.5)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud.
         @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in mm], default 10cm .. 1m. Points in cloud
@@ -64,15 +64,11 @@ class Locator(Node):
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
         # create publisher for located objects (segmented PCLs)
-        qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
+        qos = QoSProfile(depth=50, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
 
         # For now, every camera published segmented hand data PCL.
         self.pubPCL_avatar = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
-        for cam in self.cameras:
-            out_pcl_topic = cam + "/" + "detections/segmented_pointcloud_avatar"
-            self.get_logger().info("Created publisher for topic {}".format(out_pcl_topic))
-
 
         self.cvb = cv_bridge.CvBridge()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
@@ -90,10 +86,11 @@ class Locator(Node):
             cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos, callback_group=cb_group) #listener for pointcloud data from RealSense camera
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos, callback_group=cb_group) #listener for masks from detector node
-            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 60, slop=0.05) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
+        self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
 
     @staticmethod
     @jit(nopython=True, parallel=False)
@@ -117,12 +114,13 @@ class Locator(Node):
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
         if not mask_msg.masks:
-            self.get_logger().info("no masks, no party. Quitting early.")
+            # self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
         cameraData = self.getCameraData(camera)
         masks = np.array([self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks])
         object_ids, class_names, scores = mask_msg.object_ids, mask_msg.class_names, mask_msg.scores
+
         point_cloud, point_rgb, rgb_raw = ftl_pcl2numpy(pcl_msg)
         point_cloud = point_cloud.T
         # tf_mat = tf3.affines.compose(t, tf3.quaternions.quat2mat(q[-1:] + q[:-1]), np.ones(3))
@@ -134,7 +132,8 @@ class Locator(Node):
         imspace = self.project(cameraData["camera_matrix"], point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace[np.isnan(imspace)] = -1 #marking as -1 results in deletion (omission) of these points in 3D, as it's impossible to match to -1
         # dist = np.linalg.norm(point_cloud, axis=0)
-        bad_points = np.logical_or(np.logical_or(point_cloud[2, :] < self.depth_min, point_cloud[2, :] > self.depth_max), point_cloud[0, :] < -0.65)
+        bad_points = np.logical_or(point_cloud[2, :] < self.depth_min, point_cloud[2, :] > self.depth_max)
+        # bad_points = np.logical_or(np.logical_or(point_cloud[2, :] < self.depth_min, point_cloud[2, :] > self.depth_max), point_cloud[0, :] < -0.65)
         # bad_points = np.logical_or(np.logical_or(dist < self.depth_min, dist > self.depth_max), point_cloud[0, :] < -0.65)
         imspace[:, bad_points] = -1
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
@@ -148,9 +147,11 @@ class Locator(Node):
         for where, object_id, class_name, score in zip(wheres, object_ids, class_names, scores):
             # 2. segment PCL & compute median
             # skip pointclouds with too few datapoints to be useful
+            # if class_name in self.avatar_data_classes:
+            #     self.get_logger().error(f"{class_name}")
             if len(where) < self.min_points_pcl:
-                self.get_logger().info(
-                    "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
+            #     self.get_logger().info(
+            #         "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
@@ -170,9 +171,10 @@ class Locator(Node):
             seg_pcl_msg.confidence = float(score)
 
             # Data about hand position is published on different topic
-            avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
-            if class_name in avatar_data_classes:
+            
+            if class_name in self.avatar_data_classes:
                 self.pubPCL_avatar.publish(seg_pcl_msg)
+                self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
             else:
                 self.pubPCL.publish(seg_pcl_msg)
 

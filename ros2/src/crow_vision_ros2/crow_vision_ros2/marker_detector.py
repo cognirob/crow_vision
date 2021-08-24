@@ -1,6 +1,7 @@
 import rclpy #add to package.xml deps
 from rclpy.node import Node
 from ros2param.api import call_get_parameters
+from rcl_interfaces.srv import GetParameters
 
 import sensor_msgs
 #from std_msgs import TransformStamped
@@ -40,6 +41,9 @@ class MarkerDetector(Node):
         self.crowracle = CrowtologyClient(node=self)
         self.pclient = ParamClient()
         self.pclient.declare("robot_done", True)
+        calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
+        self.get_logger().info("Waiting for calibrator to setup cameras")
+        calib_client.wait_for_service()
         self.image_topics, self.cameras, self.camera_instrinsics, self.camera_extrinsics, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["image_topics", "camera_namespaces", "camera_intrinsics", "camera_extrinsics", "camera_frames"]).values]
         while len(self.cameras) == 0: #wait for cams to come online
             self.get_logger().warn("No cams detected, waiting 2s.")
@@ -65,7 +69,7 @@ class MarkerDetector(Node):
             listener = self.create_subscription(msg_type=MarkerMsg,
                                                 topic=topic,
                                                 # we're using the lambda here to pass additional(topic) arg to the listner. Which then calls a different Publisher for relevant topic.
-                                                callback=lambda msg: self.control_callback(msg, topic),
+                                                callback=lambda msg, topic=topic: self.control_callback(msg, topic),
                                                 qos_profile=1) #the listener QoS has to be =1, "keep last only".
             self.get_logger().info('Input listener created on topic: "%s"' % topic)
         self.bridge = cv_bridge.CvBridge()
@@ -127,7 +131,9 @@ class MarkerDetector(Node):
                     mtc_tf_mat = [tf3.affines.compose(tvec_i[0], rmat_i, np.ones(3)) for (tvec_i, rmat_i) in zip(tvec, rmat)]
                     for mtc_tf_mat_i in mtc_tf_mat:
                         pose = np.matmul(np.matmul(ctg_tf_mat, mtc_tf_mat_i), np.array([0, 0, 0, 1]))
-                        self.pose_markers.append(pose[:-1])
+                        pose = pose[:-1]
+                        pose[2] = 0.01
+                        self.pose_markers.append(pose)
                     if self.VISUALIZE:
                         for i in range(len(rvec)):
                             img_out2 = cv2.aruco.drawAxis(image, color_K, distCoeffs, rvec[i], tvec[i], 0.1)
@@ -146,7 +152,7 @@ class MarkerDetector(Node):
 
     def merge_markers(self, poses):
         #poses = [np.asarray([0, 0, 0]), np.asarray([1, 1, 1]), np.asarray([2, 2, 2]), np.asarray([3, 3, 3]), np.asarray([0.001, 0.001, 0])]
-        if self.define_flag == 'storage' and len(marker_poses) > 2:
+        if self.define_flag == 'storage' and len(poses) > 2:
             poses_linkage = linkage(poses, method='complete', metric='euclidean')
             clusters = fcluster(poses_linkage, self.square_length, criterion='distance')
             marker_poses = []
