@@ -186,26 +186,29 @@ class ParticleFilterNode(Node):
             self.filtered_publisher.publish(pose_array_msg)
 
             StatTimer.enter("Filter PCL publish")
+            # get PCL for each model
             pcl_uuids, pcl_points = self.particle_filter.getPclsEstimates()
             pcl_msg = ObjectPointcloud()
             pcl_msg.header.stamp = self.get_clock().now().to_msg()
             pcl_msg.header.frame_id = self.frame_id
             aggregate_pcl = []
             for obj in pcl_points:
-                if len(obj) > 1:
-                    aggregate_pcl.append(np.concatenate(obj, axis=0))
+                if len(obj) > 1:  # if there are more PCLs for this model
+                    aggregate_pcl.append(np.concatenate(obj, axis=0))  # aggregate them
                 else:
                     aggregate_pcl.append(obj[0])
             pcls = []
-            for i, np_pcl in enumerate(aggregate_pcl):
+            for i, np_pcl in enumerate(aggregate_pcl):  # clear empty PCLs
                 if len(np_pcl) > 0:
                     pcls.append(ftl_numpy2pcl(np_pcl.astype(np.float32).T, pcl_msg.header))
                 else:
                     pcl_uuids.pop(i)
+                    labels.pop(i)
             if len(pcl_uuids) > 0:
                 # self.pubPCLdebug.publish(pcls[-1])
                 pcl_msg.uuid = pcl_uuids
                 pcl_msg.pcl = pcls
+                pcl_msg.labels = labels
                 self.pcl_publisher.publish(pcl_msg)
                 StatTimer.exit("Filter PCL publish")
             StatTimer.exit("Filter publishing")

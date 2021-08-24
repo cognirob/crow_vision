@@ -10,6 +10,7 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from rclpy.duration import Duration
 from trio3_ros2_interfaces.msg import Units
 from trio3_ros2_interfaces.srv import GetMaskedPointCloud
+from crow_ontology.crowracle_client import CrowtologyClient
 
 #PointCloud2
 from crow_vision_ros2.utils import ftl_pcl2numpy
@@ -19,13 +20,14 @@ import sys
 
 class PCLItem():
 
-    def __init__(self, uuid, stamp, pcl) -> None:
+    def __init__(self, uuid, stamp, pcl, label) -> None:
         self._uuid = uuid
-        self.update(stamp, pcl)
+        self.update(stamp, pcl, label)
 
-    def update(self, stamp, pcl):
+    def update(self, stamp, pcl, label):
         self._stamp = stamp
         self._pcl = pcl
+        self._label = label
         self._pcl_numpy, _, _ = ftl_pcl2numpy(pcl)  # convert from PointCloud2.msg to numpy array
         self._center = np.mean(self._pcl_numpy, 0)
 
@@ -36,6 +38,10 @@ class PCLItem():
     @property
     def stamp(self):
         return self._stamp
+
+    @property
+    def label(self):
+        return self._label
 
     @property
     def uuid(self):
@@ -68,16 +74,18 @@ class PCLCacher(Node):
             depth=self.PCL_MEMORY_SIZE,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         sub = message_filters.Subscriber(self, ObjectPointcloud, '/filtered_pcls', qos_profile=qos)
+        self.crowracle = CrowtologyClient(node=self)
         self.cache = message_filters.Cache(sub, self.PCL_MEMORY_SIZE, allow_headerless=False)
         self.srv = self.create_service(GetMaskedPointCloud, self.PCL_GETTER_SERVICE_NAME, self.get_pcl)
         self.objects = {}
         self.keep_alive_duration = Duration(seconds=self.KEEP_ALIVE_DURATION)
+        self.get_logger().info("PCL cacher ready.")
 
     def refresh_pcls(self):
         for stamp, msg in zip(self.cache.cache_times, self.cache.cache_msgs):
-            for uid, pcl in zip(msg.uuid, msg.pcl):
+            for uid, pcl, label in zip(msg.uuid, msg.pcl, msg.labels):
                 if uid not in self.objects:  # object is not yet in the database
-                    self.objects[uid] = PCLItem(uid, stamp, pcl)
+                    self.objects[uid] = PCLItem(uid, stamp, pcl, label)
                 else:
                     obj = self.objects[uid]
                     if obj.stamp != stamp:  # object is in the DB but with an old PCL
@@ -96,7 +104,7 @@ class PCLCacher(Node):
         try:
             request_pose = np.r_["0,1,0", [getattr(request.expected_position.position, a) for a in "xyz"]]
             if request.request_units.unit_type == Units.MILIMETERS:
-                request_pose / 1000
+                request_pose /= 1000
             self.get_logger().info(f"Got a request for a segmented PCL near location {str(request_pose.tolist())}")
             response.response_units.unit_type = Units.METERS
             self.refresh_pcls()
