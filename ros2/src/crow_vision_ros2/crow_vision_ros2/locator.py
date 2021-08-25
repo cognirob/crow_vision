@@ -161,7 +161,7 @@ class Locator(Node):
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
             segmented_pcl.header.frame_id = self.global_frame_id
-            segmented_pcl.header.stamp = mask_msg.header.stamp
+            segmented_pcl.header.stamp = pcl_msg.header.stamp
             # wrap together PointCloud2 + label + score => SegmentedPointcloud
             seg_pcl_msg = SegmentedPointcloud()
             seg_pcl_msg.header = segmented_pcl.header
@@ -171,7 +171,7 @@ class Locator(Node):
             seg_pcl_msg.confidence = float(score)
 
             # Data about hand position is published on different topic
-            
+
             if class_name in self.avatar_data_classes:
                 self.pubPCL_avatar.publish(seg_pcl_msg)
                 self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
