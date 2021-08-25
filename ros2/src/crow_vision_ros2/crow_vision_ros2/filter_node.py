@@ -123,6 +123,9 @@ class ParticleFilterNode(Node):
         if self.particle_filter.n_models > 0:
             StatTimer.enter("Filter publishing")
             estimates = self.particle_filter.getEstimates()
+            if len(estimates) == 0:
+                self.get_logger().info("Got no estimates from filter, doing nothing.")
+                return
 
             ####
             # - repair objects internally in the filter
@@ -163,12 +166,17 @@ class ParticleFilterNode(Node):
             pose_array_msg = FilteredPose(poses=poses)
             pose_array_msg.size = dimensions
             # Differentiate between tracked and non-tracked objects
-            if (len(last_uuid) != 0) and (len(latest_uuid) != 0):
-                for idx in range(len(latest_uuid)):
-                    if latest_uuid[idx] == -1:
-                        tracked.append(False)
-                    else:
-                        tracked.append(True)
+            for uid in uuids_formatted:  # FIXME: check if this is correct (last/latest?)
+                if uid in latest_uuid:
+                    tracked.append(True)
+                else:
+                    tracked.append(False)
+            # if (len(last_uuid) != 0) and (len(latest_uuid) != 0):
+            #     for idx in range(len(latest_uuid)):
+            #         if latest_uuid[idx] == -1:
+            #             tracked.append(False)
+            #         else:
+            #             tracked.append(True)
             pose_array_msg.tracked = tracked
             pose_array_msg.label = labels
             pose_array_msg.uuid = uuids
