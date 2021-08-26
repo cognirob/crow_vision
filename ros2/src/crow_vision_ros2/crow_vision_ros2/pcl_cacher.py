@@ -89,7 +89,7 @@ class PCLCacher(Node):
                 else:
                     obj = self.objects[uid]
                     if obj.stamp != stamp:  # object is in the DB but with an old PCL
-                        obj.update(stamp, pcl)
+                        obj.update(stamp, pcl, label)
         # cleanup way too old PCLs
         latest_allowed_time = self.get_clock().now() - self.keep_alive_duration
         stale_uuids = []
