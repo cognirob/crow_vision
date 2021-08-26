@@ -1,7 +1,7 @@
 {
-  "type": "YOLACT", #one of "YOLACT", "Detectron2"
+  "type": "YOLACT",
   "top_k": 20,
-  "threshold": 0.8,
+  "threshold": 0.1,
   ## specify path to weights, relative to the YOLACT_REPO
   #"weights": "./data/yolact/weights/yolact_base_54_800000.pth", #generic COCO weights
   "weights": "./data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth", # uncomment to use CROW model
