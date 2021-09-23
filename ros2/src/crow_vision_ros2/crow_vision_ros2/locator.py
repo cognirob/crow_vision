@@ -31,6 +31,12 @@ from numba import jit
 
 
 class Locator(Node):
+    MIN_X = -2 # TODO
+    MAX_X = 2
+    MIN_Y = -2
+    MAX_Y = 2
+    MIN_Z = -0.01
+    MAX_Z = 0.4
 
     def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 3.5)):
         """
@@ -156,6 +162,11 @@ class Locator(Node):
 
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
             seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
+            # filter points outside the main work area
+            m = np.mean(seg_pcd, axis=1)
+            if m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y or m[2] < self.MIN_Z or m[2] > self.MAX_Z:
+                continue
+
             seg_color = rgb_raw[where]
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
