@@ -61,10 +61,10 @@ class PCLItem():
 
 
 class PCLCacher(Node):
-    PCL_MEMORY_SIZE = 5
+    PCL_MEMORY_SIZE = 30
     PCL_GETTER_SERVICE_NAME = "get_masked_point_cloud_rs"
     MAX_ALLOWED_DISTANCE = 0.2  # in meters
-    KEEP_ALIVE_DURATION = 10
+    KEEP_ALIVE_DURATION = 30
     DEBUG = False
 
     def __init__(self, node_name="pcl_cacher"):
@@ -79,7 +79,12 @@ class PCLCacher(Node):
         self.srv = self.create_service(GetMaskedPointCloud, self.PCL_GETTER_SERVICE_NAME, self.get_pcl)
         self.objects = {}
         self.keep_alive_duration = Duration(seconds=self.KEEP_ALIVE_DURATION)
+        self.create_timer(5, self.print_n_ojs)
         self.get_logger().info("PCL cacher ready.")
+
+    def print_n_ojs(self):
+        self.refresh_pcls()
+        self.get_logger().info(f"# of objs = {len(self.objects)}")
 
     def refresh_pcls(self):
         for stamp, msg in zip(self.cache.cache_times, self.cache.cache_msgs):
@@ -98,7 +103,6 @@ class PCLCacher(Node):
                 stale_uuids.append(uid)
         for uid in stale_uuids:
             del self.objects[uid]
-
 
     def get_pcl(self, request, response):
         try:
