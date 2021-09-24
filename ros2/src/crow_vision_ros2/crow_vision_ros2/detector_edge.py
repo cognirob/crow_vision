@@ -169,6 +169,27 @@ class CrowVision(Node):
         StatTimer.exit("infer")
         if preds[0] is None:
             return  # do not publish if nothing was detected
+            
+        #the input callback triggers the publishers here.
+        if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
+            StatTimer.enter("annotate")
+            img_labeled = self.cnn.label_image(img_raw, copy.deepcopy(preds), copy.deepcopy(frame))
+            img_labeled = cv2.cvtColor(img_labeled, cv2.COLOR_BGR2RGB)
+            StatTimer.exit("annotate")
+
+            if img_labeled.ndim == 3:
+                batch,w,h,c = 1, *img_labeled.shape
+            else:
+                batch,w,h,c = img_labeled.shape
+                img_labeled = img_labeled[0]
+            assert batch==1,"Batch mode not supported in ROS yet"
+
+            msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
+            # parse time from incoming msg, pass to outgoing msg
+            msg_img.header.stamp = msg.header.stamp #we always inherit timestamp from the original "time taken", ie stamp from camera topic
+            msg_img.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+            #   self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
+            self.ros[topic]["pub_img"].publish(msg_img)
 
         if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
             StatTimer.enter("compute masks")
@@ -176,6 +197,7 @@ class CrowVision(Node):
             StatTimer.exit("compute masks")
             classes = classes.astype(int).tolist()
             scores = scores.astype(float).tolist()
+            self.get_logger().error(f"Detected objects: {str(class_names)}")
             if len(classes) == 0:
                 return
 
@@ -207,27 +229,6 @@ class CrowVision(Node):
                 msg_bbox.scores = scores
                 # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_bboxes"].publish(msg_bbox)
-
-        #the input callback triggers the publishers here.
-        if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
-            StatTimer.enter("annotate")
-            img_labeled = self.cnn.label_image(img_raw, copy.deepcopy(preds), copy.deepcopy(frame))
-            img_labeled = cv2.cvtColor(img_labeled, cv2.COLOR_BGR2RGB)
-            StatTimer.exit("annotate")
-
-            if img_labeled.ndim == 3:
-                batch,w,h,c = 1, *img_labeled.shape
-            else:
-                batch,w,h,c = img_labeled.shape
-                img_labeled = img_labeled[0]
-            assert batch==1,"Batch mode not supported in ROS yet"
-
-            msg_img = self.cvb_.cv2_to_imgmsg(img_labeled, encoding="rgb8")
-            # parse time from incoming msg, pass to outgoing msg
-            msg_img.header.stamp = msg.header.stamp #we always inherit timestamp from the original "time taken", ie stamp from camera topic
-            msg_img.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
-            #   self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
-            self.ros[topic]["pub_img"].publish(msg_img)
 
         StatTimer.try_exit("full detection")
 
