@@ -28,8 +28,8 @@ import numpy as np
 
 
 class ParticleFilterNode(Node):
-    UPDATE_INTERVAL = 0.05
-    UPDATE_WINDOW_DURATION = 0.05  # Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
+    UPDATE_INTERVAL = 0.15
+    UPDATE_WINDOW_DURATION = 0.2  # Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
     VISUALIZE_PARTICLES = True  # whether to publish filter particles via ROS message
     SEGMENTED_PCL_TOPIC = "/detections/segmented_pointcloud"
     FILTERED_POSES_TOPIC = "/filtered_poses"
@@ -143,8 +143,8 @@ class ParticleFilterNode(Node):
             print(f"<filter_node>: Before tracker")
 
             last_uuid, latest_uuid = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
-            print(f"*** last_uuid: {last_uuid}")
-            print(f"*** latest_uuid: {latest_uuid}")
+            # print(f"*** last_uuid: {last_uuid}")
+            # print(f"*** latest_uuid: {latest_uuid}")
             self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
 
             self.tracker.dump_tracked_objects_info()
@@ -213,6 +213,8 @@ class ParticleFilterNode(Node):
             pcl_msg.header.stamp = self.get_clock().now().to_msg()
             pcl_msg.header.frame_id = self.frame_id
             aggregate_pcl = []
+            # print("////////////////////")
+            # print(class_names_formatted)
             for obj in pcl_points:
                 if len(obj) > 1:  # if there are more PCLs for this model
                     aggregate_pcl.append(np.concatenate(obj, axis=0))  # aggregate them
@@ -224,12 +226,13 @@ class ParticleFilterNode(Node):
                     pcls.append(ftl_numpy2pcl(np_pcl.astype(np.float32).T, pcl_msg.header))
                 else:
                     pcl_uuids.pop(i)
-                    labels.pop(i)
+                    class_names_formatted.pop(i)
+            # print(len(pcls), len(pcl_uuids), class_names_formatted)
             if len(pcl_uuids) > 0:
                 # self.pubPCLdebug.publish(pcls[-1])
                 pcl_msg.uuid = pcl_uuids
                 pcl_msg.pcl = pcls
-                pcl_msg.labels = labels
+                pcl_msg.labels = [str(x) for x in range(len(pcl_uuids))]  # TODO: class_names_formatted
                 self.pcl_publisher.publish(pcl_msg)
                 StatTimer.exit("Filter PCL publish")
             StatTimer.exit("Filter publishing")
@@ -262,8 +265,8 @@ class ParticleFilterNode(Node):
 
             # if anyupdate:
             #     self.lastMeasurement += self.measurementTolerance
-        else:
-            self.update()
+        # else:
+        self.update()
 
     # Get Avatar PCL and update his parts
     def avatar_callback(self, spcl_msg):
