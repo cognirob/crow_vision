@@ -85,9 +85,12 @@ class PCLCacher(Node):
     def print_n_ojs(self):
         self.refresh_pcls()
         self.get_logger().info(f"# of objs = {len(self.objects)}")
+        # for k, v in self.objects.items():
+        #     self.get_logger().info(f"{k} = {np.mean(v.pcl, axis=0)}")
 
     def refresh_pcls(self):
         for stamp, msg in zip(self.cache.cache_times, self.cache.cache_msgs):
+            # print(msg.pcl)
             for uid, pcl, label in zip(msg.uuid, msg.pcl, msg.labels):
                 if uid not in self.objects:  # object is not yet in the database
                     self.objects[uid] = PCLItem(uid, stamp, pcl, label)
@@ -95,6 +98,7 @@ class PCLCacher(Node):
                     obj = self.objects[uid]
                     if obj.stamp != stamp:  # object is in the DB but with an old PCL
                         obj.update(stamp, pcl, label)
+                # self.get_logger().info(f"PCL size = {np.mean(self.objects[uid].pcl_numpy, axis=0)}")
         # cleanup way too old PCLs
         latest_allowed_time = self.get_clock().now() - self.keep_alive_duration
         stale_uuids = []
