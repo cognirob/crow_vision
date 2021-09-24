@@ -96,6 +96,7 @@ class Tracker:
     ARGS:
     - crowracle: <Class:CrowtologyClient> filter_node passes database client
     """
+    DEBUG = False
 
     def __init__(self, crowracle=None):
         # Current setup detection count
@@ -164,11 +165,13 @@ class Tracker:
                 if smallest_dimensions[a] > smallest_dimensions[b]:
                     if a_b_distance < smallest_dimensions[a]: # REMOVE B -> mark as duplicate
                         parsed_objects[b].duplicate = True
-                        print("<class_duplication_filter> DUPLICATE DETECTED")
+                        if self.DEBUG:
+                            print("<class_duplication_filter> DUPLICATE DETECTED")
                 else:
                     if a_b_distance < smallest_dimensions[b]: # REMOVE A -> mark as duplicate
                         parsed_objects[a].duplicate = True
-                        print("<class_duplication_filter> DUPLICATE DETECTED")
+                        if self.DEBUG:
+                            print("<class_duplication_filter> DUPLICATE DETECTED")
 
         # Remove duplicates -> should take care of 3+ duplicates in the same space
         for object in parsed_objects:
@@ -184,8 +187,8 @@ class Tracker:
         - class_name: <string>
         - parsed_object: <Class:TrackedObject>
         """
-
-        print(f"<tracker> ! Creating new object")
+        if self.DEBUG:
+            print(f"<tracker> ! Creating new object")
         parsed_object.just_updated = True
         if not class_name in self.tracked_objects:
             self.tracked_objects[class_name] = [parsed_object]
@@ -233,19 +236,23 @@ class Tracker:
                 distance_pairs_2d.append(tracked_object_row)
 
         # Format input for the linear_sum_assignment algorithm
-        print(f"*** Linear sum assignment")
+        if self.DEBUG:
+            print(f"*** Linear sum assignment")
         if len(distance_pairs_2d):
             cost_matrix = np.zeros(shape=(len(distance_pairs_2d),len(distance_pairs_2d[0])))
             for row_i in range(len(cost_matrix)):
                 for col_i in range(len(cost_matrix[0])):
                     cost_matrix[row_i][col_i] = distance_pairs_2d[row_i][col_i].distance
-                    print(f"*** tracked_obj #{row_i} distance to detected_object #{col_i} : {distance_pairs_2d[row_i][col_i].distance}")
+                    if self.DEBUG:
+                        print(f"*** tracked_obj #{row_i} distance to detected_object #{col_i} : {distance_pairs_2d[row_i][col_i].distance}")
 
             row_ind, col_ind = linear_sum_assignment(cost_matrix)
-            print(f"row_ind: {row_ind}, col_ind: {col_ind}")
+            if self.DEBUG:
+                print(f"row_ind: {row_ind}, col_ind: {col_ind}")
 
             for idx in range(len(row_ind)):
-                print(f"*** *** Updating tracked_object #{row_ind[idx]} with detected_object #{col_ind[idx]}")
+                if self.DEBUG:
+                    print(f"*** *** Updating tracked_object #{row_ind[idx]} with detected_object #{col_ind[idx]}")
                 distance_pair = distance_pairs_2d[row_ind[idx]][col_ind[idx]]
                 distance_pair.tracked_object.update_by_object(object=distance_pair.new_object, iteration_hash=self.current_iteration_hash)
         return
@@ -288,6 +295,7 @@ class Tracker:
 
             # In last iteration - load objects
             if self.setup_detection_count >= DETECTIONS_FOR_SETUP_NEEDED:
+                # if self.DEBUG:
                 print(f"<tracker> self.setup_detection_history:")
                 for a in self.setup_detection_history:
                     print(f"self.setup_detection_history[i]: {a}")
@@ -321,7 +329,6 @@ class Tracker:
                         "counter": 0}
         # Iterate occurence and save the "approved" objects
         centroid_positions, dimensions, class_names, uuids = ([],[],[],[])
-
         print(f"<tracker>: Loader dictionary: {loader_dict}")
 
         for key in loader_dict:
@@ -374,31 +381,32 @@ class Tracker:
         """
 
         # Flag all existing objects as not (updated) this frame
-        print("<tracker>: 0")
+        if self.DEBUG:
+            print("<tracker>: 0")
 
         self.last_iteration_hash = self.current_iteration_hash
         self.current_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
 
         self.reset_flags()
-
-        print("<tracker>: A")
+        if self.DEBUG:
+            print("<tracker>: A")
 
         # Setup scene objects - after 'DETECTIONS_FOR_SETUP_NEEDED' it will return True
         if not self.setup_scene_objects(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names, uuids=uuids):
             return ([], [])
         else:
             parsed_objects_dict = self.parse_objects(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names, uuids=uuids)
-
-        print("<tracker>: B")
+        if self.DEBUG:
+            print("<tracker>: B")
 
         for class_name in parsed_objects_dict:
             self.evaluate_class_logic(class_name=class_name, parsed_objects=parsed_objects_dict[class_name])
-
-        print("<tracker>: C")
+        if self.DEBUG:
+            print("<tracker>: C")
 
         self.check_inactive_objects_hand_logic()
-
-        print("<tracker>: D")
+        if self.DEBUG:
+            print("<tracker>: D")
 
 
         # Return id's with original order, if some detection are disregarded - return -1
@@ -414,7 +422,8 @@ class Tracker:
             # Find first valid (just updated object) index and return its id
             appended = False
             for object_i in range(idx_ended, len(objects_list)):
-                print(f"idx: {idx}  object.original_order_index: { objects_list[object_i].original_order_index}  object.just_updated: {objects_list[object_i].just_updated}")
+                if self.DEBUG:
+                    print(f"idx: {idx}  object.original_order_index: { objects_list[object_i].original_order_index}  object.just_updated: {objects_list[object_i].just_updated}")
                 # print(f"object.original_order_index: {object.original_order_index}")
                 if objects_list[object_i].just_updated and objects_list[object_i].original_order_index == idx:
                     last_uuid.append(objects_list[object_i].last_uuid)
@@ -521,14 +530,16 @@ class Tracker:
         """
         Print info about all the tracked objects
         """
-
-        print("<tracked>: next lines - all tracked objects")
+        if self.DEBUG:
+            print("<tracked>: next lines - all tracked objects")
         count_objects = 0
         for class_name in self.tracked_objects:
             for tracked_object in self.tracked_objects[class_name]:
                 count_objects += 1
-                print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}, active: {tracked_object.active}, hand_was_near: {tracked_object.hand_was_near} freezed: {tracked_object.freezed}")
-        print(f"<tracker>: All tracked objects count {count_objects}")
+                if self.DEBUG:
+                    print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}, active: {tracked_object.active}, hand_was_near: {tracked_object.hand_was_near} freezed: {tracked_object.freezed}")
+        if self.DEBUG:
+            print(f"<tracker>: All tracked objects count {count_objects}")
 
     #
     def get_object_uuid(self, uuid):
