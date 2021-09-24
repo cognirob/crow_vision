@@ -31,10 +31,10 @@ from numba import jit
 
 
 class Locator(Node):
-    MIN_X = -2 # TODO
-    MAX_X = 2
-    MIN_Y = -2
-    MAX_Y = 2
+    MIN_X = -0.2
+    MAX_X = 1.25
+    MIN_Y = -0.4
+    MAX_Y = 1
     MIN_Z = -0.01
     MAX_Z = 0.4
 
