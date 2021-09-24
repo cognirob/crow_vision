@@ -15,8 +15,16 @@ def generate_launch_description():
     use_edge = LaunchConfiguration("use_edge")
     edge_arg = DeclareLaunchArgument("use_edge", default_value="True")
     use_pose = LaunchConfiguration("use_pose")
-    pose_arg = DeclareLaunchArgument("use_pose", default_value="True")
+    pose_arg = DeclareLaunchArgument("use_pose", default_value="False")
 
+    detector_parameters = {
+                    "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
+                    "config": "data/yolact/weights/weights_yolact_kuka_30/config_train.obj"
+                    # "weights": "data/yolact/weights/weights_yolact_kuka_32/crow_base_93_24523_interrupt.pth",
+                    # "config": "data/yolact/weights/weights_yolact_kuka_32/config_train.obj"
+                    # "weights": "data/yolact/weights/weights_yolact_kuka_33/crow_base_38_80000.pth",
+                    # "config": "data/yolact/weights/weights_yolact_kuka_33/config_train.obj"
+                    }
     #2. detector (2D vision)
     edge_detector_node = launch_ros.actions.Node(
         package='crow_vision_ros2',
@@ -24,10 +32,7 @@ def generate_launch_description():
         output='log',
         condition=IfCondition(use_edge),
         node_name="detector_edge",
-        parameters=[{
-                    "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
-                    "config": "data/yolact/weights/weights_yolact_kuka_30/config_train.obj"
-                    }]
+        parameters=[detector_parameters]
     )
     launchConfigs.append(edge_detector_node)
     detector_node = launch_ros.actions.Node(
@@ -36,10 +41,7 @@ def generate_launch_description():
         output='log',
         condition=UnlessCondition(use_edge),
         node_name="detector",
-        parameters=[{
-                    "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
-                    "config": "data/yolact/weights/weights_yolact_kuka_30/config_train.obj"
-                    }]
+        parameters=[detector_parameters]
     )
     launchConfigs.append(detector_node)
 
