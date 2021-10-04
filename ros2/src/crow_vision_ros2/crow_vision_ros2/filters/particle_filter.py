@@ -225,7 +225,8 @@ class ParticleFilter():
         # merge particles and weights
         samples_weights = torch.cat((self.model_particles, self.particle_weights.unsqueeze(-1)), dim=-1).split(1)
         # update position estimates from particles
-        self.model_states = torch.tensor([self._estimate_model(sw.squeeze().numpy()) for sw in samples_weights])
+        if len(samples_weights[0].squeeze().numpy())>0:
+            self.model_states = torch.tensor([self._estimate_model(sw.squeeze().numpy()) for sw in samples_weights])
         # estimate model parameters (speed & acceleration) TODO: do Kalman filtering?
         # TODO: add gradient backwards error propagation
         model_shifts = self.model_states.sub(old_states)  # could be considered as current actual speed
@@ -517,7 +518,10 @@ class ParticleFilter():
         shift = np.inf
         samples = samples_weights[..., :3].squeeze()
         weights = samples_weights[..., 3].squeeze()
-        mode = np.average(samples, axis=0, weights=weights)
+        if len(samples)>0:
+            mode = np.average(samples, axis=0, weights=weights)
+        else: 
+            mode = []
         iters = 0
         try:
             while shift > self.MEAN_SHIFT_PRECISSION or iters < self.MAX_SHIFT_ITERS:
@@ -529,7 +533,10 @@ class ParticleFilter():
                 shift = np.linalg.norm(mode - mode_old)
                 iters += 1
         except Exception as e:  # noqa
-            return np.average(samples, axis=0, weights=weights)
+            if len(samples)>0:
+                return np.average(samples, axis=0, weights=weights)
+            else:
+                return []
         else:
             return mode
 
