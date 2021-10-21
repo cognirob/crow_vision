@@ -21,7 +21,7 @@ import time
 import copy
 #import os, sys
 from crow_control.utils.profiling import StatTimer
-
+from crow_control.utils import ParamClient
 from yolact_edge.inference_tool import InfTool
 
 
@@ -77,9 +77,12 @@ class CrowVision(Node):
             self.get_logger().warn("Waiting for any cameras!")
             time.sleep(2)
             self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
-        
+
         self.m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-        
+
+        self.pclient = ParamClient()
+        self.pclient.define("detector_alive", True)
+
         self.ros = {}
         object_cams = self.config["object_camera_serials"]
         pose_cam = self.config["pose_camera_serial"]
@@ -152,6 +155,7 @@ class CrowVision(Node):
         @param topic - str, from camera/input on given topic.
         @return nothing, but send new message(s) via output Publishers.
         """
+        self.pclient.detector_alive = True
         if self.noMessagesYet:
             self.get_logger().info("Image received from camera! (will not report on next image callbacks)")
             self.noMessagesYet = False
@@ -169,7 +173,7 @@ class CrowVision(Node):
         StatTimer.exit("infer")
         if preds[0] is None:
             return  # do not publish if nothing was detected
-            
+
         #the input callback triggers the publishers here.
         if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
             StatTimer.enter("annotate")

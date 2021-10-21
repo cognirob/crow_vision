@@ -25,6 +25,7 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 
 import numpy as np
+from crow_control.utils import ParamClient
 
 
 class ParticleFilterNode(Node):
@@ -65,6 +66,9 @@ class ParticleFilterNode(Node):
         self.pcl_publisher = self.create_publisher(ObjectPointcloud, self.FILTERED_PCL_TOPIC, qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
         StatTimer.init()
+
+        self.pclient = ParamClient()
+        self.pclient.define("filter_alive", True)
 
         # Tracker initialization
         self.tracker = Tracker(crowracle=self.crowracle)
@@ -114,6 +118,7 @@ class ParticleFilterNode(Node):
         self.update(now)
 
     def update(self, now=None):
+        self.pclient.filter_alive = True
         self.particle_filter.update()
         if now is not None:
             self.lastFilterUpdate = now

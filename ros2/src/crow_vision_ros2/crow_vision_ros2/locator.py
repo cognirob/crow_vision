@@ -28,6 +28,7 @@ import transforms3d as tf3
 
 from ctypes import *  # convert float to uint32
 from numba import jit
+from crow_control.utils import ParamClient
 
 
 class Locator(Node):
@@ -59,6 +60,9 @@ class Locator(Node):
         # get global transform
         self.robot2global_tf = np.reshape([p.double_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["robot2global_tf"]).values], (4, 4))
         self.global_frame_id = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["global_frame_id"]).values[0].string_value
+
+        self.pclient = ParamClient()
+        self.pclient.define("locator_alive", True)
 
         # Set camera parameters and topics
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
@@ -119,6 +123,7 @@ class Locator(Node):
         return wheres
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
+        self.pclient.locator_alive = True
         if not mask_msg.masks:
             # self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
