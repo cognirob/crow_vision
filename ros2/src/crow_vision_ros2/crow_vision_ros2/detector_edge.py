@@ -155,7 +155,7 @@ class CrowVision(Node):
         @param topic - str, from camera/input on given topic.
         @return nothing, but send new message(s) via output Publishers.
         """
-        self.pclient.detector_alive = True
+        self.pclient.detector_alive = time.time()
         if self.noMessagesYet:
             self.get_logger().info("Image received from camera! (will not report on next image callbacks)")
             self.noMessagesYet = False

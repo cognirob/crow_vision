@@ -1,3 +1,4 @@
+from time import time
 import rclpy
 from rclpy import executors
 from rclpy.node import Node
@@ -118,7 +119,7 @@ class ParticleFilterNode(Node):
         self.update(now)
 
     def update(self, now=None):
-        self.pclient.filter_alive = True
+        self.pclient.filter_alive = time()
         self.particle_filter.update()
         if now is not None:
             self.lastFilterUpdate = now

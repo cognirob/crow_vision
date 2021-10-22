@@ -123,7 +123,7 @@ class Locator(Node):
         return wheres
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
-        self.pclient.locator_alive = True
+        self.pclient.locator_alive = time.time()
         if not mask_msg.masks:
             # self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
