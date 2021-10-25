@@ -37,7 +37,7 @@ class Locator(Node):
     MIN_Y = -0.4
     MAX_Y = 1
     MIN_Z = -0.01
-    MAX_Z = 0.4
+    MAX_Z = 0.15
 
     def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 3.5)):
         """
