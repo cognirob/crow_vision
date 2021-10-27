@@ -86,9 +86,9 @@ class CrowVisionNvidiaPose(Node):
         num_links = len(human_pose['skeleton'])
 
         model = trt_pose.models.resnet18_baseline_att(num_parts, 2 * num_links).cuda().eval()
-
         cluster_path = os.environ["CIIRC_CLUSTER"]
         model_path = os.path.join(cluster_path, "nfs/projects/crow/data/trt_pose/", "resnet18_baseline_att_224x224_A_epoch_249.pth")
+
         model.load_state_dict(torch.load(model_path))
 
         self.parse_objects = ParseObjects(topology)

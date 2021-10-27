@@ -27,6 +27,7 @@ setup(
     entry_points={
         'console_scripts': [
             'detector_pose = crow_vision_ros2.detector_pose:main',
+            'detector_trt = crow_vision_ros2.detector_nvidia_pose:main',
             'detector = crow_vision_ros2.detector:main',
             'detector_edge = crow_vision_ros2.detector_edge:main',
             'calibrator = crow_vision_ros2.calibrator:main',
