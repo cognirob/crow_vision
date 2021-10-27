@@ -30,8 +30,8 @@ from crow_control.utils import ParamClient
 
 
 class ParticleFilterNode(Node):
-    UPDATE_INTERVAL = 0.15
-    UPDATE_WINDOW_DURATION = 0.2  # Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
+    UPDATE_INTERVAL = 0.3
+    # UPDATE_WINDOW_DURATION = 0.2  # NOT USED! Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
     VISUALIZE_PARTICLES = True  # whether to publish filter particles via ROS message
     SEGMENTED_PCL_TOPIC = "/detections/segmented_pointcloud"
     FILTERED_POSES_TOPIC = "/filtered_poses"
@@ -82,10 +82,10 @@ class ParticleFilterNode(Node):
         self.get_logger().info("Filter is up")
 
     def add_and_process(self, messages):
-        if type(messages) is not list:
+        if type(messages) is not list:  # make sure messages is a list for consistency
             messages = [messages]
 
-        if len(messages) == 0:
+        if len(messages) == 0:  # if there are no messages to process, exit
             return
 
         self.get_logger().info(f"Adding {len(messages)} measurements to the filter")
@@ -250,29 +250,24 @@ class ParticleFilterNode(Node):
         if latest_time is not None:  # None -> there are no messages
             # Find timestamp of the oldest message that wasn't processed, yet
             oldest_time = self.cache.getOldestTime()
-            # orig_oldest = oldest_time.seconds_nanoseconds
-            # if oldest_time <= (self.lastFilterUpdate - self.timeSlipWindow):
-            #     oldest_time = self.lastFilterUpdate - self.timeSlipWindow
-            # # if oldest_time <= (self.lastFilterUpdate - self.lastUpdateMeasurementDDiff):
-            # #     oldest_time = self.lastFilterUpdate - self.lastUpdateMeasurementDDiff
             if oldest_time < self.lastMeasurement:
                 oldest_time = self.lastMeasurement
-                # oldest_time += self.measurementTolerance
 
-            anyupdate = False  # helper var to see if there was some update
-            while oldest_time < latest_time:
-                next_time = oldest_time + self.updateWindowDuration
-                messages = self.cache.getInterval(oldest_time, next_time)
-                oldest_time = next_time
-                if len(messages) == 0:
-                    continue
-                self.add_and_process(messages)
-                anyupdate = True
-
+            # anyupdate = False  # helper var to see if there was some update
+            # while oldest_time < latest_time:  # this is old - it uses update window
+            #     next_time = oldest_time + self.updateWindowDuration
+            #     messages = self.cache.getInterval(oldest_time, next_time)
+            #     oldest_time = next_time
+            #     if len(messages) == 0:
+            #         continue
+            #     self.add_and_process(messages)
+            #     anyupdate = True
+            messages = self.cache.getInterval(oldest_time, latest_time)
+            self.add_and_process(messages)
             # if anyupdate:
             #     self.lastMeasurement += self.measurementTolerance
-        # else:
-        self.update()
+        else:
+            self.update()
 
     # Get Avatar PCL and update his parts
     def avatar_callback(self, spcl_msg):
