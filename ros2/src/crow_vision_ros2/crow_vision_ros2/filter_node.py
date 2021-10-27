@@ -3,6 +3,8 @@ import rclpy
 from rclpy import executors
 from rclpy.node import Node
 from rclpy.time import Duration, Time
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 import message_filters
 
 from crow_msgs.msg import SegmentedPointcloud
@@ -50,7 +52,7 @@ class ParticleFilterNode(Node):
             depth=20,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.get_logger().info("Created subscriber for segmented_pcl '{self.SEGMENTED_PCL_TOPIC}'")
-        sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos)
+        sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         self.cache = message_filters.Cache(sub, 50, allow_headerless=False)
         # self.pubPCLdebug = self.create_publisher(PointCloud2, self.SEGMENTED_PCL_TOPIC + "_debug", qos_profile=qos)  # not used currently
 
@@ -75,13 +77,10 @@ class ParticleFilterNode(Node):
         self.tracker = Tracker(crowracle=self.crowracle)
         self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
         # create approx syncro callbacks
-        cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
-        subSPcl = message_filters.Subscriber(self, SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
-        sync = message_filters.ApproximateTimeSynchronizer([subSPcl], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
-        sync.registerCallback(lambda spcl_msg: self.avatar_callback(spcl_msg))
+        self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         self.get_logger().info("Filter is up")
 
-    def add_and_process(self, messages):
+    def add_and_process(self, messages,latest_time):
         if type(messages) is not list:  # make sure messages is a list for consistency
             messages = [messages]
 
@@ -263,7 +262,7 @@ class ParticleFilterNode(Node):
             #     self.add_and_process(messages)
             #     anyupdate = True
             messages = self.cache.getInterval(oldest_time, latest_time)
-            self.add_and_process(messages)
+            self.add_and_process(messages, latest_time)
             # if anyupdate:
             #     self.lastMeasurement += self.measurementTolerance
         else:
@@ -276,11 +275,10 @@ class ParticleFilterNode(Node):
             self.get_logger().info("no avatar data. Quitting early.")
             return  # no mask detections (for some reason)
 
-        header = spcl_msg.header
         np_pcl, _, c = ftl_pcl2numpy(spcl_msg.pcl)
-        object_id = spcl_msg.object_id
+        # object_id = spcl_msg.object_id
         label = str(spcl_msg.label)
-        confidence = float(spcl_msg.confidence)
+        # confidence = float(spcl_msg.confidence)
 
         np_pcl_center = np.median(np_pcl, axis=0).reshape(1, 3)
         np_pcl_dimension = (np.max(np_pcl, axis=0) - np.min(np_pcl, axis=0)).reshape(1, 3)
@@ -294,9 +292,11 @@ def main():
     rclpy.init()
     pfilter = ParticleFilterNode()
     try:
-        rclpy.spin(pfilter)
+        n_threads = 2
+        mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        rclpy.spin(pfilter, executor=mte)
     except KeyboardInterrupt:
-        print("User requested shutdown")
+        print("User requested shutdown.")
     finally:
         pfilter.destroy_node()
 
