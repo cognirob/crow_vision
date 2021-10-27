@@ -80,7 +80,7 @@ class ParticleFilterNode(Node):
         self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         self.get_logger().info("Filter is up")
 
-    def add_and_process(self, messages,latest_time):
+    def add_and_process(self, messages, latest_time):
         if type(messages) is not list:  # make sure messages is a list for consistency
             messages = [messages]
 
@@ -88,11 +88,11 @@ class ParticleFilterNode(Node):
             return
 
         self.get_logger().info(f"Adding {len(messages)} measurements to the filter")
-        latest = self.lastMeasurement
+        # latest = self.lastMeasurement
         for pcl_msg in messages:
             self.frame_id = pcl_msg.header.frame_id
-            if latest < Time.from_msg(pcl_msg.header.stamp):
-                latest = Time.from_msg(pcl_msg.header.stamp)
+            # if latest < Time.from_msg(pcl_msg.header.stamp):
+                # latest = Time.from_msg(pcl_msg.header.stamp)
             label = pcl_msg.label
             score = pcl_msg.confidence
 
@@ -107,13 +107,10 @@ class ParticleFilterNode(Node):
                 ############################################################################
 
                 pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
-
                 self.particle_filter.add_measurement((pcl, class_id, score))
 
-
-
         now = self.get_clock().now()
-        self.lastMeasurement = latest
+        self.lastMeasurement = latest_time
         self.lastUpdateMeasurementDDiff = now - self.lastMeasurement
         self.update(now)
 
