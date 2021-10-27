@@ -59,10 +59,9 @@ class ParticleFilterNode(Node):
         # setup time variables
         self.lastFilterUpdate = self.get_clock().now()  # when was the filter last update (called pf.update())
         self.lastMeasurement = self.get_clock().now()  # timestamp of the last measurement (last segmented PCL message processed)
-        self.updateWindowDuration = Duration(seconds=self.UPDATE_WINDOW_DURATION)
+        # self.updateWindowDuration = Duration(seconds=self.UPDATE_WINDOW_DURATION)
         self.timeSlipWindow = Duration(seconds=1.5)
         self.measurementTolerance = Duration(seconds=0.00001)
-        self.lastUpdateMeasurementDDiff = Duration(seconds=2)
 
         # Publisher for the output of the filter
         self.filtered_publisher = self.create_publisher(FilteredPose, self.FILTERED_POSES_TOPIC, qos)
@@ -110,8 +109,7 @@ class ParticleFilterNode(Node):
                 self.particle_filter.add_measurement((pcl, class_id, score))
 
         now = self.get_clock().now()
-        self.lastMeasurement = latest_time
-        self.lastUpdateMeasurementDDiff = now - self.lastMeasurement
+        self.lastMeasurement = latest_time + self.measurementTolerance
         self.update(now)
 
     def update(self, now=None):
