@@ -57,11 +57,8 @@ class CrowVision(Node):
         # specific imports based on YOLACT / Detectron2
         if self.config["type"] == "YOLACT":
         #     # import CNN - YOLACT
-            YOLACT_REPO='~/crow_vision_yolact/' #use your existing yolact setup
-            import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser('~/yolact_edge/yolact_edge')))
-        #     from inference_tool import InfTool
-        #     #from yolact import Yolact
-        #     #from data import set_cfg
+            YOLACT_REPO='~/crow_vision_yolact/' # For weights path
+            import sys; import os; sys.path.append(os.path.abspath(os.path.expanduser('~/yolact_edge/yolact_edge'))) # Fixes the error while importing obj config
         elif self.config["type"] == "Detectron2":
             import detectron2
         else:
