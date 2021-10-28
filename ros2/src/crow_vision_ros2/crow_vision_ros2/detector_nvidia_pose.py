@@ -26,6 +26,27 @@ print(f"\tver: {torch.__version__}")
 print(f"\tfile: {torch.__file__}")
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
+def parse_named_output(image, pose_data, object_counts, objects, normalized_peaks):
+
+    results = {}
+
+    height = image.shape[0]
+    width = image.shape[1]
+
+    count = int(object_counts[0])
+    for i in range(count):
+        obj = objects[0][i]
+        C = obj.shape[0]
+        for j in range(C):
+            name = pose_data["keypoints"][j]
+            k = int(obj[j])
+            if k >= 0:
+                peak = normalized_peaks[0][j][k]
+                x = round(float(peak[1]) * width)
+                y = round(float(peak[0]) * height)
+                results[name] = (x, y)
+
+    return results
 
 class CrowVisionNvidiaPose(Node):
 
@@ -78,7 +99,8 @@ class CrowVisionNvidiaPose(Node):
         human_pose_json_path = os.path.join(script_loc, 'nvidia_pose/human_pose.json')
 
         with open(human_pose_json_path, 'r') as f:
-            human_pose = json.load(f)
+            self.human_pose = json.load(f)
+            human_pose = self.human_pose
 
         topology = trt_pose.coco.coco_category_to_topology(human_pose)
 
@@ -132,8 +154,28 @@ class CrowVisionNvidiaPose(Node):
             cmap, paf = cmap.detach().cpu(), paf.detach().cpu()
             counts, objects, peaks = self.parse_objects(cmap, paf)
 
+            detections = parse_named_output(img_raw, self.human_pose, counts, objects, peaks)
+            # detections is an dictionary of the following format:
+            # {'left_ear': (126, 59),
+            #  'left_elbow': (185, 203),
+            #  'left_eye': (111, 58),
+            #  'left_shoulder': (169, 107),
+            #  'left_wrist': (121, 221),
+            #  'neck': (116, 110),
+            #  'nose': (101, 70),
+            #  'right_ear': (77, 62),
+            #  'right_elbow': (64, 194),
+            #  'right_eye': (90, 60),
+            #  'right_shoulder': (65, 114),
+            #  'right_wrist': (82, 220)}
+            # where keys are body parts and values are x and y coordinate
+
             msg_mask = DetectionMask()
             msg_mask.header.frame_id = msg.header.frame_id
+
+            print(detections.get("right_wrist"))
+
+            # TODO convert detected data to DetectionMask
 
 
 def main(args=None):
