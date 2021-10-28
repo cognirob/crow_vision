@@ -99,7 +99,7 @@ class CrowVisionNvidiaPose(Node):
         human_pose_json_path = os.path.join(script_loc, 'nvidia_pose/human_pose.json')
 
         with open(human_pose_json_path, 'r') as f:
-            human_pose = json.load(f)
+            self.human_pose = json.load(f)
 
         topology = trt_pose.coco.coco_category_to_topology(human_pose)
 
@@ -153,8 +153,26 @@ class CrowVisionNvidiaPose(Node):
             cmap, paf = cmap.detach().cpu(), paf.detach().cpu()
             counts, objects, peaks = self.parse_objects(cmap, paf)
 
+            detections = parse_named_output(img_raw, self.human_pose, counts, objects, peaks)
+            # detections is an dictionary of the following format:
+            # {'left_ear': (126, 59),
+            #  'left_elbow': (185, 203),
+            #  'left_eye': (111, 58),
+            #  'left_shoulder': (169, 107),
+            #  'left_wrist': (121, 221),
+            #  'neck': (116, 110),
+            #  'nose': (101, 70),
+            #  'right_ear': (77, 62),
+            #  'right_elbow': (64, 194),
+            #  'right_eye': (90, 60),
+            #  'right_shoulder': (65, 114),
+            #  'right_wrist': (82, 220)}
+            # where keys are body parts and values are x and y coordinate
+
             msg_mask = DetectionMask()
             msg_mask.header.frame_id = msg.header.frame_id
+
+            # TODO convert detected data to DetectionMask
 
 
 def main(args=None):
