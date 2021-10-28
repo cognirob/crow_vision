@@ -100,6 +100,7 @@ class CrowVisionNvidiaPose(Node):
 
         with open(human_pose_json_path, 'r') as f:
             self.human_pose = json.load(f)
+            human_pose = self.human_pose
 
         topology = trt_pose.coco.coco_category_to_topology(human_pose)
 
@@ -171,6 +172,8 @@ class CrowVisionNvidiaPose(Node):
 
             msg_mask = DetectionMask()
             msg_mask.header.frame_id = msg.header.frame_id
+
+            print(detections.get("right_wrist"))
 
             # TODO convert detected data to DetectionMask
 
