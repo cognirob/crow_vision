@@ -26,6 +26,27 @@ print(f"\tver: {torch.__version__}")
 print(f"\tfile: {torch.__file__}")
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
+def parse_named_output(image, pose_data, object_counts, objects, normalized_peaks):
+
+    results = {}
+
+    height = image.shape[0]
+    width = image.shape[1]
+
+    count = int(object_counts[0])
+    for i in range(count):
+        obj = objects[0][i]
+        C = obj.shape[0]
+        for j in range(C):
+            name = pose_data["keypoints"][j]
+            k = int(obj[j])
+            if k >= 0:
+                peak = normalized_peaks[0][j][k]
+                x = round(float(peak[1]) * width)
+                y = round(float(peak[0]) * height)
+                results[name] = (x, y)
+
+    return results
 
 class CrowVisionNvidiaPose(Node):
 
