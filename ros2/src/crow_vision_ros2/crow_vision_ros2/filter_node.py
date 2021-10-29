@@ -6,7 +6,7 @@ from rclpy.time import Duration, Time
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 import message_filters
-
+import traceback as tb
 from crow_msgs.msg import SegmentedPointcloud
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 from crow_vision_ros2.filters import ParticleFilter
@@ -35,6 +35,7 @@ class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.3
     # UPDATE_WINDOW_DURATION = 0.2  # NOT USED! Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
     VISUALIZE_PARTICLES = True  # whether to publish filter particles via ROS message
+    VISUALIZE_POSES = True  # whether to publish separate PoseArray for tracked objects
     SEGMENTED_PCL_TOPIC = "/detections/segmented_pointcloud"
     FILTERED_POSES_TOPIC = "/filtered_poses"
     FILTERED_PCL_TOPIC = "/filtered_pcls"
@@ -47,13 +48,21 @@ class ParticleFilterNode(Node):
         # create an instance of PF
         self.particle_filter = ParticleFilter(self.object_properties)  # the main component
 
+        # message counting vars
+        self.received_msg = 0
+        self.messages_processed = 0
+
         # create message cache for segmented PCLs
         qos = QoSProfile(
-            depth=20,
+            depth=30,
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.get_logger().info("Created subscriber for segmented_pcl '{self.SEGMENTED_PCL_TOPIC}'")
         sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         self.cache = message_filters.Cache(sub, 50, allow_headerless=False)
+
+        sub2 = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
+        sub2.registerCallback(self.message_counter_callback)
+
         # self.pubPCLdebug = self.create_publisher(PointCloud2, self.SEGMENTED_PCL_TOPIC + "_debug", qos_profile=qos)  # not used currently
 
         # setup time variables
@@ -61,10 +70,11 @@ class ParticleFilterNode(Node):
         self.lastMeasurement = self.get_clock().now()  # timestamp of the last measurement (last segmented PCL message processed)
         # self.updateWindowDuration = Duration(seconds=self.UPDATE_WINDOW_DURATION)
         self.timeSlipWindow = Duration(seconds=1.5)
-        self.measurementTolerance = Duration(seconds=0.00001)
+        self.measurementTolerance = Duration(nanoseconds=1)
 
         # Publisher for the output of the filter
         self.filtered_publisher = self.create_publisher(FilteredPose, self.FILTERED_POSES_TOPIC, qos)
+        self.debug_pose_publisher = self.create_publisher(PoseArray, self.FILTERED_POSES_TOPIC + "_debug", qos)
         self.pcl_publisher = self.create_publisher(ObjectPointcloud, self.FILTERED_PCL_TOPIC, qos)
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
         StatTimer.init()
@@ -79,7 +89,19 @@ class ParticleFilterNode(Node):
         self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         self.get_logger().info("Filter is up")
 
-    def add_and_process(self, messages, latest_time):
+    def message_counter_callback(self, msg):
+        print(f'received msgs: {self.received_msg}')
+        print(f'processed messages: {self.messages_processed}')
+        
+        self.received_msg += 1
+        print(f'dropped {(1-(self.messages_processed / self.received_msg)) *100}% of messages')
+
+        oldest_time = self.cache.getOldestTime()
+        latest_time = self.cache.getLastestTime()
+
+        print(f'times {[t.seconds_nanoseconds() for t in self.cache.cache_times]}')
+
+    def add_and_process(self, messages):
         if type(messages) is not list:  # make sure messages is a list for consistency
             messages = [messages]
 
@@ -109,7 +131,7 @@ class ParticleFilterNode(Node):
                 self.particle_filter.add_measurement((pcl, class_id, score))
 
         now = self.get_clock().now()
-        self.lastMeasurement = latest_time + self.measurementTolerance
+        # self.lastMeasurement = latest_time + self.measurementTolerance
         self.update(now)
 
     def update(self, now=None):
@@ -164,6 +186,11 @@ class ParticleFilterNode(Node):
                 labels.append(label)
                 uuids.append(uuid)
             pose_array_msg = FilteredPose(poses=poses)
+            if self.VISUALIZE_POSES:
+                pmsg = PoseArray(poses=poses)
+                pmsg.header.stamp = self.get_clock().now().to_msg()
+                pmsg.header.frame_id = self.frame_id
+                self.debug_pose_publisher.publish(pmsg)
             pose_array_msg.size = dimensions
             # Differentiate between tracked and non-tracked objects
             for uid in uuids_formatted:  # FIXME: check if this is correct (last/latest?)
@@ -240,26 +267,43 @@ class ParticleFilterNode(Node):
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
         """
-        latest_time = self.cache.getLastestTime()  # get the time of the last message received
-        if latest_time is not None:  # None -> there are no messages
-            # Find timestamp of the oldest message that wasn't processed, yet
-            oldest_time = self.cache.getOldestTime()
-            if oldest_time < self.lastMeasurement:
-                oldest_time = self.lastMeasurement
+        messages = self.cache.cache_msgs
+        self.cache.cache_msgs = []
+        self.cache.cache_times = []
+        if len(messages) > 0:
+            self.add_and_process(messages)
+            self.messages_processed += len(messages)
+        # # latest_time = self.cache.getLastestTime()  # get the time of the last message received
+        # latest_time = max(self.cache.cache_times)  # get the time of the last message received
+        # if latest_time is not None:  # None -> there are no messages
+        #     # Find timestamp of the oldest message that wasn't processed, yet
+        #     # oldest_time = self.cache.getOldestTime()  # this is BROKEN
+        #     oldest_time =  min(self.cache.cache_times)
+        #     if oldest_time < self.lastMeasurement:
+        #         oldest_time = self.lastMeasurement
 
-            # anyupdate = False  # helper var to see if there was some update
-            # while oldest_time < latest_time:  # this is old - it uses update window
-            #     next_time = oldest_time + self.updateWindowDuration
-            #     messages = self.cache.getInterval(oldest_time, next_time)
-            #     oldest_time = next_time
-            #     if len(messages) == 0:
-            #         continue
-            #     self.add_and_process(messages)
-            #     anyupdate = True
-            messages = self.cache.getInterval(oldest_time, latest_time)
-            self.add_and_process(messages, latest_time)
-            # if anyupdate:
-            #     self.lastMeasurement += self.measurementTolerance
+        #     # anyupdate = False  # helper var to see if there was some update
+        #     # while oldest_time < latest_time:  # this is old - it uses update window
+        #     #     next_time = oldest_time + self.updateWindowDuration
+        #     #     messages = self.cache.getInterval(oldest_time, next_time)
+        #     #     oldest_time = next_time
+        #     #     if len(messages) == 0:
+        #     #         continue
+        #     #     self.add_and_process(messages)
+        #     #     anyupdate = True
+        #     # print(f"oldest-latest: {oldest_time.seconds_nanoseconds()} - {latest_time.seconds_nanoseconds()}")
+        #     try:
+        #         messages = self.cache.getInterval(oldest_time, latest_time)
+        #     except:
+        #         print(oldest_time)
+        #         print(latest_time)
+        #         print([t.seconds_nanoseconds() for t in self.cache.cache_times])
+        #         exit(-1)
+        #     # print(f'message_size: {len(messages)}')
+        #     self.messages_processed += len(messages)
+        #     self.add_and_process(messages, latest_time)
+        #     # if anyupdate:
+        #     #     self.lastMeasurement += self.measurementTolerance
         else:
             self.update()
 
@@ -287,11 +331,15 @@ def main():
     rclpy.init()
     pfilter = ParticleFilterNode()
     try:
-        n_threads = 2
-        mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
-        rclpy.spin(pfilter, executor=mte)
+        # n_threads = 2
+        # mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        # rclpy.spin(pfilter, executor=mte)
+        rclpy.spin(pfilter)
     except KeyboardInterrupt:
         print("User requested shutdown.")
+    except BaseException as e:
+        print(f"Some error had occured: {e}")
+        tb.print_exc()        
     finally:
         pfilter.destroy_node()
 
