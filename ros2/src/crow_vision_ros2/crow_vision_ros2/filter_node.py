@@ -30,6 +30,8 @@ from rclpy.qos import QoSReliabilityPolicy
 import numpy as np
 from crow_control.utils import ParamClient
 
+from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+
 
 class ParticleFilterNode(Node):
     UPDATE_INTERVAL = 0.3
@@ -74,7 +76,7 @@ class ParticleFilterNode(Node):
 
         # Tracker initialization
         self.tracker = Tracker(crowracle=self.crowracle)
-        self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+        self.avatar_data_classes = Avatar.AVATAR_PARTS
         # create approx syncro callbacks
         self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         self.get_logger().info("Filter is up")

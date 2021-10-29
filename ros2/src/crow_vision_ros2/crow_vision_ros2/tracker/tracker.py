@@ -517,7 +517,7 @@ class Tracker:
         closest_wrist_object = None
         distance = float('inf')
 
-        trajectory_objects = [self.avatar.avatar_objects["leftWrist"], self.avatar.avatar_objects["rightWrist"] ]
+        trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"] ]
         for trajectory_object in trajectory_objects:
             dist = trajectory_object.trajectory_memory.get_trajectory_minimal_distance(avatar_object=trajectory_object,object=object)
             if dist < distance:

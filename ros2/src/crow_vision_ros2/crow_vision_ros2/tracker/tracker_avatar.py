@@ -1,7 +1,8 @@
 # ROS2
-from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
-from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT
+from crow_vision_ros2.tracker.tracker_base import Dimensions, Position
+from crow_vision_ros2.tracker.tracker_config import TRAJECTORY_MEMORY_SIZE_SECONDS
 from crow_vision_ros2.tracker.tracker_trajectory import Trajectory
+
 
 class AvatarObject:
     """
@@ -31,21 +32,36 @@ class AvatarObject:
 
         self.trajectory_memory.add_trajectory_point(position=centroid_position)
 
+
 class Avatar:
     """
     Class containing AvatarObject, this class represents a "person" with its
     parts.
     """
 
+    AVATAR_PARTS = [
+        "nose",
+        "left_eye",
+        "right_eye",
+        "left_ear",
+        "right_ear",
+        "left_shoulder",
+        "right_shoulder",
+        "left_elbow",
+        "right_elbow",
+        "left_wrist",
+        "right_wrist",
+        "left_hip",
+        "right_hip",
+        "left_knee",
+        "right_knee",
+        "left_ankle",
+        "right_ankle",
+        "neck"
+    ]
+
     def __init__(self):
-        self.avatar_objects = {
-            "head": AvatarObject(object_name="head"),
-            "leftWrist": AvatarObject(object_name="leftWrist"),
-            "rightWrist": AvatarObject(object_name="rightWrist"),
-            "leftElbow": AvatarObject(object_name="leftElbow"),
-            "rightElbow": AvatarObject(object_name="rightElbow"),
-            "leftShoulder": AvatarObject(object_name="leftShoulder"),
-            "rightShoulder": AvatarObject(object_name="rightShoulder")}
+        self.avatar_objects = {x: AvatarObject(x) for x in Avatar.AVATAR_PARTS}
 
     def update_avatar_object(self, avatar_object_name, np_position, np_dimensions):
         """
@@ -68,4 +84,5 @@ class Avatar:
 
         for key in self.avatar_objects:
             a_obj = self.avatar_objects[key]
-            print(f"<Clsas:Avatar> object: {a_obj.object_name}, centroid_position: {a_obj.centroid_position}, dimensions: {a_obj.dimensions}")
+            print(
+                f"<Clsas:Avatar> object: {a_obj.object_name}, centroid_position: {a_obj.centroid_position}, dimensions: {a_obj.dimensions}")
