@@ -221,9 +221,10 @@ def main():
     rclpy.init()
     locator = Locator()
     try:
-        n_threads = len(locator.cameras)
-        mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
-        rclpy.spin(locator, executor=mte)
+        # n_threads = len(locator.cameras)
+        # mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        # rclpy.spin(locator, executor=mte)
+        rclpy.spin(locator)
     except KeyboardInterrupt:
         print("User requested shutdown.")
     finally:
