@@ -64,7 +64,7 @@ class PCLCacher(Node):
     PCL_MEMORY_SIZE = 30
     PCL_GETTER_SERVICE_NAME = "get_masked_point_cloud_rs"
     MAX_ALLOWED_DISTANCE = 0.2  # in meters
-    KEEP_ALIVE_DURATION = 30
+    KEEP_ALIVE_DURATION = 20
     DEBUG = False
 
     def __init__(self, node_name="pcl_cacher"):
