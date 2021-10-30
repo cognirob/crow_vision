@@ -31,6 +31,8 @@ from ctypes import *  # convert float to uint32
 from numba import jit
 from crow_control.utils import ParamClient
 
+from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+
 
 class Locator(Node):
     MIN_X = -0.2
@@ -104,7 +106,7 @@ class Locator(Node):
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
-        self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+        self.avatar_data_classes = Avatar.AVATAR_PARTS
 
     @staticmethod
     @jit("float32[:, :](float32[:, :],float32[:, :])", nopython=True, parallel=False)
