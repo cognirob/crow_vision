@@ -90,7 +90,7 @@ class ParticleFilter():
     REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
     NUM_STORED_PCLS = 5 # number of latest pcls to aggregate and send in the pcl message
-    MIN_MEAS_CONFIDENCE = 0.1 # minimum confidence value to consider using a measurement
+    MIN_MEAS_CONFIDENCE = 0.3 # minimum confidence value to consider using a measurement
 
     def __init__(self, object_properties):
         self.timer = self.TIMER_CLASS()
