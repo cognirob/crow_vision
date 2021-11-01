@@ -5,6 +5,7 @@ from rcl_interfaces.msg import ParameterType
 from rcl_interfaces.srv import GetParameters
 from ros2param.api import call_get_parameters
 import message_filters
+from rclpy.time import Duration
 
 #Pointcloud
 from crow_msgs.msg import DetectionMask, SegmentedPointcloud
@@ -30,6 +31,9 @@ from ctypes import *  # convert float to uint32
 from numba import jit
 from crow_control.utils import ParamClient
 
+# from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+from crow_vision_ros2.tracker.tracker_avatar import Avatar
+
 
 class Locator(Node):
     MIN_X = -0.2
@@ -46,6 +50,8 @@ class Locator(Node):
             outside this range are dropped. Sometimes camera fails to measure depth and inputs 0.0m as depth, this is to filter out those values.
         """
         super().__init__(node_name)
+        # self.measurementTolerance = Duration(nanoseconds=1)
+
         # Wait for calibrator
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
         self.get_logger().info("Waiting for calibrator to setup cameras")
@@ -76,6 +82,7 @@ class Locator(Node):
         # create publisher for located objects (segmented PCLs)
         qos = QoSProfile(depth=50, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
+        self.pubPCL_debug = self.create_publisher(PointCloud2, '/detections/segmented_pointcloud_debug', qos_profile=qos)
 
         # For now, every camera published segmented hand data PCL.
         self.pubPCL_avatar = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
@@ -100,7 +107,7 @@ class Locator(Node):
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
         self.min_points_pcl = min_points_pcl
-        self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
+        self.avatar_data_classes = Avatar.AVATAR_PARTS
 
     # @jit(nopython=True, parallel=False)
     @staticmethod
@@ -155,8 +162,10 @@ class Locator(Node):
         imspace[:, (imspace[0] < 0) | (imspace[1] < 0) | (
             imspace[1] >= mshape[0]) | (imspace[0] >= mshape[1])] = 0
 
+
         wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
         ctg_tf_mat = cameraData["ctg_tf"]
+        total_pcd = np.zeros((3, 1))
         for where, object_id, class_name, score in zip(wheres, object_ids, class_names, scores):
             # 2. segment PCL & compute median
             # skip pointclouds with too few datapoints to be useful
@@ -173,6 +182,8 @@ class Locator(Node):
             m = np.mean(seg_pcd, axis=1)
             if m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y or m[2] < self.MIN_Z or m[2] > self.MAX_Z:
                 continue
+            # if "2" in camera:
+            total_pcd = np.c_[total_pcd, seg_pcd]
 
             seg_color = rgb_raw[where]
 
@@ -183,6 +194,7 @@ class Locator(Node):
             # wrap together PointCloud2 + label + score => SegmentedPointcloud
             seg_pcl_msg = SegmentedPointcloud()
             seg_pcl_msg.header = segmented_pcl.header
+            seg_pcl_msg.header.stamp.nanosec += 2
             seg_pcl_msg.pcl = segmented_pcl
             seg_pcl_msg.object_id = object_id
             seg_pcl_msg.label = str(class_name)
@@ -195,6 +207,12 @@ class Locator(Node):
                 self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
             else:
                 self.pubPCL.publish(seg_pcl_msg)
+
+        if len(total_pcd) > 0:
+            dmsg = ftl_numpy2pcl(total_pcd, pcl_msg.header)
+            dmsg.header.frame_id = self.global_frame_id
+            dmsg.header.stamp = pcl_msg.header.stamp
+            self.pubPCL_debug.publish(dmsg)
 
     # def compareMaskPCL(self, mask_array, projected_points):  # OLD, SLOW version
     #     a = mask_array.T.astype(np.int32).copy()

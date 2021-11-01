@@ -90,6 +90,7 @@ class ParticleFilter():
     REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
     NUM_STORED_PCLS = 5 # number of latest pcls to aggregate and send in the pcl message
+    MIN_MEAS_CONFIDENCE = 0.3 # minimum confidence value to consider using a measurement
 
     def __init__(self, object_properties):
         self.timer = self.TIMER_CLASS()
@@ -282,7 +283,8 @@ class ParticleFilter():
         for pcl, label, score in self.observations:
             assert pcl.shape[1] == 3
             if self.n_models == 0:  # no models exists -> automatically create model for each PCL
-                self._add_model(pcl, label, score)
+                if score > self.MIN_MEAS_CONFIDENCE:
+                    self._add_model(pcl, label, score)
                 continue
             # compute PCL center
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
@@ -319,9 +321,11 @@ class ParticleFilter():
                     closest_model = np.argmax(close_models)
                     self._append_pcl_to_model(closest_model, pcl, label, score, pcl_center, pcl_dimension)
                 else:
-                    self._add_model(pcl, label, score, pcl_center, pcl_dimension)
+                    if score > self.MIN_MEAS_CONFIDENCE:
+                        self._add_model(pcl, label, score, pcl_center, pcl_dimension)
             else:  # no model is close, add new model
-                self._add_model(pcl, label, score, pcl_center, pcl_dimension)
+                if score > self.MIN_MEAS_CONFIDENCE:
+                    self._add_model(pcl, label, score, pcl_center, pcl_dimension)
 
         # go through aggregated PCLs for each model
         for idx, mpcls in enumerate(self._model_pcls):

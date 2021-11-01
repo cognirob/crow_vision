@@ -25,6 +25,8 @@ class TrackedObject:
     - original_order_index: <int> Position in the input array for tracking
     - last_uuid: <string>
     - latest_uuid: <string>
+
+    last_uuid and latest_uuid (meaning of the names is wrong however – last_uuid is the uuid of the new detection and latest_uuid is the uuid of the TrackedObject which doesn’t change in time)
     """
 
     def __init__(self, class_name, centroid_position, dimensions, original_order_index, last_uuid, latest_uuid):
@@ -265,11 +267,12 @@ class Tracker:
 
         # Remove smaller items which are in THIS FRAME overlapping with bigger items of same class
         parsed_objects_cleaned = self.class_duplication_filter(parsed_objects=parsed_objects)
+        if self.DEBUG:
+            print(f'parsed_onjects_cleaned: {parsed_objects_cleaned}')
 
         if not class_name in self.tracked_objects:
             return
-        else:
-            self.distance_ordering_algorithm(class_name=class_name, parsed_objects=parsed_objects_cleaned)
+        self.distance_ordering_algorithm(class_name=class_name, parsed_objects=parsed_objects_cleaned)
         return
 
     def setup_scene_objects(self, centroid_positions, dimensions, class_names, uuids):
@@ -517,7 +520,7 @@ class Tracker:
         closest_wrist_object = None
         distance = float('inf')
 
-        trajectory_objects = [self.avatar.avatar_objects["leftWrist"], self.avatar.avatar_objects["rightWrist"] ]
+        trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"] ]
         for trajectory_object in trajectory_objects:
             dist = trajectory_object.trajectory_memory.get_trajectory_minimal_distance(avatar_object=trajectory_object,object=object)
             if dist < distance:

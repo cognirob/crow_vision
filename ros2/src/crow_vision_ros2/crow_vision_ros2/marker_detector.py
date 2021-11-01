@@ -76,6 +76,7 @@ class MarkerDetector(Node):
         self.pose_markers = []
 
     def control_callback(self, msg, topic):
+        self.get_logger().info('I got a message: {} \n topic: {}.'.format(msg, topic))
         if 'new_storage' in topic:
             self.define_flag = 'storage'
         elif 'new_position' in topic:
@@ -85,6 +86,8 @@ class MarkerDetector(Node):
             return
         marker_group_info = self.crowracle.getMarkerGroupProps(msg.group_name, language='CZ')
         #marker_group_info = self.crowracle.getMarkerGroupProps('blue')
+        self.get_logger().info('MarkerGroupProps: {}.'.format(marker_group_info))
+
         if marker_group_info.get('dict_num', False):
             self.aruco_dict = cv2.aruco.Dictionary_create(marker_group_info['dict_num'], marker_group_info['size'], marker_group_info['seed'])
             self.define_name = msg.define_name
@@ -121,6 +124,7 @@ class MarkerDetector(Node):
             #     markerCorners, markerIds = cameraMarkers.getMarkers()
 
             if len(markerCornersKeep) > 0: # and cameraMarkers.markersReady:
+                self.get_logger().info('I see {} MarkerCorners.'.format(len(markerCornersKeep)))
                 try:
                     if self.VISUALIZE:
                         img_out1 = cv2.aruco.drawDetectedMarkers(image, markerCorners, markerIds)

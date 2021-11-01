@@ -2,6 +2,7 @@ import operator
 import os
 import time
 
+import PIL
 import commentjson as json
 import cv2
 import numpy as np
@@ -21,11 +22,42 @@ import trt_pose.models
 from trt_pose.draw_objects import DrawObjects
 from trt_pose.parse_objects import ParseObjects
 
+import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
+
 print(f"Running PyTorch:")
 print(f"\tver: {torch.__version__}")
 print(f"\tfile: {torch.__file__}")
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
+try:
+    import pydevd_pycharm
+    pydevd_pycharm.settrace('172.18.0.1', port=25565, stdoutToServer=True, stderrToServer=True)
+    print("Debugger active")
+except Exception:
+    print("Skipping debugger")
+
+def parse_named_output(image, pose_data, object_counts, objects, normalized_peaks):
+
+    results = {}
+
+    height = image.shape[0]
+    width = image.shape[1]
+
+    count = int(object_counts[0])
+    for i in range(count):
+        obj = objects[0][i]
+        C = obj.shape[0]
+        for j in range(C):
+            name = pose_data["keypoints"][j]
+            k = int(obj[j])
+            if k >= 0:
+                peak = normalized_peaks[0][j][k]
+                x = round(float(peak[1]) * width)
+                y = round(float(peak[0]) * height)
+                results[name] = (x, y, j)
+
+    return results
 
 class CrowVisionNvidiaPose(Node):
 
@@ -78,7 +110,8 @@ class CrowVisionNvidiaPose(Node):
         human_pose_json_path = os.path.join(script_loc, 'nvidia_pose/human_pose.json')
 
         with open(human_pose_json_path, 'r') as f:
-            human_pose = json.load(f)
+            self.human_pose = json.load(f)
+            human_pose = self.human_pose
 
         topology = trt_pose.coco.coco_category_to_topology(human_pose)
 
@@ -86,8 +119,10 @@ class CrowVisionNvidiaPose(Node):
         num_links = len(human_pose['skeleton'])
 
         model = trt_pose.models.resnet18_baseline_att(num_parts, 2 * num_links).cuda().eval()
-        cluster_path = os.environ["CIIRC_CLUSTER"]
-        model_path = os.path.join(cluster_path, "nfs/projects/crow/data/trt_pose/", "resnet18_baseline_att_224x224_A_epoch_249.pth")
+        # cluster_path = os.environ["CIIRC_CLUSTER"]
+        # model_path = os.path.join(cluster_path, "nfs/projects/crow/data/trt_pose/", "resnet18_baseline_att_224x224_A_epoch_249.pth")
+        model_path = os.path.expanduser("~/crow2/resnet18_baseline_att_224x224_A_epoch_249.pth")
+
 
         model.load_state_dict(torch.load(model_path))
 
@@ -98,11 +133,7 @@ class CrowVisionNvidiaPose(Node):
 
         self.device = torch.device('cuda')
 
-        try:
-            import pydevd_pycharm
-            pydevd_pycharm.settrace('172.18.0.1', port=25565, stdoutToServer=True, stderrToServer=True)
-        except Exception:
-            print("Skipping debugger")
+        self.i = 0
 
     @staticmethod
     def cropND(img, bounding):
@@ -118,22 +149,89 @@ class CrowVisionNvidiaPose(Node):
         @return nothing, but send new message(s) via output Publishers.
         """
 
-        img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
-        img_raw = CrowVisionNvidiaPose.cropND(img_raw, (224, 224))
+        img = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
+
+        original_height, original_width = img.shape[0], img.shape[1]
+        crop_left = (original_width - 480) / 2
+
+        # print(f"pre: {img.shape}")
+        img = CrowVisionNvidiaPose.cropND(img, (480, 480))
+        img = cv2.resize(img, (224, 224))
+        # print(f"post: {img.shape}")
 
         # Pose mask
         if "pub_masks" in self.ros[topic]:
-            img_raw = np.reshape(img_raw, (1, 3, 224, 224))
-
-            data = torch.from_numpy(img_raw).to(self.device)
+            data = img
+            data = transforms.functional.to_tensor(data).to(self.device)
+            data = data[None, ...]
             data = data.float()
+
 
             cmap, paf = self.model(data)
             cmap, paf = cmap.detach().cpu(), paf.detach().cpu()
             counts, objects, peaks = self.parse_objects(cmap, paf)
 
+            # with open(f"{self.i}.jpg", 'wb') as f:
+            #    print(f"Saving to {self.i}")
+            #    self.draw_objects(img, counts, objects, peaks)
+            #    a = PIL.Image.fromarray(np.uint8(img))
+            #    a.save(f)
+            #    self.i += 1
+
+            detections = parse_named_output(img, self.human_pose, counts, objects, peaks)
+
+            # detections is an dictionary of the following format:
+            # {'left_ear': (126, 59),
+            #  'left_elbow': (185, 203),
+            #  'left_eye': (111, 58),
+            #  'left_shoulder': (169, 107),
+            #  'left_wrist': (121, 221),
+            #  'neck': (116, 110),
+            #  'nose': (101, 70),
+            #  'right_ear': (77, 62),
+            #  'right_elbow': (64, 194),
+            #  'right_eye': (90, 60),
+            #  'right_shoulder': (65, 114),
+            #  'right_wrist': (82, 220)}
+            # where keys are body parts and values are x and y coordinate
+
+            print(detections)
+
+            if len(detections) == 0:
+                return
+
+            # TODO convert detected data to DetectionMask
             msg_mask = DetectionMask()
             msg_mask.header.frame_id = msg.header.frame_id
+            msg_mask.masks = []
+            # msg_mask.object_ids = [] apparently this doesn't exist for some reason?
+            msg_mask.classes = []
+            msg_mask.class_names = []
+            msg_mask.scores = []
+
+            for class_name, (x, y, class_id) in detections.items():
+
+                x *= (480 / 224)
+                y *= (480 / 224)
+                x += crop_left
+
+                mask = np.zeros((original_width, original_height))
+
+                for dx in range(-5, 5):
+                    for dy in range(-5, 5):
+
+                        if x + dx < 0 or x + dx >= original_width or y + dy < 0 or y + dy >= original_height:
+                            continue
+
+                        mask[x + dx, y + dy] = 1
+
+                msg_mask.masks.append(mask)
+                # msg_mask.object_ids.append(0)
+                msg_mask.classes.append(class_id)
+                msg_mask.class_names.append(class_name)
+                msg_mask.scores.append(1.)
+
+            self.ros[topic]["pub_masks"].publish(msg_mask)
 
 
 def main(args=None):

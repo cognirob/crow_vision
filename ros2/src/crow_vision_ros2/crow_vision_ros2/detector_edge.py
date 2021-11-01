@@ -198,7 +198,7 @@ class CrowVision(Node):
             StatTimer.exit("compute masks")
             classes = classes.astype(int).tolist()
             scores = scores.astype(float).tolist()
-            self.get_logger().error(f"Detected objects: {str(class_names)}")
+            # self.get_logger().error(f"Detected objects: {str(class_names)}")
             if len(classes) == 0:
                 return
 
