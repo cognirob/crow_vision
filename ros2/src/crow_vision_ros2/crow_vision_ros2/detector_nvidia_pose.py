@@ -119,8 +119,10 @@ class CrowVisionNvidiaPose(Node):
         num_links = len(human_pose['skeleton'])
 
         model = trt_pose.models.resnet18_baseline_att(num_parts, 2 * num_links).cuda().eval()
-        cluster_path = os.environ["CIIRC_CLUSTER"]
-        model_path = os.path.join(cluster_path, "nfs/projects/crow/data/trt_pose/", "resnet18_baseline_att_224x224_A_epoch_249.pth")
+        # cluster_path = os.environ["CIIRC_CLUSTER"]
+        # model_path = os.path.join(cluster_path, "nfs/projects/crow/data/trt_pose/", "resnet18_baseline_att_224x224_A_epoch_249.pth")
+        model_path = os.path.expanduser("~/crow2/resnet18_baseline_att_224x224_A_epoch_249.pth")
+
 
         model.load_state_dict(torch.load(model_path))
 
@@ -152,10 +154,10 @@ class CrowVisionNvidiaPose(Node):
         original_height, original_width = img.shape[0], img.shape[1]
         crop_left = (original_width - 480) / 2
 
-        print(f"pre: {img.shape}")
+        # print(f"pre: {img.shape}")
         img = CrowVisionNvidiaPose.cropND(img, (480, 480))
         img = cv2.resize(img, (224, 224))
-        print(f"post: {img.shape}")
+        # print(f"post: {img.shape}")
 
         # Pose mask
         if "pub_masks" in self.ros[topic]:
@@ -169,10 +171,10 @@ class CrowVisionNvidiaPose(Node):
             cmap, paf = cmap.detach().cpu(), paf.detach().cpu()
             counts, objects, peaks = self.parse_objects(cmap, paf)
 
-            #with open(f"{self.i}.jpg", 'wb') as f:
+            # with open(f"{self.i}.jpg", 'wb') as f:
             #    print(f"Saving to {self.i}")
             #    self.draw_objects(img, counts, objects, peaks)
-            #   a = PIL.Image.fromarray(np.uint8(img))
+            #    a = PIL.Image.fromarray(np.uint8(img))
             #    a.save(f)
             #    self.i += 1
 

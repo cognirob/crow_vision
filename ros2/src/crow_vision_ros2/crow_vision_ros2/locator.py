@@ -31,7 +31,8 @@ from ctypes import *  # convert float to uint32
 from numba import jit
 from crow_control.utils import ParamClient
 
-from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+# from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+from crow_vision_ros2.tracker.tracker_avatar import Avatar
 
 
 class Locator(Node):

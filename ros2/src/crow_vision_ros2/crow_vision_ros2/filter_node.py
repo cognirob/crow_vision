@@ -30,7 +30,8 @@ from rclpy.qos import QoSReliabilityPolicy
 import numpy as np
 from crow_control.utils import ParamClient
 
-from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+# from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
+from crow_vision_ros2.tracker.tracker_avatar import Avatar
 
 
 class ParticleFilterNode(Node):
