@@ -102,16 +102,18 @@ class Locator(Node):
         self.min_points_pcl = min_points_pcl
         self.avatar_data_classes = ["leftWrist", "rightWrist", "leftElbow", "rightElbow", "leftShoulder", "rightShoulder", "head"]
 
+    # @jit(nopython=True, parallel=False)
     @staticmethod
-    @jit(nopython=True, parallel=False)
+    @jit("float32[:, ::1](float32[:, ::1],float32[:, ::1])", nopython=True, parallel=False, nogil=True, fastmath=False)
     def project(camera_matrix, point_cloud):
         # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = np.dot(camera_matrix, point_cloud)
         # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         return imspace[:2, :] / imspace[2, :]
 
+    # @jit(nopython=True, parallel=False)
     @staticmethod
-    @jit(nopython=True, parallel=False)
+    @jit("List(int64[::1])(int32[:, ::1],uint8[:, :, ::1])", nopython=True, parallel=False, nogil=True, fastmath=False)
     def compareMasksPCL_fast(idxs, masks):
         idxs1d = idxs[1, :] + idxs[0, :] * masks[0].shape[1]
         wheres = []
