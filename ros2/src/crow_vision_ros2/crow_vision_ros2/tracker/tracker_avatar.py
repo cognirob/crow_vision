@@ -40,24 +40,24 @@ class Avatar:
     """
 
     AVATAR_PARTS = [
-        "nose",
-        "left_eye",
-        "right_eye",
-        "left_ear",
-        "right_ear",
-        "left_shoulder",
-        "right_shoulder",
-        "left_elbow",
-        "right_elbow",
+        # "nose",
+        # "left_eye",
+        # "right_eye",
+        # "left_ear",
+        # "right_ear",
+        # "left_shoulder",
+        # "right_shoulder",
+        # "left_elbow",
+        # "right_elbow",
         "left_wrist",
         "right_wrist",
-        "left_hip",
-        "right_hip",
-        "left_knee",
-        "right_knee",
-        "left_ankle",
-        "right_ankle",
-        "neck"
+        # "left_hip",
+        # "right_hip",
+        # "left_knee",
+        # "right_knee",
+        # "left_ankle",
+        # "right_ankle",
+        # "neck"
     ]
 
     def __init__(self):
@@ -85,4 +85,4 @@ class Avatar:
         for key in self.avatar_objects:
             a_obj = self.avatar_objects[key]
             print(
-                f"<Clsas:Avatar> object: {a_obj.object_name}, centroid_position: {a_obj.centroid_position}, dimensions: {a_obj.dimensions}")
+                f"<Class:Avatar> object: {a_obj.object_name}, centroid_position: {a_obj.centroid_position}, dimensions: {a_obj.dimensions}")

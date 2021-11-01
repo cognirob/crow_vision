@@ -103,8 +103,12 @@ class Trajectory:
         # compute distance
         d = self.distance_3d( xyz_tup=(x, y, z), x0y0z0_tup=(P[0], P[1], P[2]))
         d = np.round(d, precision)
+
+        print(f"trajectory: {d}")
         # find the minima
         glob_min_idxs = np.argwhere(d==np.min(d)).ravel()
+        
+        print(f"trajectory_min_idx: {glob_min_idxs}")
         return glob_min_idxs, d
 
     def get_spline_xyz_data(self):
@@ -175,7 +179,7 @@ class Trajectory:
             P = object.centroid_position.get_tuple()
 
             min_idx, d = self.min_distance(x_fine, y_fine, z_fine, P)
-            return d[min_idx]
+            return d[min_idx][0]
         else:
             return self.distance_3d(xyz_tup=avatar_object.centroid_position.get_tuple() , x0y0z0_tup=object.centroid_position.get_tuple())
 

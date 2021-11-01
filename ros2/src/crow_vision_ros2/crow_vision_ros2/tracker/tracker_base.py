@@ -61,6 +61,10 @@ class Dimensions:
     def get_numpy_array(self):
         return np.array([[self.x, self.y, self.z]   ])
 
+    def __repr__(self) -> str:
+        return f"x: {self.x}\ny: {self.y}\nz: {self.z};  "
+
+
 class Position:
     """
     Class representing a position in 3D space.
@@ -81,6 +85,9 @@ class Position:
         return (self.x, self.y, self.z)
     def get_list(self):
         return [self.x, self.y, self.z]
+
+    def __repr__(self) -> str:
+        return f"x: {self.x}\ny: {self.y}\nz: {self.z};  "
 
     def get_distance_to(self, other_position):
         my_tuple = self.get_tuple()

@@ -30,7 +30,6 @@ from rclpy.qos import QoSReliabilityPolicy
 import numpy as np
 from crow_control.utils import ParamClient
 
-# from ros2.src.crow_vision_ros2.crow_vision_ros2.tracker.tracker_avatar import Avatar
 from crow_vision_ros2.tracker.tracker_avatar import Avatar
 
 
@@ -64,7 +63,7 @@ class ParticleFilterNode(Node):
         self.cache = message_filters.Cache(sub, 50, allow_headerless=False)
 
         sub2 = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
-        sub2.registerCallback(self.message_counter_callback)
+        # sub2.registerCallback(self.message_counter_callback)
 
         # self.pubPCLdebug = self.create_publisher(PointCloud2, self.SEGMENTED_PCL_TOPIC + "_debug", qos_profile=qos)  # not used currently
 
@@ -138,6 +137,7 @@ class ParticleFilterNode(Node):
         self.update(now)
 
     def update(self, now=None):
+        StatTimer.enter("Filter node update loop")
         self.pclient.filter_alive = time()
         self.particle_filter.update()
         if now is not None:
@@ -166,11 +166,14 @@ class ParticleFilterNode(Node):
 
 
             print(f"<filter_node>: Before tracker")
-
+            StatTimer.enter("tracking")
             last_uuid, latest_uuid = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
             # print(f"*** last_uuid: {last_uuid}")
             # print(f"*** latest_uuid: {latest_uuid}")
+            StatTimer.exit("tracking")
+            StatTimer.enter("correcting uuids")
             self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
+            StatTimer.exit("correcting uuids")
 
             self.tracker.dump_tracked_objects_info()
 
@@ -266,6 +269,7 @@ class ParticleFilterNode(Node):
                 self.pcl_publisher.publish(pcl_msg)
                 StatTimer.exit("Filter PCL publish")
             StatTimer.exit("Filter publishing")
+        StatTimer.exit("Filter node update loop")
 
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
