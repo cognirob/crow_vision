@@ -66,9 +66,6 @@ class Locator(Node):
         self.robot2global_tf = np.reshape([p.double_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["robot2global_tf"]).values], (4, 4))
         self.global_frame_id = call_get_parameters(node=self, node_name="/calibrator", parameter_names=["global_frame_id"]).values[0].string_value
 
-        self.pclient = ParamClient()
-        self.pclient.define("locator_alive", True)
-
         # Set camera parameters and topics
         self.camera_instrinsics = [json.loads(cintr) for cintr in self.camera_instrinsics]
         self.camera_extrinsics = [json.loads(cextr) for cextr in self.camera_extrinsics]
@@ -102,24 +99,29 @@ class Locator(Node):
             cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos, callback_group=cb_group) #listener for pointcloud data from RealSense camera
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos, callback_group=cb_group) #listener for masks from detector node
-            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 60, slop=0.05) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 80, slop=0.12) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
+
+        self.pclient = ParamClient()
+        self.pclient.define("locator_alive", time.time())
+        self.pclient.define("located_objects", [])
+        self.pclient.define("located_avatars", [])
 
         self.min_points_pcl = min_points_pcl
         self.avatar_data_classes = Avatar.AVATAR_PARTS
 
-    # @jit(nopython=True, parallel=False)
     @staticmethod
-    @jit("float32[:, ::1](float32[:, ::1],float32[:, ::1])", nopython=True, parallel=False, nogil=True, fastmath=False)
+    # @jit(nopython=True, parallel=False)
+    @jit("float32[:, ::1](float32[:, ::1],float32[:, ::1])", nopython=True, parallel=False, nogil=False, fastmath=False)
     def project(camera_matrix, point_cloud):
         # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = np.dot(camera_matrix, point_cloud)
         # [u,v,w] -> [u/w, v/w, w/w] -> [u',v'] = 2D
         return imspace[:2, :] / imspace[2, :]
 
-    # @jit(nopython=True, parallel=False)
     @staticmethod
-    @jit("List(int64[::1])(int32[:, ::1],uint8[:, :, ::1])", nopython=True, parallel=False, nogil=True, fastmath=False)
+    # @jit(nopython=True, parallel=False)
+    @jit("List(int64[::1])(int32[:, ::1],uint8[:, :, ::1])", nopython=True, parallel=False, nogil=False, fastmath=False)
     def compareMasksPCL_fast(idxs, masks):
         idxs1d = idxs[1, :] + idxs[0, :] * masks[0].shape[1]
         wheres = []
@@ -160,7 +162,6 @@ class Locator(Node):
         mshape = masks[0].shape
         imspace[:, (imspace[0] < 0) | (imspace[1] < 0) | (
             imspace[1] >= mshape[0]) | (imspace[0] >= mshape[1])] = 0
-
 
         wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
         ctg_tf_mat = cameraData["ctg_tf"]
@@ -203,9 +204,11 @@ class Locator(Node):
 
             if class_name in self.avatar_data_classes:
                 self.pubPCL_avatar.publish(seg_pcl_msg)
-                self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
+                self.pclient.located_avatars += [time.time()]
+                # self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
             else:
                 self.pubPCL.publish(seg_pcl_msg)
+                self.pclient.located_objects += [time.time()]
 
         if len(total_pcd) > 0:
             dmsg = ftl_numpy2pcl(total_pcd, pcl_msg.header)
@@ -240,10 +243,10 @@ def main():
     rclpy.init()
     locator = Locator()
     try:
-        # n_threads = len(locator.cameras)
-        # mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
-        # rclpy.spin(locator, executor=mte)
-        rclpy.spin(locator)
+        n_threads = len(locator.cameras)
+        mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        rclpy.spin(locator, executor=mte)
+        # rclpy.spin(locator)
     except KeyboardInterrupt:
         print("User requested shutdown.")
     finally:

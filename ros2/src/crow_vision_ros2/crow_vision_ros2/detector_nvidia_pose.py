@@ -144,6 +144,7 @@ class CrowVisionNvidiaPose(Node):
 
         self.pclient = ParamClient()
         self.pclient.define("pose_alive", True)
+        self.pclient.define("detected_avatars", [])
 
     @staticmethod
     def cropND(img, bounding):
@@ -158,7 +159,7 @@ class CrowVisionNvidiaPose(Node):
         @param topic - str, from camera/input on given topic.
         @return nothing, but send new message(s) via output Publishers.
         """
-        self.pclient.detector_alive = time.time()
+        self.pclient.pose_alive = time.time()
         # start = time.time()
         img = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
 
@@ -292,8 +293,11 @@ class CrowVisionNvidiaPose(Node):
                 msg_mask.class_names.append(class_name)
                 msg_mask.scores.append(1.)
                 # self.get_logger().warn(f"Mask publishing takes {time.time() - start:0.3f} seconds")
+            
             try:
                 self.ros[topic]["pub_masks"].publish(msg_mask)
+                now = time.time()
+                self.pclient.detected_avatars += len(msg_mask.classes) * [now]
             except BaseException as e:
                 self.get_logger().error(f"Exception when publishing the mask:\n{e}")
             # else:

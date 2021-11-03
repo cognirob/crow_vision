@@ -77,9 +77,6 @@ class CrowVision(Node):
 
         self.m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 
-        self.pclient = ParamClient()
-        self.pclient.define("detector_alive", True)
-
         self.ros = {}
         object_cams = self.config["object_camera_serials"]
         pose_cam = self.config["pose_camera_serial"]
@@ -143,8 +140,12 @@ class CrowVision(Node):
         )
         assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
         self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"], config=cfg)
-        print('Hi from crow_vision_ros2.')
+
+        self.pclient = ParamClient()
+        self.pclient.define("detector_alive", True)
+        self.pclient.define("detected_objects", [])
         StatTimer.init()
+        print('Detector online.')
 
     def input_callback(self, msg, topic):
         """
@@ -219,6 +220,8 @@ class CrowVision(Node):
                 msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_masks"].publish(msg_mask)
+                now = time.time()
+                self.pclient.detected_objects += len(msg_mask.classes) * [now]
                 # StatTimer.exit("process & pub masks")
             if "pub_bboxes" in self.ros[topic]:
                 msg_bbox = DetectionBBox()
