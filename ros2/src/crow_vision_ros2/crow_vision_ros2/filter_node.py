@@ -20,7 +20,7 @@ import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
-from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud
+from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud, AssemblyObjectProbability
 from crow_ontology.crowracle_client import CrowtologyClient
 from crow_control.utils.profiling import StatTimer
 
@@ -41,6 +41,7 @@ class ParticleFilterNode(Node):
     SEGMENTED_PCL_TOPIC = "/detections/segmented_pointcloud"
     FILTERED_POSES_TOPIC = "/filtered_poses"
     FILTERED_PCL_TOPIC = "/filtered_pcls"
+    ASSEMBLY_OBJECT_TOPIC = '/assembly_object'
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
@@ -85,10 +86,16 @@ class ParticleFilterNode(Node):
         self.pclient.define("filter_alive", True)
 
         # Tracker initialization
-        self.tracker = Tracker(crowracle=self.crowracle)
+        self.tracker = Tracker(crowracle=self.crowracle, freezeing_cb=self.freezing_cb)
         self.avatar_data_classes = Avatar.AVATAR_PARTS
-        # create approx syncro callbacks
+        # create avatar callback
         self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
+        
+        # create assembly object publisher
+        self.object_pub = self.create_publisher(AssemblyObjectProbability, self.ASSEMBLY_OBJECT_TOPIC, 10)
+        self.assembly_object_types = [getattr(AssemblyObjectProbability, o) for o in sorted(dir(AssemblyObjectProbability)) if o.startswith("O_")]
+        # print(self.assembly_object_types)
+
         self.get_logger().info("Filter is up")
 
     def message_counter_callback(self, msg):
@@ -103,6 +110,17 @@ class ParticleFilterNode(Node):
 
         print(f'times {[t.seconds_nanoseconds() for t in self.cache.cache_times]}')
 
+    def freezing_cb(self, class_name, obj_uuid):
+        # get classes probability and publish object added to workspace message
+        n = len(self.assembly_object_types)
+        probs = np.zeros(n)
+        probs += np.random.rand(n) * 0.01
+        probs[self.assembly_object_types.index(class_name)] = 1
+        probs /= probs.sum()
+        aop = AssemblyObjectProbability(probabilities=probs)
+        self.object_pub.publish(aop)
+        self.get_logger().info(f"Published assembly object probabilities: {aop}")
+
     def add_and_process(self, messages):
         if type(messages) is not list:  # make sure messages is a list for consistency
             messages = [messages]
@@ -110,7 +128,7 @@ class ParticleFilterNode(Node):
         if len(messages) == 0:  # if there are no messages to process, exit
             return
 
-        self.get_logger().info(f"Adding {len(messages)} measurements to the filter")
+        # self.get_logger().info(f"Adding {len(messages)} measurements to the filter")
         # latest = self.lastMeasurement
         for pcl_msg in messages:
             self.frame_id = pcl_msg.header.frame_id
@@ -165,7 +183,7 @@ class ParticleFilterNode(Node):
                 uuids_formatted.append(uuid)
 
 
-            print(f"<filter_node>: Before tracker")
+            # print(f"<filter_node>: Before tracker")
             StatTimer.enter("tracking")
             last_uuid, latest_uuid = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
             # print(f"*** last_uuid: {last_uuid}")
@@ -237,6 +255,7 @@ class ParticleFilterNode(Node):
                 pose_array_msg.particles = particles_msg
 
             self.get_logger().info('Publishing objects:' + str(labels))
+            self.get_logger().info('Tracked:' + str(pose_array_msg.tracked))
             self.filtered_publisher.publish(pose_array_msg)
 
             StatTimer.enter("Filter PCL publish")
