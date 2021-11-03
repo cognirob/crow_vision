@@ -15,7 +15,7 @@ def generate_launch_description():
     use_edge = LaunchConfiguration("use_edge")
     edge_arg = DeclareLaunchArgument("use_edge", default_value="True")
     use_pose = LaunchConfiguration("use_pose")
-    pose_arg = DeclareLaunchArgument("use_pose", default_value="False")
+    pose_arg = DeclareLaunchArgument("use_pose", default_value="True")
 
     detector_parameters = {
                     "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
@@ -24,6 +24,8 @@ def generate_launch_description():
                     # "config": "data/yolact/weights/weights_yolact_kuka_32/config_train.obj"
                     # "weights": "data/yolact/weights/weights_yolact_kuka_33/crow_base_38_80000.pth",
                     # "config": "data/yolact/weights/weights_yolact_kuka_33/config_train.obj"
+                    # "weights": "data/yolact/weights/weights_yolact_kuka_60/crow_base_99_210000.pth",
+                    # "config": "data/yolact/weights/weights_yolact_kuka_60/config_train.obj"
                     }
     #2. detector (2D vision)
     edge_detector_node = launch_ros.actions.Node(
@@ -59,9 +61,9 @@ def generate_launch_description():
 
     pose_detector_node = launch_ros.actions.Node(
         package='crow_vision_ros2',
-        node_executable='detector_pose',
+        node_executable='detector_trt',
         output='screen',
-        node_name="detector_pose",
+        node_name="detector_trt",
         condition=IfCondition(use_pose)
         # parameters=[{
         #             "weights": "data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth",
