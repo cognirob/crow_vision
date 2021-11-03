@@ -130,7 +130,7 @@ class ParticleFilter():
             - computes position estimates
         """
 
-        print(f"* Currently having self.n_models: {self.n_models}") #################################################3
+        # print(f"* Currently having self.n_models: {self.n_models}") #################################################3
 
         if self.n_models == 0:
             if len(self.observations) > 0:
