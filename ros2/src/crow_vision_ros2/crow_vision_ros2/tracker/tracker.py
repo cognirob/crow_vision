@@ -75,7 +75,7 @@ class TrackedObject:
         self.original_order_index = object.original_order_index
 
         # Ros2 particle filter - uuid correction
-        self.last_uuid   = object.latest_uuid
+        self.last_uuid = object.latest_uuid
 
         ### Reset hand adding logic data
         ## Save which hand has been close enough when object dissappeared
@@ -101,7 +101,7 @@ class Tracker:
     """
     DEBUG = False
 
-    def __init__(self, crowracle=None):
+    def __init__(self, crowracle=None, freezeing_cb=None):
         # Current setup detection count
         self.setup_detection_count = 0
         # List of dictionaries - accesible through {"centroid_positions": [...], "dimensions": [...],
@@ -115,6 +115,7 @@ class Tracker:
         # Database client passed as agument from filter node
         self.crowracle = crowracle
         assert(isinstance(self.crowracle, CrowtologyClient))
+        self.freezeing_cb = freezeing_cb
 
         # For the tracker to be able to distinguish different iterations
         # we can use hashes - will be changed every iteration
@@ -527,7 +528,7 @@ class Tracker:
         closest_wrist_object = None
         distance = float('inf')
 
-        trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"] ]
+        trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"]]
         for trajectory_object in trajectory_objects:
             dist = trajectory_object.trajectory_memory.get_trajectory_minimal_distance(avatar_object=trajectory_object,object=object)
             print(f"dist {trajectory_object.object_name} to {object.class_name}: {dist}")
@@ -604,6 +605,9 @@ class Tracker:
 
         object.centroid_position = new_centroid_position
         self.freeze_object(tracked_object=object)
+        # publish the newly frozen object
+        if self.freezeing_cb is not None:
+            self.freezeing_cb(object.class_name, object.latest_uuid)
         return
 
     def add_tracked_object_and_freeze(self, xyz_list, xyz_dimension, class_name, uuid):
