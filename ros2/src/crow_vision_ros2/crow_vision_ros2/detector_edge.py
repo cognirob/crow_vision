@@ -161,6 +161,7 @@ class CrowVision(Node):
         # self.get_logger().error(str(dir(self.ros[topic]["pub_masks"])))
         # assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
+        # StatTimer.enter(topic[:8])
         StatTimer.enter("full detection")
         img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
         #img_raw = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
@@ -203,7 +204,7 @@ class CrowVision(Node):
                 return
 
             if "pub_masks" in self.ros[topic]:
-                # StatTimer.enter("process & pu0b masks")
+                # StatTimer.enter("process & pub masks")
                 msg_mask = DetectionMask()
                 msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
                 #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)

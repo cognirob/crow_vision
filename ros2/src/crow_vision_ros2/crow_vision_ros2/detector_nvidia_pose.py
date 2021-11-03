@@ -24,6 +24,8 @@ from trt_pose.parse_objects import ParseObjects
 
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+from crow_control.utils import ParamClient
+
 
 print(f"Running PyTorch:")
 print(f"\tver: {torch.__version__}")
@@ -140,6 +142,9 @@ class CrowVisionNvidiaPose(Node):
 
         self.i = 0
 
+        self.pclient = ParamClient()
+        self.pclient.define("pose_alive", True)
+
     @staticmethod
     def cropND(img, bounding):
         start = tuple(map(lambda a, da: a // 2 - da // 2, img.shape, bounding))
@@ -153,7 +158,8 @@ class CrowVisionNvidiaPose(Node):
         @param topic - str, from camera/input on given topic.
         @return nothing, but send new message(s) via output Publishers.
         """
-
+        self.pclient.detector_alive = time.time()
+        # start = time.time()
         img = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
 
 
@@ -201,7 +207,7 @@ class CrowVisionNvidiaPose(Node):
             #  'right_wrist': (82, 220)}
             # where keys are body parts and values are x and y coordinate
 
-            print(detections)
+            # print(detections)
 
             if len(detections) == 0:
                 return
@@ -228,7 +234,7 @@ class CrowVisionNvidiaPose(Node):
                 x += crop_left
 
                 
-                print(f'mask_size: {original_height}, {original_width}')
+                # print(f'mask_size: {original_height}, {original_width}')
                 
                 USE_NP = False
                 if USE_NP:
@@ -253,17 +259,13 @@ class CrowVisionNvidiaPose(Node):
                     dilation_img[int(y),int(x)] = 1.0
                     mask = cv2.dilate(dilation_img,kernel,iterations = 1)
 
-                    with open(f"wrist_dilation.jpg", 'wb') as f:
-                        # print(f"Saving to {self.i}")
-                        # self.draw_objects(img, counts, objects, peaks)
-                        img_orig = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
-                        draw = np.maximum(img_orig[:,:,0], np.uint8(mask)*255) 
-                        a = PIL.Image.fromarray(draw)
-                        a.save(f)
-
-
-                
-
+                    # with open(f"wrist_dilation.jpg", 'wb') as f:
+                    #     # print(f"Saving to {self.i}")
+                    #     # self.draw_objects(img, counts, objects, peaks)
+                    #     img_orig = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
+                    #     draw = np.maximum(img_orig[:,:,0], np.uint8(mask)*255) 
+                    #     a = PIL.Image.fromarray(draw)
+                    #     a.save(f)
 
                 # print(f'coordinates: {coordinates}')
                 # where_mask = np.where(np.linalg.norm(coordinates - np.array([x,y]) < DISK_SIZE), 1, 0)
@@ -289,13 +291,13 @@ class CrowVisionNvidiaPose(Node):
                 msg_mask.classes.append(class_id)
                 msg_mask.class_names.append(class_name)
                 msg_mask.scores.append(1.)
-
+                # self.get_logger().warn(f"Mask publishing takes {time.time() - start:0.3f} seconds")
             try:
                 self.ros[topic]["pub_masks"].publish(msg_mask)
             except BaseException as e:
                 self.get_logger().error(f"Exception when publishing the mask:\n{e}")
-            else:
-                self.get_logger().error("Published!")
+            # else:
+            #     self.get_logger().error("Published!")
 
 
 def main(args=None):
