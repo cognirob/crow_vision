@@ -533,16 +533,15 @@ class Tracker:
         """
         Print info about all the tracked objects
         """
-        if self.DEBUG:
-            print("<tracked>: next lines - all tracked objects")
+        # if not self.DEBUG:
+        #     return
+        print("<tracker>: >>> all tracked objects >>>")
         count_objects = 0
         for class_name in self.tracked_objects:
             for tracked_object in self.tracked_objects[class_name]:
                 count_objects += 1
-                if self.DEBUG:
-                    print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}, active: {tracked_object.active}, hand_was_near: {tracked_object.hand_was_near} freezed: {tracked_object.freezed}")
-        if self.DEBUG:
-            print(f"<tracker>: All tracked objects count {count_objects}")
+                print(f"<tracker>: Class name: {class_name}, Position: {tracked_object.centroid_position.get_list()} , uuid: {tracked_object.last_uuid}, active: {tracked_object.active}, hand_was_near: {tracked_object.hand_was_near} freezed: {tracked_object.freezed}")
+        print(f"<tracker>: All tracked objects count {count_objects} <<<")
 
     #
     def get_object_uuid(self, uuid):
@@ -552,7 +551,6 @@ class Tracker:
         ARGS:
         - uuid: <string>
         """
-
         for class_name in self.tracked_objects:
             for tracked_object in self.tracked_objects[class_name]:
                 if tracked_object.last_uuid == uuid:
