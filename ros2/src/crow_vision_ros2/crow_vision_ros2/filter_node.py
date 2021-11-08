@@ -150,6 +150,10 @@ class ParticleFilterNode(Node):
                 pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
                 self.particle_filter.add_measurement((pcl, class_id, score))
 
+            now = self.get_clock().now()
+            mdelay = (now - rclpy.time.Time.from_msg(pcl_msg.header.stamp)).nanoseconds * 1e-9
+            self.get_logger().error(f"Processed pcl in filter, delay {mdelay:0.3f}")
+
         now = self.get_clock().now()
         # self.lastMeasurement = latest_time + self.measurementTolerance
         self.update(now)
@@ -260,7 +264,7 @@ class ParticleFilterNode(Node):
 
             StatTimer.enter("Filter PCL publish")
             # get PCL for each model
-            pcl_uuids, pcl_points = self.particle_filter.getPclsEstimates()
+            pcl_uuids, pcl_points, pcl_labels = self.particle_filter.getPclsEstimates()
             pcl_msg = ObjectPointcloud()
             pcl_msg.header.stamp = self.get_clock().now().to_msg()
             pcl_msg.header.frame_id = self.frame_id
@@ -284,7 +288,7 @@ class ParticleFilterNode(Node):
                 # self.pubPCLdebug.publish(pcls[-1])
                 pcl_msg.uuid = pcl_uuids
                 pcl_msg.pcl = pcls
-                pcl_msg.labels = [str(x) for x in range(len(pcl_uuids))]  # TODO: class_names_formatted
+                pcl_msg.labels = pcl_labels # TODO: class_names_formatted
                 self.pcl_publisher.publish(pcl_msg)
                 StatTimer.exit("Filter PCL publish")
             StatTimer.exit("Filter publishing")
