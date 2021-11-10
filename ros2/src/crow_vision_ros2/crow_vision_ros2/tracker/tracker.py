@@ -7,6 +7,7 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import queue as pyqueue
 import random
+from scipy.spatial import Delaunay
 
 # ROS2
 from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
@@ -100,7 +101,7 @@ class Tracker:
     """
     DEBUG = False
 
-    def __init__(self, crowracle=None):
+    def __init__(self, crowracle):
         # Current setup detection count
         self.setup_detection_count = 0
         # List of dictionaries - accesible through {"centroid_positions": [...], "dimensions": [...],
@@ -113,11 +114,32 @@ class Tracker:
 
         # Database client passed as agument from filter node
         self.crowracle = crowracle
+        self.workspace_hull = None
 
         # For the tracker to be able to distinguish different iterations
         # we can use hashes - will be changed every iteration
         self.current_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
         self.last_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
+
+    def _get_workspace_hull(self):
+        areas_uris = self.crowracle.getStoragesProps()
+        for area_uri in areas_uris:
+            if area_uri['name'] == 'workspace':
+                area_poly = self.crowracle.get_polyhedron(area_uri['uri'])
+                self.workspace_hull = Delaunay(area_poly)
+        if self.workspace_hull is None:
+            print("<tracker> 'workspace' storage doesn't exist!")
+
+    def check_position_in_workspace_area(self, xyz_list):
+        """
+        Check position xyz_list=[x,y,z] in area with name 'workspace'
+        """
+        if self.workspace_hull is None:
+            self._get_workspace_hull()
+            if self.workspace_hull is None:
+                return False
+        res = self.workspace_hull.find_simplex(xyz_list)
+        return res >= 0
 
     def reset_flags(self):
         """
@@ -357,7 +379,7 @@ class Tracker:
         for class_name in parsed_objects_dict:
             for obj in parsed_objects_dict[class_name]:
                 # Check if the object is in the workspace - if so - ignore it
-                if not self.crowracle.check_position_in_workspace_area(xyz_list=obj.centroid_position.get_list()):
+                if not self.check_position_in_workspace_area(xyz_list=obj.centroid_position.get_list()):
                     self.add_tracked_object_logic(class_name=class_name, parsed_object=obj)
         return
 
@@ -462,7 +484,7 @@ class Tracker:
             centroid_position = Position(x=centroid_positions[class_name_i][0], y=centroid_positions[class_name_i][1], z=centroid_positions[class_name_i][2])
 
             # Check if the position is in the workspace
-            if not self.crowracle.check_position_in_workspace_area(xyz_list=centroid_position.get_list()):
+            if not self.check_position_in_workspace_area(xyz_list=centroid_position.get_list()):
                 class_name = class_names[class_name_i]
                 dimension = Dimensions(x=dimensions[class_name_i][0], y=dimensions[class_name_i][1], z=dimensions[class_name_i][2])
 
@@ -502,7 +524,7 @@ class Tracker:
                     # if it was in the 'workspace' environment.
 
                     last_hand_pos_list = tracked_object.close_hand_obj_memory.centroid_position.get_list()
-                    if self.crowracle.check_position_in_workspace_area(xyz_list=last_hand_pos_list):
+                    if self.check_position_in_workspace_area(xyz_list=last_hand_pos_list):
                         # Move object to the workspace (position of the hand in the workspace) and
                         # freeze it there
                         self.move_and_freeze(xyz_list=last_hand_pos_list, uuid=tracked_object.last_uuid)
