@@ -24,6 +24,8 @@ from trt_pose.parse_objects import ParseObjects
 
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+from crow_control.utils import ParamClient
+
 
 print(f"Running PyTorch:")
 print(f"\tver: {torch.__version__}")
@@ -72,14 +74,19 @@ class CrowVisionNvidiaPose(Node):
 
         ## handle multiple inputs (cameras).
         # store the ROS Listeners,Publishers in a dict{}, keys by topic.
-        self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
+        self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
         while len(self.cameras) == 0:
             self.get_logger().warn("Waiting for any cameras!")
             time.sleep(2)
-            self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
+            self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
 
         self.ros = {}
-        for cam in self.cameras:
+        pose_cam = self.config["pose_camera_serial"]
+        for cam, serial in zip(self.cameras, self.camera_serials):
+            if serial not in pose_cam:
+                self.get_logger().warn(f"Skipping camera {cam} with serial {serial} - not configured as pose camera.")
+                continue
+
             camera_topic=cam+"/color/image_raw"
             # create INput listener with raw images
             listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
@@ -135,6 +142,10 @@ class CrowVisionNvidiaPose(Node):
 
         self.i = 0
 
+        self.pclient = ParamClient()
+        self.pclient.define("pose_alive", True)
+        self.pclient.define("detected_avatars", [])
+
     @staticmethod
     def cropND(img, bounding):
         start = tuple(map(lambda a, da: a // 2 - da // 2, img.shape, bounding))
@@ -148,8 +159,10 @@ class CrowVisionNvidiaPose(Node):
         @param topic - str, from camera/input on given topic.
         @return nothing, but send new message(s) via output Publishers.
         """
-
+        self.pclient.pose_alive = time.time()
+        # start = time.time()
         img = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
+
 
         original_height, original_width = img.shape[0], img.shape[1]
         crop_left = (original_width - 480) / 2
@@ -195,7 +208,7 @@ class CrowVisionNvidiaPose(Node):
             #  'right_wrist': (82, 220)}
             # where keys are body parts and values are x and y coordinate
 
-            print(detections)
+            # print(detections)
 
             if len(detections) == 0:
                 return
@@ -203,35 +216,92 @@ class CrowVisionNvidiaPose(Node):
             # TODO convert detected data to DetectionMask
             msg_mask = DetectionMask()
             msg_mask.header.frame_id = msg.header.frame_id
+            msg_mask.header.stamp = msg.header.stamp
             msg_mask.masks = []
-            # msg_mask.object_ids = [] apparently this doesn't exist for some reason?
+            msg_mask.object_ids = []  # apparently this doesn't exist for some reason?
             msg_mask.classes = []
             msg_mask.class_names = []
             msg_mask.scores = []
 
+            DISK_SIZE = 10
+            kernel = np.ones((DISK_SIZE,DISK_SIZE),np.uint8)
+
             for class_name, (x, y, class_id) in detections.items():
+                if "wrist" not in class_name:
+                    continue
 
                 x *= (480 / 224)
                 y *= (480 / 224)
                 x += crop_left
 
-                mask = np.zeros((original_width, original_height))
+                
+                # print(f'mask_size: {original_height}, {original_width}')
+                
+                USE_NP = False
+                if USE_NP:
+                    mask = np.zeros((original_height, original_width), dtype=np.uint8)
+                    coordinates = np.where(mask == 0)
+                    pt = np.multiply(np.ones((coordinates[-1].shape[-1],2)), np.array([y,x]))
+                    every_coordinate = np.stack(coordinates, axis=1)
+                    dist = np.linalg.norm(every_coordinate - pt, axis=1, ord=2)
+                    idx = np.where(dist < DISK_SIZE)
+                    mask[coordinates[0][idx], coordinates[1][idx]] = 1
 
-                for dx in range(-5, 5):
-                    for dy in range(-5, 5):
+                    # save picture with mask for debugging
+                    with open(f"wrist.jpg", 'wb') as f:
+                        # print(f"Saving to {self.i}")
+                        # self.draw_objects(img, counts, objects, peaks)
+                        img_orig = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
+                        draw = np.maximum(img_orig[:,:,0], np.uint8(mask)*255) 
+                        a = PIL.Image.fromarray(draw)
+                        a.save(f)
+                else:
+                    dilation_img = np.zeros((original_height, original_width), dtype=np.uint8)
+                    dilation_img[int(y),int(x)] = 1.0
+                    mask = cv2.dilate(dilation_img,kernel,iterations = 1)
 
-                        if x + dx < 0 or x + dx >= original_width or y + dy < 0 or y + dy >= original_height:
-                            continue
+                    # with open(f"wrist_dilation.jpg", 'wb') as f:
+                    #     # print(f"Saving to {self.i}")
+                    #     # self.draw_objects(img, counts, objects, peaks)
+                    #     img_orig = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
+                    #     draw = np.maximum(img_orig[:,:,0], np.uint8(mask)*255) 
+                    #     a = PIL.Image.fromarray(draw)
+                    #     a.save(f)
 
-                        mask[x + dx, y + dy] = 1
+                # print(f'coordinates: {coordinates}')
+                # where_mask = np.where(np.linalg.norm(coordinates - np.array([x,y]) < DISK_SIZE), 1, 0)
+                # print(where_mask)
+                msg_mask.masks.append(self.cvb_.cv2_to_imgmsg(mask, encoding="mono8"))
 
-                msg_mask.masks.append(mask)
-                # msg_mask.object_ids.append(0)
+                # for dx in range(-5, 5):
+                #     for dy in range(-5, 5):
+
+                #         if x + dx < 0 or x + dx >= original_width or y + dy < 0 or y + dy >= original_height:
+                #             continue
+                #         try:
+                #             mask[int(x + dx), int(y + dy)] = 1
+                #         except BaseException as e:
+                #             self.get_logger().error(f"Exception in mask index:\n{e}")
+                #             self.get_logger().error(f"x = {x}")
+                #             self.get_logger().error(f"dx = {dx}")
+                #             self.get_logger().error(f"y = {y}")
+                #             self.get_logger().error(f"dy = {dy}")
+
+                # msg_mask.masks.append(self.cvb_.cv2_to_imgmsg(mask, encoding="mono8"))
+                msg_mask.object_ids.append(0)
                 msg_mask.classes.append(class_id)
                 msg_mask.class_names.append(class_name)
                 msg_mask.scores.append(1.)
-
-            self.ros[topic]["pub_masks"].publish(msg_mask)
+                # self.get_logger().warn(f"Mask publishing takes {time.time() - start:0.3f} seconds")
+            
+            try:
+                self.ros[topic]["pub_masks"].publish(msg_mask)
+                now = time.time()
+                self.pclient.detected_avatars += len(msg_mask.classes) * [now]
+            except BaseException as e:
+                self.get_logger().error(f"Exception when publishing the mask:\n{e}")
+            # else:
+            #     self.get_logger().error("Published!")
 
 
 def main(args=None):

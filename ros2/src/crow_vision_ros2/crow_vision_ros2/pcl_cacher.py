@@ -78,6 +78,10 @@ class PCLCacher(Node):
         self.cache = message_filters.Cache(sub, self.PCL_MEMORY_SIZE, allow_headerless=False)
         self.srv = self.create_service(GetMaskedPointCloud, self.PCL_GETTER_SERVICE_NAME, self.get_pcl)
         self.objects = {}
+        self.aff_objects = {}
+        self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
+                           "screw_round_thread", "screw_round_head", "screwdriver_handle",
+                           "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
         self.keep_alive_duration = Duration(seconds=self.KEEP_ALIVE_DURATION)
         self.create_timer(5, self.print_n_ojs)
         self.get_logger().info("PCL cacher ready.")
@@ -88,25 +92,45 @@ class PCLCacher(Node):
         # for k, v in self.objects.items():
         #     self.get_logger().info(f"{k} = {np.mean(v.pcl, axis=0)}")
 
-    def refresh_pcls(self):
-        for stamp, msg in zip(self.cache.cache_times, self.cache.cache_msgs):
-            # print(msg.pcl)
-            for uid, pcl, label in zip(msg.uuid, msg.pcl, msg.labels):
-                if uid not in self.objects:  # object is not yet in the database
-                    self.objects[uid] = PCLItem(uid, stamp, pcl, label)
-                else:
-                    obj = self.objects[uid]
-                    if obj.stamp != stamp:  # object is in the DB but with an old PCL
-                        obj.update(stamp, pcl, label)
-                # self.get_logger().info(f"PCL size = {np.mean(self.objects[uid].pcl_numpy, axis=0)}")
-        # cleanup way too old PCLs
+    def remove_stale_pcls(self, objects):
         latest_allowed_time = self.get_clock().now() - self.keep_alive_duration
         stale_uuids = []
-        for uid, obj in self.objects.items():
+        for uid, obj in objects.items():
             if obj.stamp < latest_allowed_time:
                 stale_uuids.append(uid)
         for uid in stale_uuids:
-            del self.objects[uid]
+            print(uid)
+            del objects[uid]
+
+
+    def refresh_pcls(self):
+        for stamp, msg in zip(self.cache.cache_times, self.cache.cache_msgs):
+           # print(len(msg.pcl) == len(msg.uuid) == len(msg.labels))
+            for uid, pcl, label in zip(msg.uuid, msg.pcl, msg.labels):
+                if uid not in self.objects and uid not in self.aff_objects:  # object is not yet in the database
+                    if label in self.aff_classes:
+                        self.aff_objects[uid] = PCLItem(uid, stamp, pcl, label)
+                    else:
+                        self.objects[uid] = PCLItem(uid, stamp, pcl, label)
+                else:
+                    if label in self.aff_classes and uid in self.aff_objects: # affordance object and labels coresspond
+                        obj = self.aff_objects[uid]
+                    elif label not in self.aff_classes and uid in self.objects: # regular object and labels coresspond
+                        obj = self.objects[uid]
+                    elif label in self.aff_classes: # affordance object and labels do not coresspond
+                        obj = self.objects.pop(uid)
+                        self.aff_objects[uid] = obj
+                    else: # regular object and labels do not coresspond
+                        obj = self.aff_objects.pop(uid)
+                        self.objects[uid] = obj
+                    if obj.stamp != stamp or obj.label != label:  # object is in the DB but with an old PCL or has a new label
+                        if obj.label != label:
+                            print("UPDATE", obj.label, label)
+                        obj.update(stamp, pcl, label)
+                # self.get_logger().info(f"PCL size = {np.mean(self.objects[uid].pcl_numpy, axis=0)}")
+        # cleanup way too old PCLs
+        self.remove_stale_pcls(self.objects)
+        self.remove_stale_pcls(self.aff_objects)
 
     def get_pcl(self, request, response):
         try:

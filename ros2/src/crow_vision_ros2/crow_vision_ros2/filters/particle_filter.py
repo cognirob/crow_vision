@@ -130,7 +130,7 @@ class ParticleFilter():
             - computes position estimates
         """
 
-        print(f"* Currently having self.n_models: {self.n_models}") #################################################3
+        # print(f"* Currently having self.n_models: {self.n_models}") #################################################3
 
         if self.n_models == 0:
             if len(self.observations) > 0:
@@ -162,16 +162,22 @@ class ParticleFilter():
         self._estimate(time_delta)
 
     def getPclsEstimates(self):
-        """Return a dict of uuids and corresponding point clouds (aggregated form several last pcls)
+        """Return a dict of uuids and corresponding point clouds and labels (aggregated form several last pcls)
         """
         if self.n_models == 0:
             return {}
         ests_uuids = []
         ests_pcls = []
+        ests_labels = []
         for k, v in self.model_stored_pcls.items():
             ests_uuids.append(k)
-            ests_pcls.append(v[-1:-1*min(self.NUM_STORED_PCLS+1, len(v)+1):-1])# -1*min(self.NUM_STORED_PCLS+1, len(v)+1)])
-        return ests_uuids, ests_pcls
+            v_pcls = v[:,0]
+            v_labels = v[:,1]
+            v_label = mode(v_labels)[0][0]
+            v_label = self.object_properties[v_label]["name"] if v_label in self.object_properties else "unknown"
+            ests_pcls.append(v_pcls[-1:-1*min(self.NUM_STORED_PCLS+1, len(v_pcls)+1):-1])# -1*min(self.NUM_STORED_PCLS+1, len(v)+1)])
+            ests_labels.append(v_label)
+        return ests_uuids, ests_pcls, ests_labels
 
     def getEstimates(self):
         """Return a tuple of "xyz" position, class name, pcl dimensions and with uuid
@@ -417,12 +423,12 @@ class ParticleFilter():
         else:
             self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class, score))
         if self.model_stored_pcls.get(str(self.model_uuid[model_idx])) is None:
-            self.model_stored_pcls[str(self.model_uuid[model_idx])] = [pcl]
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.array([[pcl, est_class]])
         else:
-            self.model_stored_pcls[str(self.model_uuid[model_idx])].append(pcl)
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.append(self.model_stored_pcls[str(self.model_uuid[model_idx])], [[pcl, est_class]], axis=0)
         len_diff = len(self.model_stored_pcls[str(self.model_uuid[model_idx])]) - self.NUM_STORED_PCLS
         if len_diff > 0:
-            del self.model_stored_pcls[str(self.model_uuid[model_idx])][:len_diff]
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = self.model_stored_pcls[str(self.model_uuid[model_idx])][len_diff:]
         self.model_n_updates[model_idx] += 1 #update = receive and append new measurement (pcl) to existing model
         self.model_last_update[model_idx] = self.timer.now #update = receive and append new measurement (pcl) to existing model
 

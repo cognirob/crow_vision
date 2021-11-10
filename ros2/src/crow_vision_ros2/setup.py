@@ -28,6 +28,7 @@ setup(
         'console_scripts': [
             'detector_pose = crow_vision_ros2.detector_pose:main',
             'detector_trt = crow_vision_ros2.detector_nvidia_pose:main',
+            'show_hands = crow_vision_ros2.utils.show_hands:main',
             'detector = crow_vision_ros2.detector:main',
             'detector_edge = crow_vision_ros2.detector_edge:main',
             'calibrator = crow_vision_ros2.calibrator:main',

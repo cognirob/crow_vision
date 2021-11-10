@@ -14,6 +14,7 @@ from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alph
 from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, PERCENTAGE_NEEDED_TO_BE_APPROVED, TRACKER_ITERATION_HASH_LENGTH
 from crow_vision_ros2.tracker.tracker_avatar import Avatar, AvatarObject
 from crow_vision_ros2.tracker.tracker_trajectory import Trajectory
+from crow_ontology.crowracle_client import CrowtologyClient
 
 class TrackedObject:
     """
@@ -75,7 +76,7 @@ class TrackedObject:
         self.original_order_index = object.original_order_index
 
         # Ros2 particle filter - uuid correction
-        self.last_uuid   = object.latest_uuid
+        self.last_uuid = object.latest_uuid
 
         ### Reset hand adding logic data
         ## Save which hand has been close enough when object dissappeared
@@ -101,7 +102,7 @@ class Tracker:
     """
     DEBUG = False
 
-    def __init__(self, crowracle):
+    def __init__(self, crowracle, freezeing_cb=None):
         # Current setup detection count
         self.setup_detection_count = 0
         # List of dictionaries - accesible through {"centroid_positions": [...], "dimensions": [...],
@@ -114,6 +115,9 @@ class Tracker:
 
         # Database client passed as agument from filter node
         self.crowracle = crowracle
+        assert(isinstance(self.crowracle, CrowtologyClient))
+
+        self.freezeing_cb = freezeing_cb
         self.workspace_hull = None
 
         # For the tracker to be able to distinguish different iterations
@@ -507,7 +511,7 @@ class Tracker:
                     if not tracked_object.active:
                         # Check if he is already flagged as being "close to hand" and check
                         # that the object was active last iteration
-                        if not tracked_object.hand_was_near and (tracked_object.active_last_iteration_hash == self.last_iteration_hash):
+                        if not tracked_object.hand_was_near: # and (tracked_object.active_last_iteration_hash == self.last_iteration_hash):
                             distance, wrist_obj = self.get_closest_hand(object=tracked_object)
                             if distance < WRIST_OBJECT_CLIP_DISTANCE_LIMIT:
                                 # Mark tracked object as hand_was_near
@@ -519,15 +523,20 @@ class Tracker:
 
                                 print(f"<tracker>: Object: {tracked_object.class_name} was too close to the hand before disappearing")
 
-                if not tracked_object.active and tracked_object.hand_was_near:
+                if not tracked_object.active and tracked_object.hand_was_near and not tracked_object.freezed:
                     # Check last position of the hand object saved in the tracked object
                     # if it was in the 'workspace' environment.
+                    print(f"<tracker>: Object: {tracked_object.class_name} inactive and hand was near.")
 
                     last_hand_pos_list = tracked_object.close_hand_obj_memory.centroid_position.get_list()
                     if self.check_position_in_workspace_area(xyz_list=last_hand_pos_list):
                         # Move object to the workspace (position of the hand in the workspace) and
                         # freeze it there
+                        print(f"<tracker>: Object: {tracked_object.class_name} frozen in workspace: {last_hand_pos_list}")
                         self.move_and_freeze(xyz_list=last_hand_pos_list, uuid=tracked_object.last_uuid)
+
+                    else:
+                        print(f"<tracker>: Hand {tracked_object.close_hand_obj_memory.object_name} not (yet) in workspace: {last_hand_pos_list}")
 
     def get_closest_hand(self, object):
         """
@@ -542,9 +551,11 @@ class Tracker:
         closest_wrist_object = None
         distance = float('inf')
 
-        trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"] ]
+        trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"]]
         for trajectory_object in trajectory_objects:
             dist = trajectory_object.trajectory_memory.get_trajectory_minimal_distance(avatar_object=trajectory_object,object=object)
+            print(f"dist {trajectory_object.object_name} to {object.class_name}: {dist}")
+            print(f"previous dist: {distance}")
             if dist < distance:
                 distance = dist
                 closest_wrist_object = trajectory_object
@@ -615,6 +626,9 @@ class Tracker:
 
         object.centroid_position = new_centroid_position
         self.freeze_object(tracked_object=object)
+        # publish the newly frozen object
+        if self.freezeing_cb is not None:
+            self.freezeing_cb(object.class_name, object.latest_uuid)
         return
 
     def add_tracked_object_and_freeze(self, xyz_list, xyz_dimension, class_name, uuid):
