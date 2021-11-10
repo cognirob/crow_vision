@@ -1,7 +1,5 @@
 from scipy.spatial import Delaunay
 from crow_vision_ros2.utils.polyhedron import Polyhedron
-from scipy.spatial import Delaunay
-from crow_vision_ros2.utils.polyhedron import Polyhedron
 import open3d as o3d
 
 def get_triangles(mesh):
