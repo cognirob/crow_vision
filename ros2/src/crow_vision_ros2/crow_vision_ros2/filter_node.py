@@ -62,6 +62,51 @@ class ParticleFilterNode(Node):
         self.timer = self.create_timer(self.UPDATE_INTERVAL, self.filter_update) # this callback is called periodically to handle everyhing
         StatTimer.init()
 
+<<<<<<< Updated upstream
+=======
+        self.pclient = ParamClient()
+        self.pclient.define("filter_alive", True)
+
+        # Tracker initialization
+        self.tracker = Tracker(crowracle=self.crowracle, freezeing_cb=self.freezing_cb)
+        self.avatar_data_classes = Avatar.AVATAR_PARTS
+        # create avatar callback
+        self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
+        
+        # create assembly object publisher
+        self.object_pub = self.create_publisher(AssemblyObjectProbability, self.ASSEMBLY_OBJECT_TOPIC, 10)
+        self.assembly_object_types = [getattr(AssemblyObjectProbability, o) for o in sorted(dir(AssemblyObjectProbability)) if o.startswith("O_")]
+        # print(self.assembly_object_types)
+
+        self.get_logger().info("Filter is up")
+
+    def message_counter_callback(self, msg):
+        print(f'received msgs: {self.received_msg}')
+        print(f'processed messages: {self.messages_processed}')
+        
+        self.received_msg += 1
+        print(f'dropped {(1-(self.messages_processed / self.received_msg)) *100}% of messages')
+
+        oldest_time = self.cache.getOldestTime()
+        latest_time = self.cache.getLastestTime()
+
+        print(f'times {[t.seconds_nanoseconds() for t in self.cache.cache_times]}')
+
+    def freezing_cb(self, class_name, obj_uuid):
+        # get classes probability and publish object added to workspace message
+        n = len(self.assembly_object_types)
+        probs = np.zeros(n)
+        probs += np.random.rand(n) * 0.01
+        if class_name not in self.assembly_object_types:
+            self.get_logger().warn(f"Tracker wanted to freeze {class_name} but it isn't in assembly object types!")
+            return
+        probs[self.assembly_object_types.index(class_name)] = 1
+        probs /= probs.sum()
+        aop = AssemblyObjectProbability(probabilities=probs)
+        self.object_pub.publish(aop)
+        self.get_logger().info(f"Published assembly object probabilities: {aop}")
+
+>>>>>>> Stashed changes
     def add_and_process(self, messages):
         if type(messages) is not list:
             messages = [messages]
