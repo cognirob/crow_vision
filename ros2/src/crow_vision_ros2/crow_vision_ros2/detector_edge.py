@@ -21,7 +21,7 @@ import time
 import copy
 #import os, sys
 from crow_control.utils.profiling import StatTimer
-
+from crow_control.utils import ParamClient
 from yolact_edge.inference_tool import InfTool
 
 
@@ -46,7 +46,7 @@ class CrowVision(Node):
     - "/detections/confidences", etc. TODO
     """
     def __init__(self, config='config.json'):
-        super().__init__('crow_detector')
+        super().__init__('crow_detector_edge')
 
         #parse config
         CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
@@ -69,14 +69,20 @@ class CrowVision(Node):
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
         self.get_logger().info("Waiting for calibrator to setup cameras")
         calib_client.wait_for_service()
-        self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
+        self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
         while len(self.cameras) == 0:
             self.get_logger().warn("Waiting for any cameras!")
             time.sleep(2)
-            self.cameras, self.camera_frames = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames"]).values]
+            self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
+
+        self.m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 
         self.ros = {}
-        for cam in self.cameras:
+        object_cams = self.config["object_camera_serials"]
+        pose_cam = self.config["pose_camera_serial"]
+        for cam, serial in zip(self.cameras, self.camera_serials):
+            if serial not in object_cams and serial in pose_cam:
+                self.get_logger().warn(f"Skipping camera {cam} with serial {serial} - not configured as object camera.")
             camera_topic=cam+"/color/image_raw"
             # create INput listener with raw images
             listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
@@ -134,8 +140,12 @@ class CrowVision(Node):
         )
         assert os.path.exists(model_abs), "Provided path to model weights does not exist! {}".format(model_abs)
         self.cnn = InfTool(weights=model_abs, top_k=self.config["top_k"], score_threshold=self.config["threshold"], config=cfg)
-        print('Hi from crow_vision_ros2.')
+
+        self.pclient = ParamClient()
+        self.pclient.define("detector_alive", True)
+        self.pclient.define("detected_objects", [])
         StatTimer.init()
+        print('Detector online.')
 
     def input_callback(self, msg, topic):
         """
@@ -143,6 +153,7 @@ class CrowVision(Node):
         @param topic - str, from camera/input on given topic.
         @return nothing, but send new message(s) via output Publishers.
         """
+        self.pclient.detector_alive = time.time()
         if self.noMessagesYet:
             self.get_logger().info("Image received from camera! (will not report on next image callbacks)")
             self.noMessagesYet = False
@@ -151,10 +162,9 @@ class CrowVision(Node):
         # self.get_logger().error(str(dir(self.ros[topic]["pub_masks"])))
         # assert topic in self.ros, "We don't have registered listener for the topic {} !".format(topic)
 
+        # StatTimer.enter(topic[:8])
         StatTimer.enter("full detection")
-        StatTimer.enter("imgmsg_to_cv2")
         img_raw = self.cvb_.imgmsg_to_cv2(msg, "bgr8")
-        StatTimer.exit("imgmsg_to_cv2")
         #img_raw = cv2.cvtColor(img_raw, cv2.COLOR_BGR2RGB)
 
         StatTimer.enter("infer")
@@ -182,9 +192,7 @@ class CrowVision(Node):
             msg_img.header.stamp = msg.header.stamp #we always inherit timestamp from the original "time taken", ie stamp from camera topic
             msg_img.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
             #   self.get_logger().info("Publishing as Image {} x {}".format(msg_img.width, msg_img.height))
-            StatTimer.enter("pub annot img")
             self.ros[topic]["pub_img"].publish(msg_img)
-            StatTimer.exit("pub annot img")
 
         if "pub_masks" in self.ros[topic] or "pub_bboxes" in self.ros[topic]:
             StatTimer.enter("compute masks")
@@ -192,15 +200,14 @@ class CrowVision(Node):
             StatTimer.exit("compute masks")
             classes = classes.astype(int).tolist()
             scores = scores.astype(float).tolist()
+            # self.get_logger().error(f"Detected objects: {str(class_names)}")
             if len(classes) == 0:
-                self.get_logger().info("No objects detected, skipping.")
                 return
 
             if "pub_masks" in self.ros[topic]:
-                StatTimer.enter("process & pub masks")
+                # StatTimer.enter("process & pub masks")
                 msg_mask = DetectionMask()
-                m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-                msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
+                msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
                 #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)
                 # parse time from incoming msg, pass to outgoing msg
                 msg_mask.header.stamp = msg.header.stamp
@@ -209,10 +216,13 @@ class CrowVision(Node):
                 msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
                 msg_mask.classes = classes
                 msg_mask.class_names = class_names
+                msg_mask.object_ids = [0] * len(classes)
                 msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_masks"].publish(msg_mask)
-                StatTimer.exit("process & pub masks")
+                now = time.time()
+                self.pclient.detected_objects += len(msg_mask.classes) * [now]
+                # StatTimer.exit("process & pub masks")
             if "pub_bboxes" in self.ros[topic]:
                 msg_bbox = DetectionBBox()
                 msg_bbox.bboxes = [BBox(bbox=bbox) for bbox in bboxes]
@@ -224,6 +234,7 @@ class CrowVision(Node):
                 msg_bbox.scores = scores
                 # self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.data, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_bboxes"].publish(msg_bbox)
+
         StatTimer.try_exit("full detection")
 
 
@@ -236,6 +247,8 @@ def main(args=None):
         rclpy.spin(cnn, executor=mte)
         # rclpy.spin(cnn)
         cnn.destroy_node()
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
     finally:
         cv2.destroyAllWindows()
         rclpy.shutdown()

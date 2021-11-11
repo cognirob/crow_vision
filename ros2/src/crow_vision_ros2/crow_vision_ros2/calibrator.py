@@ -46,6 +46,8 @@ class Calibrator(Node):
         self.declare_parameter("info_topics", value=[], descriptor=infoTopicsParamDesc)
         cameraNodesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of available camera nodes (e.g. "/camera<X>/camera")')
         self.declare_parameter("camera_nodes", value=[], descriptor=cameraNodesParamDesc)
+        cameraSerialsParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of serial numbers of available cameras')
+        self.declare_parameter("camera_serials", value=[], descriptor=cameraSerialsParamDesc)
         cameraNamespacesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of namespaces (e.g. "/camera<X>") of available cameras')
         self.declare_parameter("camera_namespaces", value=[], descriptor=cameraNamespacesParamDesc)
         cameraMatricesParamDesc = rclpy.node.ParameterDescriptor(type=ParameterType.PARAMETER_STRING_ARRAY, description='List of camera intrinsic parameters for available cameras')
@@ -252,6 +254,8 @@ class Calibrator(Node):
         paramCameraNodes.append(ns + "/" + cname)
         paramCameraNamespaces = self.get_parameter("camera_namespaces").get_parameter_value().string_array_value
         paramCameraNamespaces.append(ns)
+        paramCameraSerials = self.get_parameter("camera_serials").get_parameter_value().string_array_value
+        paramCameraSerials.append(self.camera_serials[self.camera_namespaces.index(camera_ns)])
         # Camera intrinsics parameter
         paramCameraIntrinsics = self.get_parameter("camera_intrinsics").get_parameter_value().string_array_value
         paramCameraIntrinsics.append(json.dumps({
@@ -285,6 +289,11 @@ class Calibrator(Node):
                 "camera_nodes",
                 rclpy.Parameter.Type.STRING_ARRAY,
                 paramCameraNodes
+            ),
+            rclpy.parameter.Parameter(
+                "camera_serials",
+                rclpy.Parameter.Type.STRING_ARRAY,
+                paramCameraSerials
             ),
             rclpy.parameter.Parameter(
                 "camera_namespaces",

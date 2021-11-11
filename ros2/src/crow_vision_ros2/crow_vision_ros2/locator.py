@@ -5,6 +5,7 @@ from rcl_interfaces.msg import ParameterType
 from rcl_interfaces.srv import GetParameters
 from ros2param.api import call_get_parameters
 import message_filters
+from rclpy.time import Duration
 
 #Pointcloud
 from crow_msgs.msg import DetectionMask, SegmentedPointcloud
@@ -28,17 +29,28 @@ import transforms3d as tf3
 
 from ctypes import *  # convert float to uint32
 from numba import jit
+from crow_control.utils import ParamClient
+
+from crow_vision_ros2.tracker.tracker_avatar import Avatar
 
 
 class Locator(Node):
+    MIN_X = -0.2
+    MAX_X = 1.25
+    MIN_Y = -0.4
+    MAX_Y = 1
+    MIN_Z = -0.01
+    MAX_Z = 0.15
 
-    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 1.6)):
+    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 3.5)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud.
         @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in mm], default 10cm .. 1m. Points in cloud
             outside this range are dropped. Sometimes camera fails to measure depth and inputs 0.0m as depth, this is to filter out those values.
         """
         super().__init__(node_name)
+        # self.measurementTolerance = Duration(nanoseconds=1)
+
         # Wait for calibrator
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
         self.get_logger().info("Waiting for calibrator to setup cameras")
@@ -64,8 +76,12 @@ class Locator(Node):
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
         # create publisher for located objects (segmented PCLs)
-        qos = QoSProfile(depth=30, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
+        qos = QoSProfile(depth=50, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
+        self.pubPCL_debug = self.create_publisher(PointCloud2, '/detections/segmented_pointcloud_debug', qos_profile=qos)
+
+        # For now, every camera published segmented hand data PCL.
+        self.pubPCL_avatar = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', qos_profile=qos)
 
         self.cvb = cv_bridge.CvBridge()
         self.mask_dtype = {'names':['f{}'.format(i) for i in range(2)], 'formats':2 * [np.int32]}
@@ -83,13 +99,20 @@ class Locator(Node):
             cb_group = rclpy.callback_groups.MutuallyExclusiveCallbackGroup()
             subPCL = message_filters.Subscriber(self, PointCloud2, pclTopic, qos_profile=qos, callback_group=cb_group) #listener for pointcloud data from RealSense camera
             subMasks = message_filters.Subscriber(self, DetectionMask, maskTopic, qos_profile=qos, callback_group=cb_group) #listener for masks from detector node
-            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 40, slop=0.5) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
+            sync = message_filters.ApproximateTimeSynchronizer([subPCL, subMasks], 80, slop=0.12) #create and register callback for syncing these 2 message streams, slop=tolerance [sec]
             sync.registerCallback(lambda pcl_msg, mask_msg, cam=cam: self.detection_callback(pcl_msg, mask_msg, cam))
 
+        self.pclient = ParamClient()
+        self.pclient.define("locator_alive", time.time())
+        self.pclient.define("located_objects", [])
+        self.pclient.define("located_avatars", [])
+
         self.min_points_pcl = min_points_pcl
+        self.avatar_data_classes = Avatar.AVATAR_PARTS
 
     @staticmethod
-    @jit(nopython=True, parallel=False)
+    # @jit(nopython=True, parallel=False)
+    @jit("float32[:, ::1](float32[:, ::1],float32[:, ::1])", nopython=True, parallel=False, nogil=False, fastmath=False)
     def project(camera_matrix, point_cloud):
         # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace = np.dot(camera_matrix, point_cloud)
@@ -97,7 +120,8 @@ class Locator(Node):
         return imspace[:2, :] / imspace[2, :]
 
     @staticmethod
-    @jit(nopython=True, parallel=False)
+    # @jit(nopython=True, parallel=False)
+    @jit("List(int64[::1])(int32[:, ::1],uint8[:, :, ::1])", nopython=True, parallel=False, nogil=False, fastmath=False)
     def compareMasksPCL_fast(idxs, masks):
         idxs1d = idxs[1, :] + idxs[0, :] * masks[0].shape[1]
         wheres = []
@@ -109,65 +133,88 @@ class Locator(Node):
         return wheres
 
     def detection_callback(self, pcl_msg, mask_msg, camera):
+        self.pclient.locator_alive = time.time()
         if not mask_msg.masks:
-            self.get_logger().info("no masks, no party. Quitting early.")
+            # self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
         cameraData = self.getCameraData(camera)
         masks = np.array([self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks])
-        class_names, scores = mask_msg.class_names, mask_msg.scores
+        object_ids, class_names, scores = mask_msg.object_ids, mask_msg.class_names, mask_msg.scores
 
         point_cloud, point_rgb, rgb_raw = ftl_pcl2numpy(pcl_msg)
         point_cloud = point_cloud.T
-
         # tf_mat = tf3.affines.compose(t, tf3.quaternions.quat2mat(q[-1:] + q[:-1]), np.ones(3))
         tf_mat = cameraData["dtc_tf"]
         point_cloud = np.dot(tf_mat, np.pad(point_cloud, ((0, 1), (0, 0)), mode="constant", constant_values=1))[:3, :]
         point_cloud = point_cloud.astype(np.float32)  # secret hack to make sure this works...
-
         ##process pcd
         # 1. convert 3d pcl to 2d image-space
         imspace = self.project(cameraData["camera_matrix"], point_cloud) # converts pcl (shape 3,N) of [x,y,z] (3D) into image space (with cam_projection matrix) -> [u,v,w] -> [u/w, v/w] which is in 2D
         imspace[np.isnan(imspace)] = -1 #marking as -1 results in deletion (omission) of these points in 3D, as it's impossible to match to -1
         # dist = np.linalg.norm(point_cloud, axis=0)
-        bad_points = np.logical_or(np.logical_or(point_cloud[2, :] < self.depth_min, point_cloud[2, :] > self.depth_max), point_cloud[0, :] < -0.65)
+        bad_points = np.logical_or(point_cloud[2, :] < self.depth_min, point_cloud[2, :] > self.depth_max)
+        # bad_points = np.logical_or(np.logical_or(point_cloud[2, :] < self.depth_min, point_cloud[2, :] > self.depth_max), point_cloud[0, :] < -0.65)
         # bad_points = np.logical_or(np.logical_or(dist < self.depth_min, dist > self.depth_max), point_cloud[0, :] < -0.65)
         imspace[:, bad_points] = -1
         # assert np.isnan(imspace).any() == False, 'must not have NaN element'  # sorry, but this is expensive (half a ms) #optimizationfreak
         imspace = imspace.astype(np.int32)
-
         mshape = masks[0].shape
         imspace[:, (imspace[0] < 0) | (imspace[1] < 0) | (
             imspace[1] >= mshape[0]) | (imspace[0] >= mshape[1])] = 0
 
         wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
-
         ctg_tf_mat = cameraData["ctg_tf"]
-        for where, class_name, score in zip(wheres, class_names, scores):
+        total_pcd = np.zeros((3, 1))
+        for where, object_id, class_name, score in zip(wheres, object_ids, class_names, scores):
             # 2. segment PCL & compute median
             # skip pointclouds with too few datapoints to be useful
+            # if class_name in self.avatar_data_classes:
+            #     self.get_logger().error(f"{class_name}")
             if len(where) < self.min_points_pcl:
-                self.get_logger().info(
-                    "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
+            #     self.get_logger().info(
+            #         "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
             seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
+            # filter points outside the main work area
+            m = np.mean(seg_pcd, axis=1)
+            if m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y or m[2] < self.MIN_Z or m[2] > self.MAX_Z:
+                continue
+            # if "2" in camera:
+            total_pcd = np.c_[total_pcd, seg_pcd]
+
             seg_color = rgb_raw[where]
 
             # output: create back a pcl from seg_pcd and publish it as ROS PointCloud2
             segmented_pcl = ftl_numpy2pcl(seg_pcd, pcl_msg.header, seg_color)
             segmented_pcl.header.frame_id = self.global_frame_id
-            segmented_pcl.header.stamp = mask_msg.header.stamp
-
+            segmented_pcl.header.stamp = pcl_msg.header.stamp
             # wrap together PointCloud2 + label + score => SegmentedPointcloud
             seg_pcl_msg = SegmentedPointcloud()
             seg_pcl_msg.header = segmented_pcl.header
+            seg_pcl_msg.header.stamp.nanosec += 2
             seg_pcl_msg.pcl = segmented_pcl
+            seg_pcl_msg.object_id = object_id
             seg_pcl_msg.label = str(class_name)
             seg_pcl_msg.confidence = float(score)
 
-            self.pubPCL.publish(seg_pcl_msg)
+            # Data about hand position is published on different topic
+
+            if class_name in self.avatar_data_classes:
+                self.pubPCL_avatar.publish(seg_pcl_msg)
+                self.pclient.located_avatars += [time.time()]
+                # self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
+            else:
+                self.pubPCL.publish(seg_pcl_msg)
+                self.pclient.located_objects += [time.time()]
+
+        if len(total_pcd) > 0:
+            dmsg = ftl_numpy2pcl(total_pcd, pcl_msg.header)
+            dmsg.header.frame_id = self.global_frame_id
+            dmsg.header.stamp = pcl_msg.header.stamp
+            self.pubPCL_debug.publish(dmsg)
 
     # def compareMaskPCL(self, mask_array, projected_points):  # OLD, SLOW version
     #     a = mask_array.T.astype(np.int32).copy()
@@ -192,8 +239,6 @@ class Locator(Node):
             "pcl_topic": self.pcl_topics[idx],
         }
 
-
-
 def main():
     rclpy.init()
     locator = Locator()
@@ -201,6 +246,7 @@ def main():
         n_threads = len(locator.cameras)
         mte = MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
         rclpy.spin(locator, executor=mte)
+        # rclpy.spin(locator)
     except KeyboardInterrupt:
         print("User requested shutdown.")
     finally:

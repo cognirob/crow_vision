@@ -36,7 +36,7 @@ def ftl_numpy2pcl(xyz, orig_header, rgb=None):
 
     if rgb is not None:
         assert num_points == len(rgb), "color must have same number of points"
-        fields = [PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate(list('xyz') + ['rgb'])]
+        fields = [ PointField(name=n, offset=i*itemsize, datatype=PointField.FLOAT32, count=1) for i, n in enumerate(list('xyz') + ['rgb']) ]
         fields[-1].offset = 16
         k = 5
         dataa = np.concatenate((xyz.T, np.zeros((num_points, 1), dtype=np.float32), rgb[:, np.newaxis]), axis=1)
@@ -57,7 +57,6 @@ def ftl_numpy2pcl(xyz, orig_header, rgb=None):
         fields=fields,
         point_step=(itemsize * k),  #=xyz + padding + rgb
         row_step=(itemsize * k * num_points),
-        data=dataa.tobytes()
-        )
-    return pcl
+        data=dataa.tobytes())
 
+    return pcl

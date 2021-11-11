@@ -71,25 +71,26 @@ class Timer():
 class ParticleFilter():
     MEAN_SHIFT_PRECISSION = 0.001
     CLASS_HISTORY_LEN = 10
-    PARTICLES_PER_MODEL = 500
+    PARTICLES_PER_MODEL = 600
     TIMER_CLASS = Timer
-    DELETION_TIME_LIMIT = 5  # 10 seconds
-    MAX_SHIFT_ITERS = 20
+    DELETION_TIME_LIMIT = 2  # 10 seconds
+    MAX_SHIFT_ITERS = 15
     STATIC_NOISE = 0.01  # 5 cm
     GLOBAL_DISTANCE_LIMIT = 0.1  # limit for a model to be considered "close" to new observation
     TREE_DISTANCE_UPPER_BOUND = 0.01  # TODO: should be probably 1mm?
-    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-7  # TODO: search for optimal value
+    CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-5  # TODO: search for optimal value
     PARTICLES_PCL_COUNT = 200  # how many particles to generate from measured PCLs
     PARTICLES_UNIFORM_COUNT = 500  # how many uniformly distributed particles to generate
     PARTICLES_UNIFORM_DISTANCE = 0.2  # size of circle or cube around the object in which the uniformly random ptcs should be generated
-    MODEL_SHIFT_NOISE_LIMIT = 0.005  # if model moves less than this, it is considered a noise, not an actual movement
+    MODEL_SHIFT_NOISE_LIMIT = 0.03  # if model moves less than this, it is considered a noise, not an actual movement
     ACCELERATION_LIMIT = 0.0005  # 1m/s**2 is assumed as max acceleration (higher values are clipped)
-    SPEED_LIMIT = 0.05  # 1m/s is assumed as max speed (higher values are clipped)
-    NEW_MODEL_MIN_UPDATES = 10  # minimum number of measurements required for new model to be reported
-    NEW_MODEL_TTL = 3  # minimum time in seconds required for new model to be reported
-    REPORT_FRESH_MODELS_ONLY = False  # if True, reports only models that had updates lately
+    SPEED_LIMIT = 0.01  # 1m/s is assumed as max speed (higher values are clipped)
+    NEW_MODEL_MIN_UPDATES = 2  # minimum number of measurements required for new model to be reported
+    NEW_MODEL_TTL = 0.5  # minimum time in seconds required for new model to be reported
+    REPORT_FRESH_MODELS_ONLY = True  # if True, reports only models that had updates lately
     LABEL_WEIGHT = 0 # coefficient of importance of detected label when searching for closest model pcl to detected pcl
-    NUM_STORED_PCLS = 3 # number of latest pcls to aggregate and send in the pcl message
+    NUM_STORED_PCLS = 5 # number of latest pcls to aggregate and send in the pcl message
+    MIN_MEAS_CONFIDENCE = 0.3 # minimum confidence value to consider using a measurement
 
     def __init__(self, object_properties):
         self.timer = self.TIMER_CLASS()
@@ -128,6 +129,9 @@ class ParticleFilter():
             - processes measurements (PF step 2)
             - computes position estimates
         """
+
+        # print(f"* Currently having self.n_models: {self.n_models}") #################################################3
+
         if self.n_models == 0:
             if len(self.observations) > 0:
                 self._processMeasurements()
@@ -148,7 +152,7 @@ class ParticleFilter():
         # diffuse
         self.model_particles.add_(torch.randn_like(self.model_particles) * self.STATIC_NOISE * time_delta)
 
-        # add measurements
+        # filtered measurements
         if len(self.observations) > 0:
             self._processMeasurements()
             # estimate classes
@@ -158,16 +162,22 @@ class ParticleFilter():
         self._estimate(time_delta)
 
     def getPclsEstimates(self):
-        """Return a dict of uuids and corresponding point clouds (aggregated form several last pcls)
+        """Return a dict of uuids and corresponding point clouds and labels (aggregated form several last pcls)
         """
         if self.n_models == 0:
             return {}
         ests_uuids = []
         ests_pcls = []
+        ests_labels = []
         for k, v in self.model_stored_pcls.items():
             ests_uuids.append(k)
-            ests_pcls.append(v[-1:-1*min(self.NUM_STORED_PCLS+1, len(v)+1):-1])# -1*min(self.NUM_STORED_PCLS+1, len(v)+1)])
-        return ests_uuids, ests_pcls
+            v_pcls = v[:,0]
+            v_labels = v[:,1]
+            v_label = mode(v_labels)[0][0]
+            v_label = self.object_properties[v_label]["name"] if v_label in self.object_properties else "unknown"
+            ests_pcls.append(v_pcls[-1:-1*min(self.NUM_STORED_PCLS+1, len(v_pcls)+1):-1])# -1*min(self.NUM_STORED_PCLS+1, len(v)+1)])
+            ests_labels.append(v_label)
+        return ests_uuids, ests_pcls, ests_labels
 
     def getEstimates(self):
         """Return a tuple of "xyz" position, class name, pcl dimensions and with uuid
@@ -178,9 +188,11 @@ class ParticleFilter():
         for i in range(self.n_models):
             n_updates = self.model_n_updates[i]
             time_diff = self.timer.now - self.model_first_update[i]
+
             if (n_updates >= self.NEW_MODEL_MIN_UPDATES) and (time_diff >= self.NEW_MODEL_TTL):
                 if (self.REPORT_FRESH_MODELS_ONLY==False) or (self.last_filter_update <= self.model_last_update[i]):
                     ests.append((self.model_states[i].numpy(), self.model_class_names[i], self.model_pcl_dimensions[i], self.model_uuid[i]))
+
         return ests
 
     def add_measurement(self, z):
@@ -210,7 +222,9 @@ class ParticleFilter():
         time_tensor = tensor([time_delta, time_delta**2], dtype=torch.float32).unsqueeze(0)  # (1x2)
         self._update_velocities = time_tensor.matmul(self.model_params)  # model_params : (Qx2x3) -> Qx1x3
         # TODO: update velocity and acceleration?
-        self.model_particles.add_(self._update_velocities)  # model_particles : Qx1000x3
+        # FIXME: model updates paused for now
+        # self.model_particles.add_(self._update_velocities)  # model_particles : Qx1000x3
+
 
     def _estimate(self, time_delta):
         # save previous states
@@ -218,7 +232,8 @@ class ParticleFilter():
         # merge particles and weights
         samples_weights = torch.cat((self.model_particles, self.particle_weights.unsqueeze(-1)), dim=-1).split(1)
         # update position estimates from particles
-        self.model_states = torch.tensor([self._estimate_model(sw.squeeze().numpy()) for sw in samples_weights])
+        if len(samples_weights[0].squeeze().numpy())>0:
+            self.model_states = torch.tensor([self._estimate_model(sw.squeeze().numpy()) for sw in samples_weights])
         # estimate model parameters (speed & acceleration) TODO: do Kalman filtering?
         # TODO: add gradient backwards error propagation
         model_shifts = self.model_states.sub(old_states)  # could be considered as current actual speed
@@ -245,6 +260,13 @@ class ParticleFilter():
         # update classes @TODO: include score information
         cls_estimate = mode(self.model_class_history, axis=1, nan_policy="propagate")[0]
         cls_estimate[np.isnan(cls_estimate)] = -1
+
+        ########################################################################
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 2/3 ###############
+        cls_estimate[np.isnan(cls_estimate)] = 0
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 2/3 ###############
+        ########################################################################
+
         self.model_classes = cls_estimate.ravel()
         self.model_class_names = [self.object_properties[class_key]["name"] if class_key in self.object_properties else "unknown" for class_key in self.model_classes]
 
@@ -267,7 +289,8 @@ class ParticleFilter():
         for pcl, label, score in self.observations:
             assert pcl.shape[1] == 3
             if self.n_models == 0:  # no models exists -> automatically create model for each PCL
-                self._add_model(pcl, label, score)
+                if score > self.MIN_MEAS_CONFIDENCE:
+                    self._add_model(pcl, label, score)
                 continue
             # compute PCL center
             pcl_center = np.median(pcl, axis=0).reshape(1, 3)
@@ -304,9 +327,11 @@ class ParticleFilter():
                     closest_model = np.argmax(close_models)
                     self._append_pcl_to_model(closest_model, pcl, label, score, pcl_center, pcl_dimension)
                 else:
-                    self._add_model(pcl, label, score, pcl_center, pcl_dimension)
+                    if score > self.MIN_MEAS_CONFIDENCE:
+                        self._add_model(pcl, label, score, pcl_center, pcl_dimension)
             else:  # no model is close, add new model
-                self._add_model(pcl, label, score, pcl_center, pcl_dimension)
+                if score > self.MIN_MEAS_CONFIDENCE:
+                    self._add_model(pcl, label, score, pcl_center, pcl_dimension)
 
         # go through aggregated PCLs for each model
         for idx, mpcls in enumerate(self._model_pcls):
@@ -336,6 +361,14 @@ class ParticleFilter():
             # compute PCLs mean
             center = np.median(pcl_centers, axis=0)
             # sigma from model (add sigma from pcl? <- np.std(pcls, axis=0))
+
+            ########################################################################
+            ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 3/3 ###############
+            if int(self.model_classes[idx]) == -1:
+                self.model_classes[idx] = 0
+            ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 3/3 ###############
+            ########################################################################
+
             sigma = self.object_properties[self.model_classes[idx]]["sigma"]
             # resample
             resamp_particles, resamp_weights = self._weigh_resample_particles(particles, center, sigma, self.PARTICLES_PER_MODEL)
@@ -390,12 +423,12 @@ class ParticleFilter():
         else:
             self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class, score))
         if self.model_stored_pcls.get(str(self.model_uuid[model_idx])) is None:
-            self.model_stored_pcls[str(self.model_uuid[model_idx])] = [pcl]
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.array([[pcl, est_class]])
         else:
-            self.model_stored_pcls[str(self.model_uuid[model_idx])].append(pcl)
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.append(self.model_stored_pcls[str(self.model_uuid[model_idx])], [[pcl, est_class]], axis=0)
         len_diff = len(self.model_stored_pcls[str(self.model_uuid[model_idx])]) - self.NUM_STORED_PCLS
         if len_diff > 0:
-            del self.model_stored_pcls[str(self.model_uuid[model_idx])][:len_diff]
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = self.model_stored_pcls[str(self.model_uuid[model_idx])][len_diff:]
         self.model_n_updates[model_idx] += 1 #update = receive and append new measurement (pcl) to existing model
         self.model_last_update[model_idx] = self.timer.now #update = receive and append new measurement (pcl) to existing model
 
@@ -406,6 +439,16 @@ class ParticleFilter():
             pcl_dimension = (np.max(pcl, axis=0) - np.min(pcl, axis=0)).reshape(1, 3)
 
         n_pcl = pcl.shape[0]
+
+        ########################################################################
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS 1/3 ###############
+        # print(f"****** class_est: {class_est}, score: {score}")
+        # print(f"****** self.object_properties: {self.object_properties}")
+        if int(class_est) == -1:
+            class_est = 0
+        # print(f"****** self.object_properties[class_est]: {self.object_properties[class_est]}")
+        ################## TEMPORARY FIX FOR UNKNOWN OBJECTS ###################
+        ########################################################################
 
         sigma = self.object_properties[class_est]["sigma"]
         # generate particles
@@ -464,7 +507,6 @@ class ParticleFilter():
 
     def _delete_model(self, model_number):
         mask = torch.arange(0, self.n_models) != model_number
-
         self.model_particles = self.model_particles[mask, ...]
         self.particle_weights = self.particle_weights[mask, ...]
         self.model_params = self.model_params[mask, ...]
@@ -486,7 +528,10 @@ class ParticleFilter():
         shift = np.inf
         samples = samples_weights[..., :3].squeeze()
         weights = samples_weights[..., 3].squeeze()
-        mode = np.average(samples, axis=0, weights=weights)
+        if len(samples)>0:
+            mode = np.average(samples, axis=0, weights=weights)
+        else: 
+            mode = []
         iters = 0
         try:
             while shift > self.MEAN_SHIFT_PRECISSION or iters < self.MAX_SHIFT_ITERS:
@@ -498,6 +543,33 @@ class ParticleFilter():
                 shift = np.linalg.norm(mode - mode_old)
                 iters += 1
         except Exception as e:  # noqa
-            return np.average(samples, axis=0, weights=weights)
+            if len(samples)>0:
+                return np.average(samples, axis=0, weights=weights)
+            else:
+                return []
         else:
             return mode
+
+    def _correct_model_uuids(self, last_uuids, latest_uuids):
+        # Use the new uuids to find newer objects and give them the older uuids
+        for last_uuids_i in range(len(last_uuids)):
+            if latest_uuids[last_uuids_i] != last_uuids[last_uuids_i]:
+                if last_uuids[last_uuids_i] in self.model_uuid:
+                    if latest_uuids[last_uuids_i] != -1:
+
+                        where_a = (np.where(self.model_uuid == latest_uuids[last_uuids_i])[0])
+                        n_updates = self.NEW_MODEL_MIN_UPDATES + 1
+                        last_update = self.last_filter_update
+                        if len(where_a):
+                            where_a = where_a[0]
+                            n_updates = self.model_n_updates[where_a]
+                            last_update = self.model_last_update[where_a]
+                            self._delete_model(where_a)
+
+                        where_b = (np.where(self.model_uuid == last_uuids[last_uuids_i])[0])
+                        if len(where_b):
+                            where_b = where_b[0]
+                            self.model_uuid[where_b] = latest_uuids[last_uuids_i]
+                            self.model_n_updates[where_b] = n_updates + 1  # FIXME: maybe a better solution - without this, corrected model is ignored.
+                            self.model_last_update[where_b] = last_update  # FIXME: maybe a better solution - without this, corrected model is ignored.
+        return

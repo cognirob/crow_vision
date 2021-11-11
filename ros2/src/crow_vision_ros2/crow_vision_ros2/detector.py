@@ -46,7 +46,6 @@ class CrowVision(Node):
     """
     def __init__(self, config='config_affordance.json'):
         super().__init__('crow_detector')
-
         #parse config
         CONFIG_DEFAULT = pkg_resources.resource_filename("crow_vision_ros2", config)
         with open(CONFIG_DEFAULT) as configFile:
@@ -107,9 +106,7 @@ class CrowVision(Node):
                 topic = cam + "/" + self.config["outputs"]["prefix"] + "/" + self.config["outputs"]["bboxes"]
                 self.get_logger().info('Output publisher created for topic: "%s"' % topic)
                 self.ros[camera_topic]["pub_bboxes"] = self.create_publisher(DetectionBBox, topic, qos_profile=qos) #publishes the processed (annotated,detected) bboxes
-
         # self.get_logger().error(str(self.ros))
-
         self.noMessagesYet = True
         self.cvb_ = CvBridge()
 
@@ -165,6 +162,8 @@ class CrowVision(Node):
         if preds[0]["detection"] is None:
             return  # do not publish if nothing was detected
 
+
+
         #the input callback triggers the publishers here.
         if "pub_img" in self.ros[topic]: # labeled image publisher. (Use "" to disable)
             StatTimer.enter("annotate")
@@ -194,12 +193,18 @@ class CrowVision(Node):
             StatTimer.exit("compute masks")
             classes = classes.astype(int).tolist()
             scores = scores.astype(float).tolist()
+
             if len(classes) == 0:
                 self.get_logger().info("No objects detected, skipping.")
                 return
-
             if "pub_masks" in self.ros[topic]:
                 StatTimer.enter("process & pub masks")
+                ###
+                ## As part of development of pose masks - this item was added
+                ## to the message topic structure, for the yoloact it doens't yet
+                ## have a purpose
+                object_ids = list(range(0, len(classes)))
+                ###
                 msg_mask = DetectionMask()
                 m_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
                 msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
@@ -209,10 +214,12 @@ class CrowVision(Node):
                 for mask in msg_mask.masks:
                     mask.header.stamp = msg.header.stamp
                 msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+                msg_mask.object_ids = object_ids
                 msg_mask.classes = classes
                 msg_mask.class_names = class_names
                 msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
+
                 self.ros[topic]["pub_masks"].publish(msg_mask)
                 StatTimer.exit("process & pub masks")
             if "pub_bboxes" in self.ros[topic]:
@@ -228,7 +235,6 @@ class CrowVision(Node):
                 self.ros[topic]["pub_bboxes"].publish(msg_bbox)
         StatTimer.try_exit("full detection")
 
-
 def main(args=None):
     rclpy.init(args=args)
     try:
@@ -241,7 +247,6 @@ def main(args=None):
     finally:
         cv2.destroyAllWindows()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
