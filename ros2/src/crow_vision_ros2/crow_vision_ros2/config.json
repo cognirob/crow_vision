@@ -1,30 +1,5 @@
 {
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-  "type": "YOLACT", #one of "YOLACT", "Detectron2"
-  "top_k": 10,
-=======
-  "type": "YOLACT",
-  "top_k": 30,
->>>>>>> 3fa649a13352cd7ef3f2ddeeabf2e252c56a9892
-  "threshold": 0.2,
-  ## specify path to weights, relative to the YOLACT_REPO
-  #"weights": "./data/yolact/weights/yolact_base_54_800000.pth", #generic COCO weights
-  "weights": "./data/yolact/weights/weights_yolact_kuka_30/crow_base_25_133333.pth", # uncomment to use CROW model
 
-  ## specify path to model, relative to the POSENET_REPO
-  "posenet_model": "./_models/mobilenet_v1_101.pth",
-
-  ## filter cameras by serial
-  "object_camera_serials": ["032522250227", "035122250184", "032522250249"],
-  "pose_camera_serial": "105322252074",
-
-  ## for config use one of: name of config(string) from yolact config file; path to .obj (used for CROW); or "none" (will try to guess)
-  ## weights and config must match (crow/generic)
-<<<<<<< HEAD
-  #"config": "yolact_edge_config", #toggle yolact_base_config and crow_base_config. weights must change accordingly.
-  "config": "./data/yolact/weights/weights_yolact_kuka_21/config_train.obj", # uncomment for use with CROW weights
-=======
   "type": "YOLACT",
   "top_k": 30,
   "threshold": 0.1,
@@ -43,12 +18,7 @@
   ## weights and config must match (crow/generic)
   #"config": "yolact_base_config", #toggle yolact_base_config and crow_base_config. weights must change accordingly.
   "config": "./data/yolact/weights/weights_yolact_kuka_32/config_train.obj", # uncomment for use with CROW weights
->>>>>>> Stashed changes
-=======
-  #"config": "yolact_base_config", #toggle yolact_base_config and crow_base_config. weights must change accordingly.
-  # "config": "./data/yolact/weights/weights_yolact_kuka_26/config_train.obj", # uncomment for use with CROW weights
-  "config": "./data/yolact/weights/weights_yolact_kuka_30/config_train.obj", # uncomment for use with CROW weights
->>>>>>> 3fa649a13352cd7ef3f2ddeeabf2e252c56a9892
+
   "outputs": { #output ROS topics are formed as: config["inputs"][0]["camera"] + config["outputs"]["masks"] ,etc.
     # pass an empty string "" to ignore/skip that output.
     "prefix": "detections",
