@@ -44,7 +44,7 @@ class CrowVision(Node):
     - "/detections/bboxes"
     - "/detections/confidences", etc. TODO
     """
-    def __init__(self, config='config.json'):
+    def __init__(self, config='config_affordance.json'):
         super().__init__('crow_detector')
 
         #parse config
