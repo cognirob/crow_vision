@@ -174,12 +174,15 @@ class Trajectory:
         """
 
         if self.queue.qsize() > 3:
-            x_fine, y_fine, z_fine = self.get_spline_xyz_data()
-            # a point to calculate distance to
-            P = object.centroid_position.get_tuple()
+            try:
+                x_fine, y_fine, z_fine = self.get_spline_xyz_data()
+                # a point to calculate distance to
+                P = object.centroid_position.get_tuple()
 
-            min_idx, d = self.min_distance(x_fine, y_fine, z_fine, P)
-            return d[min_idx][0]
+                min_idx, d = self.min_distance(x_fine, y_fine, z_fine, P)
+                return d[min_idx][0]
+            except:
+                return np.inf  # TODO: this is a quick fix for the "get_spline_xyz_data" funciton occasionally not working.
         else:
             return self.distance_3d(xyz_tup=avatar_object.centroid_position.get_tuple() , x0y0z0_tup=object.centroid_position.get_tuple())
 
