@@ -200,7 +200,7 @@ class ParticleFilterNode(Node):
             self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
             StatTimer.exit("correcting uuids")
 
-            self.tracker.dump_tracked_objects_info()
+            # self.tracker.dump_tracked_objects_info()
 
             #self.get_logger().info(str(estimates))
             poses = []
