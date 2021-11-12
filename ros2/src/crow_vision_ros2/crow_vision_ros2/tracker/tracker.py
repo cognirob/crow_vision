@@ -11,7 +11,7 @@ from scipy.spatial import Delaunay
 
 # ROS2
 from crow_vision_ros2.tracker.tracker_base import get_vector_length, random_alpha_numeric, Dimensions, Position, Color, ObjectsDistancePair
-from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, PERCENTAGE_NEEDED_TO_BE_APPROVED, TRACKER_ITERATION_HASH_LENGTH
+from crow_vision_ros2.tracker.tracker_config import DEFAULT_ALPHA_NUMERIC_LENGTH, TRAJECTORY_MEMORY_SIZE_SECONDS, WRIST_OBJECT_CLIP_DISTANCE_LIMIT, DETECTIONS_FOR_SETUP_NEEDED, PERCENTAGE_NEEDED_TO_BE_APPROVED, TRACKER_ITERATION_HASH_LENGTH, SETUP_OVERLAP_DISTANCE_MERGE, SETUP_OVERLAP_DISTANCE_MAX
 from crow_vision_ros2.tracker.tracker_avatar import Avatar, AvatarObject
 from crow_vision_ros2.tracker.tracker_trajectory import Trajectory
 from crow_ontology.crowracle_client import CrowtologyClient
@@ -119,30 +119,42 @@ class Tracker:
 
         self.freezeing_cb = freezeing_cb
         self.workspace_hull = None
+        self.front_stage_hull = None
+        self.trackable_classes = self.crowracle.getWorkpieceDetNames()
 
         # For the tracker to be able to distinguish different iterations
         # we can use hashes - will be changed every iteration
         self.current_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
         self.last_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
 
-    def _get_workspace_hull(self):
+    def _get_area_hull(self, area_name):
         areas_uris = self.crowracle.getStoragesProps()
         for area_uri in areas_uris:
-            if area_uri['name'] == 'workspace':
+            if area_uri['name'] == area_name:
                 area_poly = self.crowracle.get_polyhedron(area_uri['uri'])
-                self.workspace_hull = Delaunay(area_poly)
-        if self.workspace_hull is None:
-            print("<tracker> 'workspace' storage doesn't exist!")
+                return Delaunay(area_poly)
+        print(f"<tracker> Area of name '{area_name}' doesn't exist in ontology!")
 
     def check_position_in_workspace_area(self, xyz_list):
         """
         Check position xyz_list=[x,y,z] in area with name 'workspace'
         """
         if self.workspace_hull is None:
-            self._get_workspace_hull()
+            self.workspace_hull = self._get_area_hull('workspace')
             if self.workspace_hull is None:
                 return False
         res = self.workspace_hull.find_simplex(xyz_list)
+        return res >= 0
+
+    def check_position_in_front_stage(self, xyz_list):
+        """
+        Check position xyz_list=[x,y,z] in area with name 'front_stage'
+        """
+        if self.front_stage_hull is None:
+            self.front_stage_hull = self._get_area_hull('front_stage')
+            if self.front_stage_hull is None:
+                return False
+        res = self.front_stage_hull.find_simplex(xyz_list)
         return res >= 0
 
     def reset_flags(self):
@@ -150,9 +162,8 @@ class Tracker:
         Flags all objects of the tracker as 'fresh' i.e. not updated, not
         duplicate etc...
         """
-
-        for class_name in self.tracked_objects:
-            for object in self.tracked_objects[class_name]:
+        for class_object_group in self.tracked_objects.values():
+            for object in class_object_group:
                 object.active = False
                 object.just_updated = False
                 object.duplicate = False
@@ -162,10 +173,9 @@ class Tracker:
         """
         Returns all objects of tracker in 1 list
         """
-
         dump_list = []
-        for class_name in self.tracked_objects:
-            for object in self.tracked_objects[class_name]:
+        for class_object_group in self.tracked_objects.values():
+            for object in class_object_group:
                 dump_list.append(object)
         return dump_list
 
@@ -337,31 +347,36 @@ class Tracker:
 
     def load_setup_objects(self):
         """
-        Count uuid's and load objects with occurence more thna x% (see config)
+        Count uuid's and load objects with occurrence more than x% (see config)
         (filter takes care of uuids). Each new uuid will have its own key in
-        dicionary and its data as well as counter.
+        dictionary and its data as well as counter.
         """
-
         loader_dict = {}
-        for history_i in range(len(self.setup_detection_history)):
-            # Check if key (i.e. uuid) exists
-            for key_i in range(len(self.setup_detection_history[history_i]["uuids"])):
-                key = self.setup_detection_history[history_i]["uuids"][key_i]
-                if self.setup_detection_history[history_i]["uuids"][key_i] in loader_dict:
-                    loader_dict[key]["counter"] += 1
+        centroid_dict = {}  # to resolve multiple uuids in setup belonging to the same object
+        uuid_remap_dict = {}
+        for history_entry in self.setup_detection_history:
+            for centroid_position, dimension, class_name, uid in zip(history_entry["centroid_positions"], history_entry["dimensions"], history_entry["class_names"], history_entry["uuids"]):
+                if class_name not in self.trackable_classes:  # skip classes that are not workpieces
+                    continue
+                if uid in loader_dict:
+                    if np.linalg.norm(np.array(loader_dict[uid]["centroid_positions"]) - np.array(centroid_position)) > SETUP_OVERLAP_DISTANCE_MAX:
+                        # TODO: maybe ignore this update?
+                        print(f"<tracker>: Object of class {class_name} with uuid {uid} found to be at two positions that are too far appart!")
+                    loader_dict[uid]["counter"] += 1
+                    loader_dict[uid]["class_names"] = class_name  # filter is computing the "mode" of class but it can change
                 else:
-                    loader_dict[key] = {
-                        "centroid_positions": self.setup_detection_history[history_i]["centroid_positions"][key_i],
-                        "dimensions": self.setup_detection_history[history_i]["dimensions"][key_i],
-                        "class_names": self.setup_detection_history[history_i]["class_names"][key_i],
-                        "uuids": self.setup_detection_history[history_i]["uuids"][key_i],
-                        "counter": 0}
-        # Iterate occurence and save the "approved" objects
+                    loader_dict[uid] = {
+                        "centroid_positions": centroid_position,
+                        "dimensions": dimension,
+                        "class_names": class_name,
+                        "uuids": uid,
+                        "counter": 1}
+        # Iterate occurrence and save the "approved" objects
         centroid_positions, dimensions, class_names, uuids = ([],[],[],[])
         print(f"<tracker>: Loader dictionary: {loader_dict}")
 
         for key in loader_dict:
-            if loader_dict[key]["counter"] > (PERCENTAGE_NEEDED_TO_BE_APPROVED*DETECTIONS_FOR_SETUP_NEEDED):
+            if loader_dict[key]["counter"] > (PERCENTAGE_NEEDED_TO_BE_APPROVED * DETECTIONS_FOR_SETUP_NEEDED):
                 centroid_positions.append(loader_dict[key]["centroid_positions"])
                 dimensions.append(loader_dict[key]["dimensions"])
                 class_names.append(loader_dict[key]["class_names"])
@@ -410,15 +425,10 @@ class Tracker:
         """
 
         # Flag all existing objects as not (updated) this frame
-        if self.DEBUG:
-            print("<tracker>: 0")
-
         self.last_iteration_hash = self.current_iteration_hash
         self.current_iteration_hash = random.getrandbits(TRACKER_ITERATION_HASH_LENGTH)
 
         self.reset_flags()
-        if self.DEBUG:
-            print("<tracker>: A")
 
         # Setup scene objects - after 'DETECTIONS_FOR_SETUP_NEEDED' it will return True
         if not self.setup_scene_objects(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names, uuids=uuids):
@@ -505,8 +515,8 @@ class Tracker:
         to the workspace
         """
 
-        for class_name in self.tracked_objects:
-            for tracked_object in self.tracked_objects[class_name]:
+        for class_object_group in self.tracked_objects.values():
+            for tracked_object in class_object_group:
                 if not tracked_object.freezed:
                     if not tracked_object.active:
                         # Check if he is already flagged as being "close to hand" and check
@@ -584,8 +594,8 @@ class Tracker:
         ARGS:
         - uuid: <string>
         """
-        for class_name in self.tracked_objects:
-            for tracked_object in self.tracked_objects[class_name]:
+        for class_object_group in self.tracked_objects.values():
+            for tracked_object in class_object_group:
                 if tracked_object.last_uuid == uuid:
                     return tracked_object
 
