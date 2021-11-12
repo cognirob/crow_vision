@@ -76,7 +76,7 @@ class ParticleFilter():
     DELETION_TIME_LIMIT = 2  # 10 seconds
     MAX_SHIFT_ITERS = 15
     STATIC_NOISE = 0.01  # 5 cm
-    GLOBAL_DISTANCE_LIMIT = 0.1  # limit for a model to be considered "close" to new observation
+    GLOBAL_DISTANCE_LIMIT = 0.05  # limit for a model to be considered "close" to new observation
     TREE_DISTANCE_UPPER_BOUND = 0.01  # TODO: should be probably 1mm?
     CLOSE_MODEL_PROBABILITY_THRESHOLD = 1e-5  # TODO: search for optimal value
     PARTICLES_PCL_COUNT = 200  # how many particles to generate from measured PCLs
@@ -530,7 +530,7 @@ class ParticleFilter():
         weights = samples_weights[..., 3].squeeze()
         if len(samples)>0:
             mode = np.average(samples, axis=0, weights=weights)
-        else: 
+        else:
             mode = []
         iters = 0
         try:
