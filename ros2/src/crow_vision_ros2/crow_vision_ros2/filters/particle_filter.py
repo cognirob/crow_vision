@@ -423,7 +423,7 @@ class ParticleFilter():
         else:
             self._model_pcls[model_idx].append((pcl, pcl_center, pcl_dimension, est_class, score))
         if self.model_stored_pcls.get(str(self.model_uuid[model_idx])) is None:
-            self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.array([[pcl, est_class]])
+            self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.array([[pcl, est_class]], dtype=object)
         else:
             self.model_stored_pcls[str(self.model_uuid[model_idx])] = np.append(self.model_stored_pcls[str(self.model_uuid[model_idx])], [[pcl, est_class]], axis=0)
         len_diff = len(self.model_stored_pcls[str(self.model_uuid[model_idx])]) - self.NUM_STORED_PCLS
