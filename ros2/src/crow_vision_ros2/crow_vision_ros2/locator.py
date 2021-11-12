@@ -42,7 +42,7 @@ class Locator(Node):
     MIN_Z = -0.01
     MAX_Z = 0.15
 
-    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.3, 3.5)):
+    def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.2, 4)):
         """
         @arg min_points_plc : >0, default 500, In the segmented pointcloud, minimum number for points (xyz) to be a (reasonable) cloud.
         @arg depth_range: tuple (int,int), (min, max) range for estimated depth [in mm], default 10cm .. 1m. Points in cloud
@@ -76,7 +76,7 @@ class Locator(Node):
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
         # create publisher for located objects (segmented PCLs)
-        qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
+        qos = QoSProfile(depth=20, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
         self.pubPCL_debug = self.create_publisher(PointCloud2, '/detections/segmented_pointcloud_debug', qos_profile=qos)
 
