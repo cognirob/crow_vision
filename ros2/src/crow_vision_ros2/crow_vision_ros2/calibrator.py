@@ -114,7 +114,7 @@ class Calibrator(Node):
                 optical_frame = f"{camera_ns[1:]}_color_optical_frame"
                 self.optical_frames[camera_ns] = optical_frame
         else:  # the novel way: periodically check if cameras are online and add cameras one by one
-            sleep(7)
+            sleep(20)
             self.timer = self.create_timer(2, self.timer_cb)
 
     def timer_cb(self):
