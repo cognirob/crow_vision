@@ -115,6 +115,9 @@ class ParticleFilterNode(Node):
         n = len(self.assembly_object_types)
         probs = np.zeros(n)
         probs += np.random.rand(n) * 0.01
+        if class_name not in self.assembly_object_types:
+            self.get_logger().warn(f"Tracker wanted to freeze {class_name} but it isn't in assembly object types!")
+            return
         probs[self.assembly_object_types.index(class_name)] = 1
         probs /= probs.sum()
         aop = AssemblyObjectProbability(probabilities=probs)
