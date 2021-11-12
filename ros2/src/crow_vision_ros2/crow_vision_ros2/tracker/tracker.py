@@ -304,7 +304,7 @@ class Tracker:
         # Remove smaller items which are in THIS FRAME overlapping with bigger items of same class
         parsed_objects_cleaned = self.class_duplication_filter(parsed_objects=parsed_objects)
         if self.DEBUG:
-            print(f'parsed_onjects_cleaned: {parsed_objects_cleaned}')
+            print(f'parsed_objects_cleaned: {parsed_objects_cleaned}')
 
         if not class_name in self.tracked_objects:
             return
@@ -435,18 +435,11 @@ class Tracker:
             return ([], [])
         else:
             parsed_objects_dict = self.parse_objects(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names, uuids=uuids)
-        if self.DEBUG:
-            print("<tracker>: B")
 
         for class_name in parsed_objects_dict:
             self.evaluate_class_logic(class_name=class_name, parsed_objects=parsed_objects_dict[class_name])
-        if self.DEBUG:
-            print("<tracker>: C")
 
         self.check_inactive_objects_hand_logic()
-        if self.DEBUG:
-            print("<tracker>: D")
-
 
         # Return id's with original order, if some detection are disregarded - return -1
         # Dump all object instances into 1 list
@@ -492,14 +485,16 @@ class Tracker:
         parsed_objects = {}
         # Initialize empty dicitonaries of unique class_names
         for class_name in class_names:
-            parsed_objects[class_name] = []
+            if class_name in self.trackable_classes and class_name not in parsed_objects:
+                parsed_objects[class_name] = []
         # Add objects to the dictionary
-        for class_name_i in range(len(class_names)):
+        for class_name_i, class_name in enumerate(class_names):
+            if class_name not in self.trackable_classes:  # don't add non-trackable objects
+                continue
             centroid_position = Position(x=centroid_positions[class_name_i][0], y=centroid_positions[class_name_i][1], z=centroid_positions[class_name_i][2])
 
             # Check if the position is in the workspace
             if not self.check_position_in_workspace_area(xyz_list=centroid_position.get_list()):
-                class_name = class_names[class_name_i]
                 dimension = Dimensions(x=dimensions[class_name_i][0], y=dimensions[class_name_i][1], z=dimensions[class_name_i][2])
 
                 tracked_obj = TrackedObject(class_name=class_name, centroid_position=centroid_position, dimensions=dimension, original_order_index=class_name_i, last_uuid=uuids[class_name_i] ,latest_uuid=uuids[class_name_i])
@@ -544,7 +539,6 @@ class Tracker:
                         # freeze it there
                         print(f"<tracker>: Object: {tracked_object.class_name} frozen in workspace: {last_hand_pos_list}")
                         self.move_and_freeze(xyz_list=last_hand_pos_list, uuid=tracked_object.last_uuid)
-
                     else:
                         print(f"<tracker>: Hand {tracked_object.close_hand_obj_memory.object_name} not (yet) in workspace: {last_hand_pos_list}")
 
@@ -564,8 +558,8 @@ class Tracker:
         trajectory_objects = [self.avatar.avatar_objects["left_wrist"], self.avatar.avatar_objects["right_wrist"]]
         for trajectory_object in trajectory_objects:
             dist = trajectory_object.trajectory_memory.get_trajectory_minimal_distance(avatar_object=trajectory_object,object=object)
-            print(f"dist {trajectory_object.object_name} to {object.class_name}: {dist}")
-            print(f"previous dist: {distance}")
+            # print(f"dist {trajectory_object.object_name} to {object.class_name}: {dist}")
+            # print(f"previous dist: {distance}")
             if dist < distance:
                 distance = dist
                 closest_wrist_object = trajectory_object
