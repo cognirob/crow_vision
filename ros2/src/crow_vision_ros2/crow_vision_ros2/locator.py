@@ -76,7 +76,7 @@ class Locator(Node):
         assert self.depth_min < self.depth_max and self.depth_min > 0.0
 
         # create publisher for located objects (segmented PCLs)
-        qos = QoSProfile(depth=50, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
+        qos = QoSProfile(depth=5, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
         self.pubPCL_debug = self.create_publisher(PointCloud2, '/detections/segmented_pointcloud_debug', qos_profile=qos)
 
@@ -110,6 +110,8 @@ class Locator(Node):
         self.min_points_pcl = min_points_pcl
         self.avatar_data_classes = Avatar.AVATAR_PARTS
 
+        # self.runtimes = []
+
     @staticmethod
     # @jit(nopython=True, parallel=False)
     @jit("float32[:, ::1](float32[:, ::1],float32[:, ::1])", nopython=True, parallel=False, nogil=False, fastmath=False)
@@ -138,6 +140,7 @@ class Locator(Node):
             # self.get_logger().info("no masks, no party. Quitting early.")
             return  # no mask detections (for some reason)
 
+        # start = time.time()
         cameraData = self.getCameraData(camera)
         masks = np.array([self.cvb.imgmsg_to_cv2(mask, "mono8") for mask in mask_msg.masks])
         object_ids, class_names, scores = mask_msg.object_ids, mask_msg.class_names, mask_msg.scores
@@ -166,14 +169,16 @@ class Locator(Node):
         wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
         ctg_tf_mat = cameraData["ctg_tf"]
         total_pcd = np.zeros((3, 1))
+        # total_processed = 0
+        # start_loop = time.time()
         for where, object_id, class_name, score in zip(wheres, object_ids, class_names, scores):
             # 2. segment PCL & compute median
             # skip pointclouds with too few datapoints to be useful
             # if class_name in self.avatar_data_classes:
             #     self.get_logger().error(f"{class_name}")
             if len(where) < self.min_points_pcl:
-            #     self.get_logger().info(
-            #         "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
+                self.get_logger().info(
+                    "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
             seg_pcd = np.dot(ctg_tf_mat, np.pad(point_cloud[:, where], ((0, 1), (0, 0)), mode="constant", constant_values=1))
@@ -181,9 +186,11 @@ class Locator(Node):
             # filter points outside the main work area
             m = np.mean(seg_pcd, axis=1)
             if m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y or m[2] < self.MIN_Z or m[2] > self.MAX_Z:
+                self.get_logger().info(
+                    "Cam {}: Skipping '{}'  -- out of bounds. ".format(camera, class_name))
                 continue
             # if "2" in camera:
-            total_pcd = np.c_[total_pcd, seg_pcd]
+            # total_pcd = np.c_[total_pcd, seg_pcd]
 
             seg_color = rgb_raw[where]
 
@@ -209,12 +216,19 @@ class Locator(Node):
             else:
                 self.pubPCL.publish(seg_pcl_msg)
                 self.pclient.located_objects += [time.time()]
+            # total_processed += 1
+            # self.runtimes.append(time.time() - start_loop)
 
-        if len(total_pcd) > 0:
-            dmsg = ftl_numpy2pcl(total_pcd, pcl_msg.header)
-            dmsg.header.frame_id = self.global_frame_id
-            dmsg.header.stamp = pcl_msg.header.stamp
-            self.pubPCL_debug.publish(dmsg)
+        # total_runtime = time.time() - start
+        # now = self.get_clock().now()
+        # mdelay = (now - rclpy.time.Time.from_msg(mask_msg.header.stamp)).nanoseconds * 1e-9
+        # pdelay = (now - rclpy.time.Time.from_msg(pcl_msg.header.stamp)).nanoseconds * 1e-9
+        # self.get_logger().error(f"Processed {total_processed} objects for camera {camera}. Total runtime was {total_runtime:0.3f}. Delay {mdelay:0.3f} | {pdelay:0.3f}")
+        # if len(total_pcd) > 0:
+        #     dmsg = ftl_numpy2pcl(total_pcd, pcl_msg.header)
+        #     dmsg.header.frame_id = self.global_frame_id
+        #     dmsg.header.stamp = pcl_msg.header.stamp
+        #     self.pubPCL_debug.publish(dmsg)
 
     # def compareMaskPCL(self, mask_array, projected_points):  # OLD, SLOW version
     #     a = mask_array.T.astype(np.int32).copy()
@@ -248,6 +262,8 @@ def main():
         rclpy.spin(locator, executor=mte)
         # rclpy.spin(locator)
     except KeyboardInterrupt:
+        # from scipy.stats import describe
+        # print(describe(locator.runtimes))
         print("User requested shutdown.")
     finally:
         locator.destroy_node()
