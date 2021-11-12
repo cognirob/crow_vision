@@ -334,11 +334,11 @@ class Tracker:
 
             # In last iteration - load objects
             if self.setup_detection_count >= DETECTIONS_FOR_SETUP_NEEDED:
-                # if self.DEBUG:
-                print(f"<tracker> self.setup_detection_history:")
-                for a in self.setup_detection_history:
-                    print(f"self.setup_detection_history[i]: {a}")
-                print("<tracker> Loading setup objects")
+                if self.DEBUG:
+                    print(f"<tracker> self.setup_detection_history:")
+                    for a in self.setup_detection_history:
+                        print(f"self.setup_detection_history[i]: {a}")
+                    print("<tracker> Loading setup objects")
 
                 self.load_setup_objects()
             return False
