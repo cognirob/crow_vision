@@ -35,12 +35,17 @@ from crow_vision_ros2.tracker.tracker_avatar import Avatar
 
 
 class Locator(Node):
-    MIN_X = -0.2
+    MIN_X = -0.2  # work table boundaries - set specifically for each workplace
     MAX_X = 1.25
     MIN_Y = -0.4
     MAX_Y = 1
     MIN_Z = -0.01
     MAX_Z = 0.15
+
+    LR_X = 0.84  # x position of the cutout for the leftrobot
+    R_Y_MIN = -0.15  # y start of th cutout for the robots
+    R_Y_MAX = 0.21  # y end of th cutout for the robots
+    RR_X = 0.2  # x position of the cutout for the leftrobot
 
     def __init__(self, node_name="locator", min_points_pcl=2, depth_range=(0.2, 4)):
         """
@@ -185,9 +190,11 @@ class Locator(Node):
             seg_pcd = seg_pcd[:3, :] / seg_pcd[3, :]
             # filter points outside the main work area
             m = np.mean(seg_pcd, axis=1)
-            if m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y or m[2] < self.MIN_Z or m[2] > self.MAX_Z:
-                self.get_logger().info(
-                    "Cam {}: Skipping '{}'  -- out of bounds. ".format(camera, class_name))
+            if m[2] < self.MIN_Z or m[2] > self.MAX_Z or m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y:
+                self.get_logger().info("Cam {}: Skipping '{}'  -- out of bounds. ".format(camera, class_name))
+                continue
+            elif m[1] > self.R_Y_MIN and m[1] < self.R_Y_MAX and (m[0] > self.LR_X or m[0] < self.RR_X):
+                self.get_logger().info("Cam {}: Skipping '{}'  -- in the robot cutout. ".format(camera, class_name))
                 continue
             # if "2" in camera:
             # total_pcd = np.c_[total_pcd, seg_pcd]
