@@ -11,7 +11,7 @@
   "posenet_model": "./_models/mobilenet_v1_101.pth",
 
   ## filter cameras by serial
-  "object_camera_serials": ["032522250227", "035122250184", "032522250249"],
+  "object_camera_serials": ["032522250227", "035122250184", "105322252074"],
   "pose_camera_serial": "105322252074",
 
   ## for config use one of: name of config(string) from yolact config file; path to .obj (used for CROW); or "none" (will try to guess)
