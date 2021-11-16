@@ -11,6 +11,7 @@ import rclpy
 import sensor_msgs
 import torch
 from crow_msgs.msg import DetectionMask
+from rcl_interfaces.srv import GetParameters
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
@@ -74,6 +75,9 @@ class CrowVisionNvidiaPose(Node):
 
         ## handle multiple inputs (cameras).
         # store the ROS Listeners,Publishers in a dict{}, keys by topic.
+        calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
+        self.get_logger().info("Waiting for calibrator to setup cameras")
+        calib_client.wait_for_service()
         self.cameras, self.camera_frames, self.camera_serials = [p.string_array_value for p in call_get_parameters(node=self, node_name="/calibrator", parameter_names=["camera_namespaces", "camera_frames", "camera_serials"]).values]
         while len(self.cameras) == 0:
             self.get_logger().warn("Waiting for any cameras!")
