@@ -8,7 +8,7 @@ from crow_msgs.msg import ObjectPointcloud
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from rclpy.duration import Duration
-from trio3_ros2_interfaces.msg import Units
+from trio3_ros2_interfaces.msg import Units, RobotActionType, ObjectType
 from trio3_ros2_interfaces.srv import GetMaskedPointCloud
 from crow_ontology.crowracle_client import CrowtologyClient
 
@@ -64,6 +64,7 @@ class PCLCacher(Node):
     PCL_MEMORY_SIZE = 30
     PCL_GETTER_SERVICE_NAME = "get_masked_point_cloud_rs"
     MAX_ALLOWED_DISTANCE = 0.2  # in meters
+    MAX_AFF_ALLOWED_DISTANCE = 0.2
     KEEP_ALIVE_DURATION = 20
     DEBUG = False
 
@@ -82,6 +83,9 @@ class PCLCacher(Node):
         self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
                            "screw_round_thread", "screw_round_head", "screwdriver_handle",
                            "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
+        self.action_to_aff_type = {RobotActionType.PICK_AND_HOME: "_handle",
+                                   RobotActionType.PICK_AND_PLACE: "_handle",
+                                   RobotActionType.PICK_AND_PASS: "_head"}
         self.keep_alive_duration = Duration(seconds=self.KEEP_ALIVE_DURATION)
         self.create_timer(5, self.print_n_ojs)
         self.get_logger().info("PCL cacher ready.")
@@ -128,6 +132,8 @@ class PCLCacher(Node):
     def get_pcl(self, request, response):
         try:
             request_pose = np.r_["0,1,0", [getattr(request.expected_position.position, a) for a in "xyz"]]
+            request_action = request.robot_action_type
+            request_object = request.object_type
             if request.request_units.unit_type == Units.MILIMETERS:
                 request_pose /= 1000
             self.get_logger().info(f"Got a request for a segmented PCL near location {str(request_pose.tolist())}")
@@ -146,8 +152,29 @@ class PCLCacher(Node):
                 return response
 
             closest_object = self.objects[dist_objs[min_idx, 1]]
-            self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} located {min_value}m away from the requested location.")
-            response.masked_point_cloud = closest_object.pcl
+
+            # Construct response based on the request action and object type
+            if request_action == RobotActionType.POINT:
+                self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} located {min_value}m away from the requested location.")
+                response.masked_point_cloud = closest_object.pcl
+            elif request_action in self.action_to_aff_type:
+                request_affordance = request_object + self.action_to_aff_type[request_action]
+                dist_affs = np.r_["0,2,0", [[o.compute_distance(request_pose), uid] for uid, o in self.aff_objects.items()
+                                                                                     if o.label == request_affordance]]
+                if dist_affs:
+                    distances = dist_affs[:, 0].astype(float)
+                    min_idx = np.argmin(distances)
+                    min_value = distances[min_idx]
+                    if min_value > self.MAX_AFF_ALLOWED_DISTANCE:
+                        self.get_logger().error(f"Error requesting a segmented PCL: No PCL is close enough to the requested position!\n\trequest: {str(request_pose)}\n\tdistances: {str(distances)}")
+                        return response
+                    closest_aff = self.aff_objects[dist_affs[min_idx, 1]]
+                    self.get_logger().info(f"Responding with a PCL @ {str(closest_aff.center)} located {min_value}m away from the requested location.")
+                    response.masked_point_cloud = closest_aff.pcl
+                else:
+                    self.get_logger().error(f"Error requesting a segmented PCL: No PCL is close enough to the requested position!\n\trequest: {str(request_pose)}\n\tdistances: {str(distances)}")
+                    return response
+
             if self.DEBUG:
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(closest_object.pcl_numpy.astype(np.float32))
