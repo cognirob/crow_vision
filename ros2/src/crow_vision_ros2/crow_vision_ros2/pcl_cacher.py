@@ -88,7 +88,7 @@ class PCLCacher(Node):
 
     def print_n_ojs(self):
         self.refresh_pcls()
-        self.get_logger().info(f"# of objs = {len(self.objects)}")
+        self.get_logger().info(f"# of objs = {len(self.objects)}, # of aff objs = {len(self.aff_objects)}")
         # for k, v in self.objects.items():
         #     self.get_logger().info(f"{k} = {np.mean(v.pcl, axis=0)}")
 
@@ -99,7 +99,6 @@ class PCLCacher(Node):
             if obj.stamp < latest_allowed_time:
                 stale_uuids.append(uid)
         for uid in stale_uuids:
-            print(uid)
             del objects[uid]
 
 
@@ -118,6 +117,8 @@ class PCLCacher(Node):
                     else:
                         obj = self.aff_objects[uid]
                     if obj.stamp != stamp:  # object is in the DB but with an old PCL or has a new label
+                        # if label != obj.label:
+                        #     print("Inconistency", label, obj.label)
                         obj.update(stamp, pcl, label)
                 # self.get_logger().info(f"PCL size = {np.mean(self.objects[uid].pcl_numpy, axis=0)}")
         # cleanup way too old PCLs
