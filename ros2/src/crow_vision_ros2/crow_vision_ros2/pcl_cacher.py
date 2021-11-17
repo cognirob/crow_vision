@@ -113,19 +113,11 @@ class PCLCacher(Node):
                     else:
                         self.objects[uid] = PCLItem(uid, stamp, pcl, label)
                 else:
-                    if label in self.aff_classes and uid in self.aff_objects: # affordance object and labels coresspond
-                        obj = self.aff_objects[uid]
-                    elif label not in self.aff_classes and uid in self.objects: # regular object and labels coresspond
+                    if uid in self.objects:
                         obj = self.objects[uid]
-                    elif label in self.aff_classes: # affordance object and labels do not coresspond
-                        obj = self.objects.pop(uid)
-                        self.aff_objects[uid] = obj
-                    else: # regular object and labels do not coresspond
-                        obj = self.aff_objects.pop(uid)
-                        self.objects[uid] = obj
-                    if obj.stamp != stamp or obj.label != label:  # object is in the DB but with an old PCL or has a new label
-                        if obj.label != label:
-                            print("UPDATE", obj.label, label)
+                    else:
+                        obj = self.aff_objects[uid]
+                    if obj.stamp != stamp:  # object is in the DB but with an old PCL or has a new label
                         obj.update(stamp, pcl, label)
                 # self.get_logger().info(f"PCL size = {np.mean(self.objects[uid].pcl_numpy, axis=0)}")
         # cleanup way too old PCLs

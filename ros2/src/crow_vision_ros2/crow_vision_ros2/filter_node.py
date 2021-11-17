@@ -50,6 +50,11 @@ class ParticleFilterNode(Node):
         self.object_properties = self.crowracle.get_filter_object_properties()
         # create an instance of PF
         self.particle_filter = ParticleFilter(self.object_properties)  # the main component
+        self.aff_particle_filter = ParticleFilter(self.object_properties)
+
+        self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
+                           "screw_round_thread", "screw_round_head", "screwdriver_handle",
+                           "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
 
         # message counting vars
         self.received_msg = 0
@@ -151,7 +156,10 @@ class ParticleFilterNode(Node):
                 ############################################################################
 
                 pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
-                self.particle_filter.add_measurement((pcl, class_id, score))
+                if label in self.aff_classes:
+                    self.aff_particle_filter.add_measurement((pcl, class_id, score))
+                else:
+                    self.particle_filter.add_measurement((pcl, class_id, score))
 
             now = self.get_clock().now()
             mdelay = (now - rclpy.time.Time.from_msg(pcl_msg.header.stamp)).nanoseconds * 1e-9
@@ -164,15 +172,21 @@ class ParticleFilterNode(Node):
     def update(self, now=None):
         StatTimer.enter("Filter node update loop")
         self.pclient.filter_alive = time()
-        self.particle_filter.update()
         if now is not None:
             self.lastFilterUpdate = now
         else:
             self.lastFilterUpdate = self.get_clock().now()
+        self.update_particle_filter(self.particle_filter)
+        self.update_particle_filter(self.aff_particle_filter)
+        StatTimer.exit("Filter node update loop")
 
-        if self.particle_filter.n_models > 0:
+
+    def update_particle_filter(self, particle_filter):
+        particle_filter.update()
+
+        if particle_filter.n_models > 0:
             StatTimer.enter("Filter publishing")
-            estimates = self.particle_filter.getEstimates()
+            estimates = particle_filter.getEstimates()
             if len(estimates) == 0:
                 self.get_logger().info("Got no estimates from filter, doing nothing.")
                 return
@@ -197,7 +211,7 @@ class ParticleFilterNode(Node):
             # print(f"*** latest_uuid: {latest_uuid}")
             StatTimer.exit("tracking")
             StatTimer.enter("correcting uuids")
-            self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
+            particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
             StatTimer.exit("correcting uuids")
 
             # self.tracker.dump_tracked_objects_info()
@@ -243,7 +257,7 @@ class ParticleFilterNode(Node):
 
             if self.VISUALIZE_PARTICLES:
                 particles_msg = []
-                particles = self.particle_filter.get_model_particles()
+                particles = particle_filter.get_model_particles()
                 for model_particles in particles:
                     model_particles_msg = Float32MultiArray()
                     dims = model_particles.shape
@@ -267,7 +281,7 @@ class ParticleFilterNode(Node):
 
             StatTimer.enter("Filter PCL publish")
             # get PCL for each model
-            pcl_uuids, pcl_points, pcl_labels = self.particle_filter.getPclsEstimates()
+            pcl_uuids, pcl_points, pcl_labels = particle_filter.getPclsEstimates()
             pcl_msg = ObjectPointcloud()
             pcl_msg.header.stamp = self.get_clock().now().to_msg()
             pcl_msg.header.frame_id = self.frame_id
@@ -295,7 +309,6 @@ class ParticleFilterNode(Node):
                 self.pcl_publisher.publish(pcl_msg)
                 StatTimer.exit("Filter PCL publish")
             StatTimer.exit("Filter publishing")
-        StatTimer.exit("Filter node update loop")
 
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
