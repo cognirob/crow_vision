@@ -2,9 +2,8 @@ import rclpy #add to package.xml deps
 from rclpy.node import Node
 from rcl_interfaces.srv import GetParameters
 from ros2param.api import call_get_parameters
-
+import traceback as tb
 import sensor_msgs
-
 from crow_msgs.msg import DetectionMask, DetectionBBox, BBox
 from cv_bridge import CvBridge
 
@@ -22,6 +21,7 @@ import copy
 #import os, sys
 from crow_control.utils.profiling import StatTimer
 from crow_control.utils import ParamClient
+from crow_ontology.crowracle_client import CrowtologyClient
 from yolact_edge.inference_tool import InfTool
 
 
@@ -64,6 +64,9 @@ class CrowVision(Node):
         else:
             raise Exception("Supported types only: 'Detectron2', 'YOLACT'. Set in config.type. ")
 
+        # get allowed objects
+        crowtology = CrowtologyClient(node=self)
+        self.allowed_classes = crowtology.getAllowedDetNames()
         ## handle multiple inputs (cameras).
         # store the ROS Listeners,Publishers in a dict{}, keys by topic.
         calib_client = self.create_client(GetParameters, '/calibrator/get_parameters')
@@ -83,6 +86,9 @@ class CrowVision(Node):
         for cam, serial in zip(self.cameras, self.camera_serials):
             if serial not in object_cams and serial in pose_cam:
                 self.get_logger().warn(f"Skipping camera {cam} with serial {serial} - not configured as object camera.")
+                continue
+            
+            self.get_logger().warn(f"Using camera {cam} with serial {serial} as object camera.")
             camera_topic=cam+"/color/image_raw"
             # create INput listener with raw images
             listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
@@ -207,17 +213,41 @@ class CrowVision(Node):
             if "pub_masks" in self.ros[topic]:
                 # StatTimer.enter("process & pub masks")
                 msg_mask = DetectionMask()
-                msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
-                #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)
-                # parse time from incoming msg, pass to outgoing msg
                 msg_mask.header.stamp = msg.header.stamp
-                for mask in msg_mask.masks:
+                msg_mask.header.frame_id = msg.header.frame_id
+
+                msg_mask.masks = []
+                msg_mask.classes = []
+                msg_mask.class_names = []
+                msg_mask.scores = []
+                msg_mask.object_ids = []
+                for mask, cls, cls_name, score in zip(masks.astype(np.uint8), classes, class_names, scores):
+                    if cls_name not in self.allowed_classes:
+                        self.get_logger().error(f"Skipping class {cls_name}")
+                        continue
+                    mask = self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel), encoding="mono8")
                     mask.header.stamp = msg.header.stamp
-                msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
-                msg_mask.classes = classes
-                msg_mask.class_names = class_names
-                msg_mask.object_ids = [0] * len(classes)
-                msg_mask.scores = scores
+                    msg_mask.masks.append(mask)
+                    msg_mask.classes.append(cls)
+                    msg_mask.class_names.append(cls_name)
+                    msg_mask.scores.append(score)
+                    msg_mask.object_ids.append(0)
+
+                if len(msg_mask.masks) == 0:
+                    self.get_logger().warn(f"No enabled object classes detected.")
+                    return
+
+                # msg_mask.masks = [self.cvb_.cv2_to_imgmsg(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.m_kernel), encoding="mono8") for mask in masks.astype(np.uint8)]
+                # #cv2.imshow("aa", cv2.morphologyEx(masks[0], cv2.MORPH_OPEN, m_kernel)); cv2.waitKey(4)
+                # # parse time from incoming msg, pass to outgoing msg
+                # msg_mask.header.stamp = msg.header.stamp
+                # for mask in msg_mask.masks:
+                #     mask.header.stamp = msg.header.stamp
+                # msg_mask.header.frame_id = msg.header.frame_id  # TODO: fix frame name because stupid Intel RS has only one frame for all cameras
+                # msg_mask.classes = classes
+                # msg_mask.class_names = class_names
+                # msg_mask.object_ids = [0] * len(classes)
+                # msg_mask.scores = scores
                 #self.get_logger().info("Publishing as String {} at time {} ".format(msg_mask.class_names, msg_mask.header.stamp.sec))
                 self.ros[topic]["pub_masks"].publish(msg_mask)
                 now = time.time()
@@ -242,13 +272,16 @@ def main(args=None):
     rclpy.init(args=args)
     try:
         cnn = CrowVision()
-        n_threads = len(cnn.cameras)
-        mte = rclpy.executors.MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
-        rclpy.spin(cnn, executor=mte)
-        # rclpy.spin(cnn)
+        # n_threads = len(cnn.cameras)
+        # mte = rclpy.executors.MultiThreadedExecutor(num_threads=n_threads, context=rclpy.get_default_context())
+        # rclpy.spin(cnn, executor=mte)
+        rclpy.spin(cnn)
         cnn.destroy_node()
     except KeyboardInterrupt:
         print("User requested shutdown.")
+    except BaseException as e:
+        print(f"Some error had occured: {e}")
+        tb.print_exc()
     finally:
         cv2.destroyAllWindows()
         rclpy.shutdown()

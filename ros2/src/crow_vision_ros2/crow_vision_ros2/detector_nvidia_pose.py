@@ -90,7 +90,8 @@ class CrowVisionNvidiaPose(Node):
             if serial not in pose_cam:
                 self.get_logger().warn(f"Skipping camera {cam} with serial {serial} - not configured as pose camera.")
                 continue
-
+            
+            self.get_logger().warn(f"Using camera {cam} with serial {serial} as pose camera.")
             camera_topic=cam+"/color/image_raw"
             # create INput listener with raw images
             listener = self.create_subscription(msg_type=sensor_msgs.msg.Image,
