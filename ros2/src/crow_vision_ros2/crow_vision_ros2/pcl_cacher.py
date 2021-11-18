@@ -83,9 +83,9 @@ class PCLCacher(Node):
         self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
                            "screw_round_thread", "screw_round_head", "screwdriver_handle",
                            "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
-        self.action_to_aff_type = {RobotActionType.PICK_AND_HOME: "_handle",
-                                   RobotActionType.PICK_AND_PLACE: "_handle",
-                                   RobotActionType.PICK_AND_PASS: "_head"}
+        self.action_to_aff_type = {RobotActionType.PICK_N_HOME: "_handle",
+                                   RobotActionType.PICK_N_PLACE: "_handle",
+                                   RobotActionType.PICK_N_PASS: "_head"}
         self.keep_alive_duration = Duration(seconds=self.KEEP_ALIVE_DURATION)
         self.create_timer(5, self.print_n_ojs)
         self.get_logger().info("PCL cacher ready.")
