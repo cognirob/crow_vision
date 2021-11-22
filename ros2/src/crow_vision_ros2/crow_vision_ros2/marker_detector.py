@@ -24,7 +24,7 @@ import transforms3d as tf3
 import pkg_resources
 import time
 import subprocess
-
+import traceback as tb
 qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
 
 
@@ -336,11 +336,16 @@ class MarkerDetector(Node):
 
 def main():
     rclpy.init()
-    time.sleep(1)
-    marker_detector = MarkerDetector()
-
-    rclpy.spin(marker_detector)
-    marker_detector.destroy_node()
+    try:
+        marker_detector = MarkerDetector()
+        rclpy.spin(marker_detector)
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
+    except BaseException as e:
+        print(f"Some error had occured: {e}")
+        tb.print_exc()
+    finally:
+        marker_detector.destroy_node()
 
 if __name__ == "__main__":
     main()

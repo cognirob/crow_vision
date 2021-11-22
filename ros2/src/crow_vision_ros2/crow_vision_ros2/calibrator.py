@@ -15,6 +15,7 @@ import argparse
 import sys
 import os
 from crow_vision_ros2.utils.get_camera_transformation import CameraGlobalTFGetter
+import traceback as tb
 
 
 class Calibrator(Node):
@@ -322,12 +323,17 @@ class Calibrator(Node):
 
 def main(args=[]):
     rclpy.init()
-
-    calibrator = Calibrator()
-
-    rclpy.spin(calibrator)
-
-    cv2.destroyAllWindows()
+    try:
+        calibrator = Calibrator()
+        rclpy.spin(calibrator)
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
+    except BaseException as e:
+        print(f"Some error had occured: {e}")
+        tb.print_exc()
+    finally:
+        calibrator.destroy_node()
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
