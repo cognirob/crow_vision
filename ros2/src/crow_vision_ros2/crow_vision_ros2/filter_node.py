@@ -13,12 +13,14 @@ from crow_vision_ros2.filters import ParticleFilter
 
 # Tracker
 from crow_vision_ros2.tracker import Tracker
+from crow_vision_ros2.tracker.tracker_config import DETECTIONS_FOR_SETUP_NEEDED
 
 #TF
 import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
 from sensor_msgs.msg import PointCloud2
+from std_srvs.srv import Trigger
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
 from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud, AssemblyObjectProbability
 from crow_ontology.crowracle_client import CrowtologyClient
@@ -42,6 +44,7 @@ class ParticleFilterNode(Node):
     FILTERED_POSES_TOPIC = "/filtered_poses"
     FILTERED_PCL_TOPIC = "/filtered_pcls"
     ASSEMBLY_OBJECT_TOPIC = '/assembly_object'
+    RESET_OBJECTS_SERVICE = "/reset_tracker_objects"
 
     def __init__(self, node_name="particle_filter"):
         super().__init__(node_name)
@@ -90,18 +93,19 @@ class ParticleFilterNode(Node):
         self.avatar_data_classes = Avatar.AVATAR_PARTS
         # create avatar callback
         self.create_subscription(SegmentedPointcloud, '/detections/segmented_pointcloud_avatar', callback=self.avatar_callback, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
-        
+
         # create assembly object publisher
         self.object_pub = self.create_publisher(AssemblyObjectProbability, self.ASSEMBLY_OBJECT_TOPIC, 10)
         self.assembly_object_types = [getattr(AssemblyObjectProbability, o) for o in sorted(dir(AssemblyObjectProbability)) if o.startswith("O_")]
-        # print(self.assembly_object_types)
+
+        self.start_build_srv = self.create_service(Trigger, self.RESET_OBJECTS_SERVICE, self.reset_tracker_objects)#, callback_group=rclpy.callback_groups.ReentrantCallbackGroup())
 
         self.get_logger().info("Filter is up")
 
     def message_counter_callback(self, msg):
         print(f'received msgs: {self.received_msg}')
         print(f'processed messages: {self.messages_processed}')
-        
+
         self.received_msg += 1
         print(f'dropped {(1-(self.messages_processed / self.received_msg)) *100}% of messages')
 
@@ -123,6 +127,19 @@ class ParticleFilterNode(Node):
         aop = AssemblyObjectProbability(probabilities=probs)
         self.object_pub.publish(aop)
         self.get_logger().info(f"Published assembly object probabilities: {aop}")
+
+    def reset_tracker_objects(self, request, response):
+        """Resets the tracker scene setup (i.e. the tracked objects)"""
+        self.get_logger().info("Got request to reset the scene.")
+        n_updates = request.n_updates
+        if n_updates > 0:
+            self.tracker.DETECTIONS_FOR_SETUP_NEEDED = n_updates
+        else:
+            self.tracker.DETECTIONS_FOR_SETUP_NEEDED = DETECTIONS_FOR_SETUP_NEEDED
+
+        self.tracker.reset_setup()
+        response.success = True
+        return response
 
     def add_and_process(self, messages):
         if type(messages) is not list:  # make sure messages is a list for consistency
@@ -372,7 +389,7 @@ def main():
         print("User requested shutdown.")
     except BaseException as e:
         print(f"Some error had occured: {e}")
-        tb.print_exc()        
+        tb.print_exc()
     finally:
         pfilter.destroy_node()
 

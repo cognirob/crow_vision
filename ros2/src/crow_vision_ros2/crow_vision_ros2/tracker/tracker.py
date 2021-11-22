@@ -101,6 +101,7 @@ class Tracker:
     - crowracle: <Class:CrowtologyClient> filter_node passes database client
     """
     DEBUG = False
+    DETECTIONS_FOR_SETUP_NEEDED = DETECTIONS_FOR_SETUP_NEEDED
 
     def __init__(self, crowracle, freezeing_cb=None):
         # Current setup detection count
@@ -324,16 +325,16 @@ class Tracker:
         - uuids: <list:string>
         """
 
-        if self.setup_detection_count < DETECTIONS_FOR_SETUP_NEEDED:
+        if self.setup_detection_count < self.DETECTIONS_FOR_SETUP_NEEDED:
             self.setup_detection_count += 1
             # Save current data to dictionary
             curr_dict = {"centroid_positions": centroid_positions, "dimensions": dimensions, "class_names": class_names, "uuids": uuids}
             self.setup_detection_history.append(curr_dict)
 
-            print(f"<tracker> Setup iteration #{self.setup_detection_count}/{DETECTIONS_FOR_SETUP_NEEDED} ...")
+            print(f"<tracker> Setup iteration #{self.setup_detection_count}/{self.DETECTIONS_FOR_SETUP_NEEDED} ...")
 
             # In last iteration - load objects
-            if self.setup_detection_count >= DETECTIONS_FOR_SETUP_NEEDED:
+            if self.setup_detection_count >= self.DETECTIONS_FOR_SETUP_NEEDED:
                 if self.DEBUG:
                     print(f"<tracker> self.setup_detection_history:")
                     for a in self.setup_detection_history:
@@ -376,7 +377,7 @@ class Tracker:
         print(f"<tracker>: Loader dictionary: {loader_dict}")
 
         for key in loader_dict:
-            if loader_dict[key]["counter"] > (PERCENTAGE_NEEDED_TO_BE_APPROVED * DETECTIONS_FOR_SETUP_NEEDED):
+            if loader_dict[key]["counter"] > (PERCENTAGE_NEEDED_TO_BE_APPROVED * self.DETECTIONS_FOR_SETUP_NEEDED):
                 centroid_positions.append(loader_dict[key]["centroid_positions"])
                 dimensions.append(loader_dict[key]["dimensions"])
                 class_names.append(loader_dict[key]["class_names"])
@@ -430,7 +431,7 @@ class Tracker:
 
         self.reset_flags()
 
-        # Setup scene objects - after 'DETECTIONS_FOR_SETUP_NEEDED' it will return True
+        # Setup scene objects - after 'self.DETECTIONS_FOR_SETUP_NEEDED' it will return True
         if not self.setup_scene_objects(centroid_positions=centroid_positions, dimensions=dimensions, class_names=class_names, uuids=uuids):
             return ([], [])
         else:
