@@ -17,7 +17,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from ros2param.api import call_get_parameters
-
+import traceback as tb
 import trt_pose.coco
 import trt_pose.models
 from trt_pose.draw_objects import DrawObjects
@@ -318,6 +318,11 @@ def main(args=None):
         rclpy.spin(cnn, executor=mte)
         # rclpy.spin(cnn)
         cnn.destroy_node()
+    except KeyboardInterrupt:
+        print("User requested shutdown.")
+    except BaseException as e:
+        print(f"Some error had occured: {e}")
+        tb.print_exc()
     finally:
         cv2.destroyAllWindows()
         rclpy.shutdown()
