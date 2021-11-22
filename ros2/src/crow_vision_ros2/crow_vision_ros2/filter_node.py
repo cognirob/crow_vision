@@ -8,6 +8,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 import message_filters
 import traceback as tb
 from crow_msgs.msg import SegmentedPointcloud
+from crow_msgs.srv import ResetScene
 from crow_vision_ros2.utils import make_vector3, ftl_pcl2numpy, ftl_numpy2pcl
 from crow_vision_ros2.filters import ParticleFilter
 
@@ -20,7 +21,6 @@ import tf2_py as tf
 import tf2_ros
 from geometry_msgs.msg import PoseArray, Pose
 from sensor_msgs.msg import PointCloud2
-from std_srvs.srv import Trigger
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
 from crow_msgs.msg import FilteredPose, PclDimensions, ObjectPointcloud, AssemblyObjectProbability
 from crow_ontology.crowracle_client import CrowtologyClient
@@ -98,7 +98,7 @@ class ParticleFilterNode(Node):
         self.object_pub = self.create_publisher(AssemblyObjectProbability, self.ASSEMBLY_OBJECT_TOPIC, 10)
         self.assembly_object_types = [getattr(AssemblyObjectProbability, o) for o in sorted(dir(AssemblyObjectProbability)) if o.startswith("O_")]
 
-        self.start_build_srv = self.create_service(Trigger, self.RESET_OBJECTS_SERVICE, self.reset_tracker_objects)#, callback_group=rclpy.callback_groups.ReentrantCallbackGroup())
+        self.start_build_srv = self.create_service(ResetScene, self.RESET_OBJECTS_SERVICE, self.reset_tracker_objects)#, callback_group=rclpy.callback_groups.ReentrantCallbackGroup())
 
         self.get_logger().info("Filter is up")
 
