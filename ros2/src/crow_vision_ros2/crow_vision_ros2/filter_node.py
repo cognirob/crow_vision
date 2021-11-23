@@ -55,10 +55,7 @@ class ParticleFilterNode(Node):
         self.particle_filter = ParticleFilter(self.object_properties)  # the main component
         self.aff_particle_filter = ParticleFilter(self.object_properties)
 
-        self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
-                           "screw_round_thread", "screw_round_head", "screwdriver_handle",
-                           "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
-
+        self.aff_classes = self.crowracle.getAffordanceDetNames()
         # message counting vars
         self.received_msg = 0
         self.messages_processed = 0
