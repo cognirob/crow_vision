@@ -61,22 +61,21 @@ class PCLItem():
 
 
 class PCLCacher(Node):
-    PCL_MEMORY_SIZE = 30
+    PCL_MEMORY_SIZE = 10
     PCL_GETTER_SERVICE_NAME = "get_masked_point_cloud_rs"
-    MAX_AFF_ALLOWED_DISTANCE = 0.3
-    MAX_SPEC_ALLOWED_DISTANCE = 0.25  # in meters
-    MAX_ANY_ALLOWED_DISTANCE = 0.2
-    KEEP_ALIVE_DURATION = 20
+    PCL_TOPIC = '/filtered_pcls'
+    MAX_AFF_ALLOWED_DISTANCE = 0.2
+    MAX_SPEC_ALLOWED_DISTANCE = 0.1  # in meters
+    MAX_ANY_ALLOWED_DISTANCE = 0.05
+    KEEP_ALIVE_DURATION = 10
     DEBUG = False
 
     def __init__(self, node_name="pcl_cacher"):
         super().__init__(node_name)
         # Get existing cameras from and topics from the calibrator
-        qos = QoSProfile(
-            depth=self.PCL_MEMORY_SIZE,
-            reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
-        sub = message_filters.Subscriber(self, ObjectPointcloud, '/filtered_pcls', qos_profile=qos)
+        qos = QoSProfile(depth=self.PCL_MEMORY_SIZE, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.crowracle = CrowtologyClient(node=self)
+        sub = message_filters.Subscriber(self, ObjectPointcloud, self.PCL_TOPIC, qos_profile=qos)
         self.cache = message_filters.Cache(sub, self.PCL_MEMORY_SIZE, allow_headerless=False)
         self.srv = self.create_service(GetMaskedPointCloud, self.PCL_GETTER_SERVICE_NAME, self.get_pcl)
         self.objects = {}
@@ -108,7 +107,10 @@ class PCLCacher(Node):
 
 
     def refresh_pcls(self):
-        for stamp, msg in zip(self.cache.cache_times, self.cache.cache_msgs):
+        cache_times, cache_msgs = self.cache.cache_times, self.cache.cache_msgs
+        self.cache.cache_msgs = []
+        self.cache.cache_times = []
+        for stamp, msg in zip(cache_times, cache_msgs):
            # print(len(msg.pcl) == len(msg.uuid) == len(msg.labels))
             for uid, pcl, label in zip(msg.uuid, msg.pcl, msg.labels):
                 if uid not in self.objects and uid not in self.aff_objects:  # object is not yet in the database
