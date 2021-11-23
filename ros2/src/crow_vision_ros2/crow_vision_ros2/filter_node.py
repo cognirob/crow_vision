@@ -53,6 +53,11 @@ class ParticleFilterNode(Node):
         self.object_properties = self.crowracle.get_filter_object_properties()
         # create an instance of PF
         self.particle_filter = ParticleFilter(self.object_properties)  # the main component
+        self.aff_particle_filter = ParticleFilter(self.object_properties)
+
+        self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
+                           "screw_round_thread", "screw_round_head", "screwdriver_handle",
+                           "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
 
         # message counting vars
         self.received_msg = 0
@@ -168,7 +173,10 @@ class ParticleFilterNode(Node):
                 ############################################################################
 
                 pcl, _, c = ftl_pcl2numpy(pcl_msg.pcl)
-                self.particle_filter.add_measurement((pcl, class_id, score))
+                if label in self.aff_classes:
+                    self.aff_particle_filter.add_measurement((pcl, class_id, score))
+                else:
+                    self.particle_filter.add_measurement((pcl, class_id, score))
 
             now = self.get_clock().now()
             mdelay = (now - rclpy.time.Time.from_msg(pcl_msg.header.stamp)).nanoseconds * 1e-9
@@ -181,110 +189,117 @@ class ParticleFilterNode(Node):
     def update(self, now=None):
         StatTimer.enter("Filter node update loop")
         self.pclient.filter_alive = time()
-        self.particle_filter.update()
         if now is not None:
             self.lastFilterUpdate = now
         else:
             self.lastFilterUpdate = self.get_clock().now()
+        self.update_particle_filter(self.particle_filter)
+        self.update_particle_filter(self.aff_particle_filter, tracking_on=False, pose_est_on=False)
+        StatTimer.exit("Filter node update loop")
 
-        if self.particle_filter.n_models > 0:
+
+    def update_particle_filter(self, particle_filter, tracking_on=True, pose_est_on=True):
+        particle_filter.update()
+
+        if particle_filter.n_models > 0:
             StatTimer.enter("Filter publishing")
-            estimates = self.particle_filter.getEstimates()
+            estimates = particle_filter.getEstimates()
             if len(estimates) == 0:
                 self.get_logger().info("Got no estimates from filter, doing nothing.")
                 return
+            if tracking_on:
+                ####
+                # - repair objects internally in the filter
+                # - update
+                # - on return "0" delete object on that position
+                # Format input data
+                poses_formatted, class_names_formatted, dimensions_formatted, uuids_formatted = ([],[],[],[])
+                for pose, label, dims, uuid in estimates:
+                    poses_formatted.append(pose.tolist())
+                    class_names_formatted.append(label)
+                    dimensions_formatted.append(dims)
+                    uuids_formatted.append(uuid)
 
-            ####
-            # - repair objects internally in the filter
-            # - update
-            # - on return "0" delete object on that position
-            # Format input data
-            poses_formatted, class_names_formatted, dimensions_formatted, uuids_formatted = ([],[],[],[])
-            for pose, label, dims, uuid in estimates:
-                poses_formatted.append(pose.tolist())
-                class_names_formatted.append(label)
-                dimensions_formatted.append(dims)
-                uuids_formatted.append(uuid)
 
-
-            # print(f"<filter_node>: Before tracker")
-            StatTimer.enter("tracking")
-            last_uuids, original_uuids = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
-            # print(f"*** last_uuid: {last_uuid}")
-            # print(f"*** latest_uuid: {latest_uuid}")
-            StatTimer.exit("tracking")
-            StatTimer.enter("correcting uuids")
-            self.particle_filter.correct_model_uuids(last_uuids=last_uuids, original_uuids=original_uuids)
-            StatTimer.exit("correcting uuids")
+                # print(f"<filter_node>: Before tracker")
+                StatTimer.enter("tracking")
+                last_uuids, original_uuids = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
+                # print(f"*** last_uuid: {last_uuid}")
+                # print(f"*** latest_uuid: {latest_uuid}")
+                StatTimer.exit("tracking")
+                StatTimer.enter("correcting uuids")
+                particle_filter.correct_model_uuids(last_uuids=last_uuids, original_uuids=original_uuids)
+                StatTimer.exit("correcting uuids")
 
             # self.tracker.dump_tracked_objects_info()
 
             #self.get_logger().info(str(estimates))
-            poses = []
-            dimensions = []
-            tracked = []
-            labels = []
-            uuids = []
-            for pose, label, dims, uuid in estimates:
-                pose_msg = Pose()
-                pose_msg.position.x, pose_msg.position.y, pose_msg.position.z = pose.tolist()
-                poses.append(pose_msg)
-                dim_msg = PclDimensions(dimensions=dims)
-                dimensions.append(dim_msg)
-                labels.append(label)
-                uuids.append(uuid)
-            pose_array_msg = FilteredPose(poses=poses)
-            if self.VISUALIZE_POSES:
-                pmsg = PoseArray(poses=poses)
-                pmsg.header.stamp = self.get_clock().now().to_msg()
-                pmsg.header.frame_id = self.frame_id
-                self.debug_pose_publisher.publish(pmsg)
-            pose_array_msg.size = dimensions
-            # Differentiate between tracked and non-tracked objects
-            for uid in uuids_formatted:  # FIXME: check if this is correct (last/latest?)
-                if uid in latest_uuid:
-                    tracked.append(True)
-                else:
-                    tracked.append(False)
-            # if (len(last_uuid) != 0) and (len(latest_uuid) != 0):
-            #     for idx in range(len(latest_uuid)):
-            #         if latest_uuid[idx] == -1:
-            #             tracked.append(False)
-            #         else:
-            #             tracked.append(True)
-            pose_array_msg.tracked = tracked
-            pose_array_msg.label = labels
-            pose_array_msg.uuid = uuids
-            pose_array_msg.header.stamp = self.get_clock().now().to_msg()
-            pose_array_msg.header.frame_id = self.frame_id
+            if pose_est_on:
+                poses = []
+                dimensions = []
+                tracked = []
+                labels = []
+                uuids = []
+                for pose, label, dims, uuid in estimates:
+                    pose_msg = Pose()
+                    pose_msg.position.x, pose_msg.position.y, pose_msg.position.z = pose.tolist()
+                    poses.append(pose_msg)
+                    dim_msg = PclDimensions(dimensions=dims)
+                    dimensions.append(dim_msg)
+                    labels.append(label)
+                    uuids.append(uuid)
+                pose_array_msg = FilteredPose(poses=poses)
+                if self.VISUALIZE_POSES:
+                    pmsg = PoseArray(poses=poses)
+                    pmsg.header.stamp = self.get_clock().now().to_msg()
+                    pmsg.header.frame_id = self.frame_id
+                    self.debug_pose_publisher.publish(pmsg)
+                pose_array_msg.size = dimensions
+                # Differentiate between tracked and non-tracked objects
+                for uid in uuids_formatted:  # FIXME: check if this is correct (last/latest?)
+                    if uid in latest_uuid:
+                        tracked.append(True)
+                    else:
+                        tracked.append(False)
+                # if (len(last_uuid) != 0) and (len(latest_uuid) != 0):
+                #     for idx in range(len(latest_uuid)):
+                #         if latest_uuid[idx] == -1:
+                #             tracked.append(False)
+                #         else:
+                #             tracked.append(True)
+                pose_array_msg.tracked = tracked
+                pose_array_msg.label = labels
+                pose_array_msg.uuid = uuids
+                pose_array_msg.header.stamp = self.get_clock().now().to_msg()
+                pose_array_msg.header.frame_id = self.frame_id
 
-            if self.VISUALIZE_PARTICLES:
-                particles_msg = []
-                particles = self.particle_filter.get_model_particles()
-                for model_particles in particles:
-                    model_particles_msg = Float32MultiArray()
-                    dims = model_particles.shape
-                    model_particles_msg.layout.dim.append(MultiArrayDimension())
-                    model_particles_msg.layout.dim[0].label = 'num_points'
-                    model_particles_msg.layout.dim[0].size = dims[0]
-                    model_particles_msg.layout.dim[0].stride = dims[0]*dims[1]
-                    model_particles_msg.layout.dim.append(MultiArrayDimension())
-                    model_particles_msg.layout.dim[1].label = 'xyz'
-                    model_particles_msg.layout.dim[1].size = dims[1]
-                    model_particles_msg.layout.dim[1].stride = dims[0]
-                    data = np.frombuffer(model_particles.tobytes(),'float32')
-                    model_particles_msg.data = data.tolist()
-                    particles_msg.append(model_particles_msg)
+                if self.VISUALIZE_PARTICLES:
+                    particles_msg = []
+                    particles = particle_filter.get_model_particles()
+                    for model_particles in particles:
+                        model_particles_msg = Float32MultiArray()
+                        dims = model_particles.shape
+                        model_particles_msg.layout.dim.append(MultiArrayDimension())
+                        model_particles_msg.layout.dim[0].label = 'num_points'
+                        model_particles_msg.layout.dim[0].size = dims[0]
+                        model_particles_msg.layout.dim[0].stride = dims[0]*dims[1]
+                        model_particles_msg.layout.dim.append(MultiArrayDimension())
+                        model_particles_msg.layout.dim[1].label = 'xyz'
+                        model_particles_msg.layout.dim[1].size = dims[1]
+                        model_particles_msg.layout.dim[1].stride = dims[0]
+                        data = np.frombuffer(model_particles.tobytes(),'float32')
+                        model_particles_msg.data = data.tolist()
+                        particles_msg.append(model_particles_msg)
 
-                pose_array_msg.particles = particles_msg
+                    pose_array_msg.particles = particles_msg
 
-            self.get_logger().info('Publishing objects:' + str(labels))
-            self.get_logger().info('Tracked:' + str(pose_array_msg.tracked))
-            self.filtered_publisher.publish(pose_array_msg)
+                self.get_logger().info('Publishing objects:' + str(labels))
+                self.get_logger().info('Tracked:' + str(pose_array_msg.tracked))
+                self.filtered_publisher.publish(pose_array_msg)
 
             StatTimer.enter("Filter PCL publish")
             # get PCL for each model
-            pcl_uuids, pcl_points, pcl_labels = self.particle_filter.getPclsEstimates()
+            pcl_uuids, pcl_points, pcl_labels = particle_filter.getPclsEstimates()
             pcl_msg = ObjectPointcloud()
             pcl_msg.header.stamp = self.get_clock().now().to_msg()
             pcl_msg.header.frame_id = self.frame_id
@@ -312,7 +327,6 @@ class ParticleFilterNode(Node):
                 self.pcl_publisher.publish(pcl_msg)
                 StatTimer.exit("Filter PCL publish")
             StatTimer.exit("Filter publishing")
-        StatTimer.exit("Filter node update loop")
 
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
