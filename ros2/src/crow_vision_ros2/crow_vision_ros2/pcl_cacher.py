@@ -79,9 +79,7 @@ class PCLCacher(Node):
         self.srv = self.create_service(GetMaskedPointCloud, self.PCL_GETTER_SERVICE_NAME, self.get_pcl)
         self.objects = {}
         self.aff_objects = {}
-        self.aff_classes = ["hammer_handle", "hammer_head", "pliers_handle", "pliers_head",
-                           "screw_round_thread", "screw_round_head", "screwdriver_handle",
-                           "screwdriver_head", "wrench_handle", "wrench_open", "wrench_ring"]
+        self.aff_classes = self.crowracle.getAffordanceDetNames()
         self.keep_alive_duration = Duration(seconds=self.KEEP_ALIVE_DURATION)
         self.create_timer(5, self.print_n_ojs)
         self.get_logger().info("PCL cacher ready.")
