@@ -73,8 +73,8 @@ class PCLCacher(Node):
     def __init__(self, node_name="pcl_cacher"):
         super().__init__(node_name)
         # Get existing cameras from and topics from the calibrator
-        qos = QoSProfile(depth=self.PCL_MEMORY_SIZE, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.crowracle = CrowtologyClient(node=self)
+        qos = QoSProfile(depth=self.PCL_MEMORY_SIZE, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         sub = message_filters.Subscriber(self, ObjectPointcloud, self.PCL_TOPIC, qos_profile=qos)
         self.cache = message_filters.Cache(sub, self.PCL_MEMORY_SIZE, allow_headerless=False)
         self.srv = self.create_service(GetMaskedPointCloud, self.PCL_GETTER_SERVICE_NAME, self.get_pcl)
