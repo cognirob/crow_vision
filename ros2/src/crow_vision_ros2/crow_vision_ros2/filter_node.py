@@ -209,12 +209,12 @@ class ParticleFilterNode(Node):
 
             # print(f"<filter_node>: Before tracker")
             StatTimer.enter("tracking")
-            last_uuid, latest_uuid = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
+            last_uuids, original_uuids = self.tracker.track_and_get_uuids(centroid_positions=poses_formatted, dimensions=dimensions_formatted, class_names=class_names_formatted, uuids=uuids_formatted)
             # print(f"*** last_uuid: {last_uuid}")
             # print(f"*** latest_uuid: {latest_uuid}")
             StatTimer.exit("tracking")
             StatTimer.enter("correcting uuids")
-            self.particle_filter._correct_model_uuids(last_uuids=last_uuid, latest_uuids=latest_uuid)
+            self.particle_filter.correct_model_uuids(last_uuids=last_uuids, original_uuids=original_uuids)
             StatTimer.exit("correcting uuids")
 
             # self.tracker.dump_tracked_objects_info()

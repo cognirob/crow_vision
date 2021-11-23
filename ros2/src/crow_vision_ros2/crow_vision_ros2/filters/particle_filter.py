@@ -550,26 +550,28 @@ class ParticleFilter():
         else:
             return mode
 
-    def _correct_model_uuids(self, last_uuids, latest_uuids):
+    def correct_model_uuids(self, last_uuids, original_uuids):
         # Use the new uuids to find newer objects and give them the older uuids
-        for last_uuids_i in range(len(last_uuids)):
-            if latest_uuids[last_uuids_i] != last_uuids[last_uuids_i]:
-                if last_uuids[last_uuids_i] in self.model_uuid:
-                    if latest_uuids[last_uuids_i] != -1:
+        for i, (last_uuid, original_uuid) in enumerate(zip(last_uuids, original_uuids)):
+            if original_uuid != last_uuid:  # if the new uuid mismatches the original uuid
+                if last_uuid in self.model_uuid:  # check if the new uuid is in the filter (why wouldn't it?)
+                    if original_uuid != -1:  # I guess some validation check?
 
-                        where_a = (np.where(self.model_uuid == latest_uuids[last_uuids_i])[0])
+                        where_original = np.where(self.model_uuid == original_uuid)[0]
                         n_updates = self.NEW_MODEL_MIN_UPDATES + 1
                         last_update = self.last_filter_update
-                        if len(where_a):
-                            where_a = where_a[0]
-                            n_updates = self.model_n_updates[where_a]
-                            last_update = self.model_last_update[where_a]
-                            self._delete_model(where_a)
+                        if len(where_original) > 0:
+                            where_original = where_original[0]
+                            n_updates = self.model_n_updates[where_original]
+                            last_update = self.model_last_update[where_original]
+                            self._delete_model(where_original)
 
-                        where_b = (np.where(self.model_uuid == last_uuids[last_uuids_i])[0])
-                        if len(where_b):
-                            where_b = where_b[0]
-                            self.model_uuid[where_b] = latest_uuids[last_uuids_i]
-                            self.model_n_updates[where_b] = n_updates + 1  # FIXME: maybe a better solution - without this, corrected model is ignored.
-                            self.model_last_update[where_b] = last_update  # FIXME: maybe a better solution - without this, corrected model is ignored.
+                        where_last = np.where(self.model_uuid == last_uuid)[0]
+                        if len(where_last) > 0:
+                            where_last = where_last[0]
+                            self.model_uuid[where_last] = original_uuid
+                            self.model_n_updates[where_last] = n_updates + 1  # FIXME: maybe a better solution - without this, corrected model is ignored.
+                            self.model_last_update[where_last] = last_update  # FIXME: maybe a better solution - without this, corrected model is ignored.
+                        else:
+                            raise ValueError("Missing a model with the never uuid makes no sense in the filter!")
         return
