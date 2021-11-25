@@ -36,7 +36,8 @@ from crow_vision_ros2.tracker.tracker_avatar import Avatar
 
 
 class ParticleFilterNode(Node):
-    UPDATE_INTERVAL = 0.3
+    UPDATE_INTERVAL = 0.5
+    CACHE_SIZE = 50
     # UPDATE_WINDOW_DURATION = 0.2  # NOT USED! Time window size from which messages are aggregated (should normally be the same as UPDATE_INTERVAL)
     VISUALIZE_PARTICLES = True  # whether to publish filter particles via ROS message
     VISUALIZE_POSES = True  # whether to publish separate PoseArray for tracked objects
@@ -66,7 +67,7 @@ class ParticleFilterNode(Node):
             reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
         self.get_logger().info("Created subscriber for segmented_pcl '{self.SEGMENTED_PCL_TOPIC}'")
         sub = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
-        self.cache = message_filters.Cache(sub, 50, allow_headerless=False)
+        self.cache = message_filters.Cache(sub, self.CACHE_SIZE, allow_headerless=False)
 
         sub2 = message_filters.Subscriber(self, SegmentedPointcloud, self.SEGMENTED_PCL_TOPIC, qos_profile=qos, callback_group=MutuallyExclusiveCallbackGroup())
         # sub2.registerCallback(self.message_counter_callback)
@@ -101,6 +102,8 @@ class ParticleFilterNode(Node):
         self.assembly_object_types = [getattr(AssemblyObjectProbability, o) for o in sorted(dir(AssemblyObjectProbability)) if o.startswith("O_")]
 
         self.start_build_srv = self.create_service(ResetScene, self.RESET_OBJECTS_SERVICE, self.reset_tracker_objects)#, callback_group=rclpy.callback_groups.ReentrantCallbackGroup())
+
+        self.start_time = self.get_clock().now()
 
         self.get_logger().info("Filter is up")
 
@@ -175,9 +178,9 @@ class ParticleFilterNode(Node):
                 else:
                     self.particle_filter.add_measurement((pcl, class_id, score))
 
-            now = self.get_clock().now()
-            mdelay = (now - rclpy.time.Time.from_msg(pcl_msg.header.stamp)).nanoseconds * 1e-9
-            self.get_logger().error(f"Processed pcl in filter, delay {mdelay:0.3f}")
+            # now = self.get_clock().now()
+            # mdelay = (now - rclpy.time.Time.from_msg(pcl_msg.header.stamp)).nanoseconds * 1e-9
+            # self.get_logger().error(f"Processed pcl in filter, delay {mdelay:0.3f}")
 
         now = self.get_clock().now()
         # self.lastMeasurement = latest_time + self.measurementTolerance
@@ -254,7 +257,7 @@ class ParticleFilterNode(Node):
                 pose_array_msg.size = dimensions
                 # Differentiate between tracked and non-tracked objects
                 for uid in uuids_formatted:  # FIXME: check if this is correct (last/latest?)
-                    if uid in latest_uuid:
+                    if uid in original_uuids:
                         tracked.append(True)
                     else:
                         tracked.append(False)
@@ -328,7 +331,16 @@ class ParticleFilterNode(Node):
     def filter_update(self):
         """Main function, periodically called by rclpy.Timer
         """
+        oldest_time = self.cache.getOldestTime()
+        if oldest_time is None:
+            oldest_time = -1
+            latest_time = -1
+        else:
+            oldest_time = (self.cache.getOldestTime() - self.start_time).nanoseconds * 1e-9
+            latest_time = (self.cache.getLastestTime() - self.start_time).nanoseconds * 1e-9
+
         messages = self.cache.cache_msgs
+        self.get_logger().info(f"Cache had {len(messages)} messages. Timestamps: {oldest_time} <-> {latest_time}")
         self.cache.cache_msgs = []
         self.cache.cache_times = []
         if len(messages) > 0:
