@@ -82,7 +82,7 @@ class Locator(Node):
 
         # create publisher for located objects (segmented PCLs)
         qos = QoSProfile(depth=20, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT)
-        self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=qos)
+        self.pubPCL = self.create_publisher(SegmentedPointcloud, '/detections/segmented_pointcloud', qos_profile=QoSProfile(depth=20, reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE))
         self.pubPCL_debug = self.create_publisher(PointCloud2, '/detections/segmented_pointcloud_debug', qos_profile=qos)
 
         # For now, every camera published segmented hand data PCL.
@@ -173,7 +173,7 @@ class Locator(Node):
 
         wheres = self.compareMasksPCL_fast(imspace[[1, 0], :], masks)
         ctg_tf_mat = cameraData["ctg_tf"]
-        total_pcd = np.zeros((3, 1))
+        # total_pcd = np.zeros((3, 1))
         # total_processed = 0
         # start_loop = time.time()
         for where, object_id, class_name, score in zip(wheres, object_ids, class_names, scores):
@@ -182,7 +182,7 @@ class Locator(Node):
             # if class_name in self.avatar_data_classes:
             #     self.get_logger().error(f"{class_name}")
             if len(where) < self.min_points_pcl:
-                self.get_logger().info(
+                self.get_logger().warn(
                     "Cam {}: Skipping pcl {} for '{}' mask_score: {} -- too few datapoints. ".format(camera, len(where), class_name, score))
                 continue
 
@@ -191,10 +191,10 @@ class Locator(Node):
             # filter points outside the main work area
             m = np.mean(seg_pcd, axis=1)
             if m[2] < self.MIN_Z or m[2] > self.MAX_Z or m[0] < self.MIN_X or m[0] > self.MAX_X or m[1] < self.MIN_Y or m[1] > self.MAX_Y:
-                self.get_logger().info("Cam {}: Skipping '{}'  -- out of bounds. ".format(camera, class_name))
+                self.get_logger().warn("Cam {}: Skipping '{}'  -- out of bounds. ".format(camera, class_name))
                 continue
             elif m[1] > self.R_Y_MIN and m[1] < self.R_Y_MAX and (m[0] > self.LR_X or m[0] < self.RR_X):
-                self.get_logger().info("Cam {}: Skipping '{}'  -- in the robot cutout. ".format(camera, class_name))
+                self.get_logger().warn("Cam {}: Skipping '{}'  -- in the robot cutout. ".format(camera, class_name))
                 continue
             # if "2" in camera:
             # total_pcd = np.c_[total_pcd, seg_pcd]
@@ -221,6 +221,7 @@ class Locator(Node):
                 self.pclient.located_avatars += [time.time()]
                 # self.get_logger().error(f"{class_name} = {np.mean(seg_pcd, 1)}")
             else:
+                # self.get_logger().warn(f">>> {seg_pcl_msg.label}")
                 self.pubPCL.publish(seg_pcl_msg)
                 self.pclient.located_objects += [time.time()]
             # total_processed += 1
