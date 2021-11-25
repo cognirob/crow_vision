@@ -38,6 +38,7 @@ setup(
             'filter = crow_vision_ros2.filter_node:main',
             'visualizator = crow_vision_ros2.visualizator:main',
             'pcl_cacher = crow_vision_ros2.pcl_cacher:main',
+            'pose_query = crow_vision_ros2.pose_query:main',
             'marker_detector = crow_vision_ros2.marker_detector:main'
         ],
     },
