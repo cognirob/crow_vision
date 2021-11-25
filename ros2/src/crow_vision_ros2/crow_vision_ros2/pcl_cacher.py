@@ -11,7 +11,7 @@ from rclpy.duration import Duration
 from trio3_ros2_interfaces.msg import Units, RobotActionType, ObjectType
 from trio3_ros2_interfaces.srv import GetMaskedPointCloud
 from crow_ontology.crowracle_client import CrowtologyClient
-
+import traceback as tb
 #PointCloud2
 from crow_vision_ros2.utils import ftl_pcl2numpy
 import open3d as o3d
@@ -68,7 +68,7 @@ class PCLCacher(Node):
     MAX_SPEC_ALLOWED_DISTANCE = 0.1  # in meters
     MAX_ANY_ALLOWED_DISTANCE = 0.05
     KEEP_ALIVE_DURATION = 10
-    DEBUG = False
+    DEBUG = True
 
     def __init__(self, node_name="pcl_cacher"):
         super().__init__(node_name)
@@ -197,9 +197,8 @@ class PCLCacher(Node):
                 self.get_logger().error("Error requesting a segmented PCL: No PCL is close enough to the requested position!")
                 return response
             else:
-                self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} with a label {closest_object.label} located {min_dist}m away from the requested location.")
+                self.get_logger().info(f"Responding with a PCL @ {str(closest_object.center)} [{closest_object.pcl_numpy.shape[0]}] with a label {closest_object.label} located {min_dist}m away from the requested location.")
                 response.masked_point_cloud = closest_object.pcl
-
 
             if self.DEBUG:
                 pcd = o3d.geometry.PointCloud()
@@ -221,6 +220,9 @@ def main():
         rclpy.spin(pclCacher)
     except KeyboardInterrupt:
         print("User requested shutdown.")
+    except BaseException as e:
+        print(f"Some error had occured: {e}")
+        tb.print_exc()
     finally:
         pclCacher.destroy_node()
 
